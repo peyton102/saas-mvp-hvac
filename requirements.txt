@@ -6,3 +6,5 @@ pydantic
 email-validator
 tzdata
 phonenumbers
+
+python-multipart
