@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+twilio
+pydantic
+email-validator
+tzdata
+phonenumbers
