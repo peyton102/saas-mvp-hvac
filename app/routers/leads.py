@@ -1,9 +1,9 @@
-# app/routers/leads.py
 from fastapi import APIRouter
-from app import config, storage
-from app.services.sms import send_sms
-from app.schemas import LeadIn, LeadOut
-from app.utils.phone import normalize_us_phone
+from .. import config, storage
+from ..services.sms import send_sms
+from ..schemas import LeadIn, LeadOut
+from ..utils.phone import normalize_us_phone
+
 
 router = APIRouter(prefix="", tags=["leads"])
 
