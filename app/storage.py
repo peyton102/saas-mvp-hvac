@@ -104,3 +104,48 @@ def sent_recently(phone: str, minutes: int = 120) -> bool:
         if now - dt <= timedelta(minutes=minutes):
             return True
     return False
+
+# --- bookings CSV support ---
+from pathlib import Path
+import csv, uuid
+from datetime import datetime, timezone
+
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+CSV_BOOKINGS = DATA_DIR / "bookings.csv"
+BOOKING_FIELDS = [
+    "booking_id","created_at","source",
+    "event_id","invitee_name","invitee_email","invitee_phone",
+    "start_time","end_time","timezone","notes","sms_sent",
+]
+
+def save_booking(event_id: str, invitee_name: str, invitee_email: str, invitee_phone: str,
+                 start_time: str, end_time: str, tz_str: str, notes: str, sms_sent: bool,
+                 source: str = "calendly"):
+    new_file = not CSV_BOOKINGS.exists() or CSV_BOOKINGS.stat().st_size == 0
+    row = {
+        "booking_id": str(uuid.uuid4()),
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "source": source,
+        "event_id": event_id or "",
+        "invitee_name": invitee_name or "",
+        "invitee_email": invitee_email or "",
+        "invitee_phone": invitee_phone or "",
+        "start_time": start_time or "",
+        "end_time": end_time or "",
+        "timezone": tz_str or "",
+        "notes": notes or "",
+        "sms_sent": "true" if sms_sent else "false",
+    }
+    with CSV_BOOKINGS.open("a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=BOOKING_FIELDS)
+        if new_file:
+            w.writeheader()
+        w.writerow(row)
+
+def read_bookings(limit: int = 20) -> list[dict]:
+    if not CSV_BOOKINGS.exists():
+        return []
+    with CSV_BOOKINGS.open("r", newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    return list(reversed(rows))[:max(0, limit)]
