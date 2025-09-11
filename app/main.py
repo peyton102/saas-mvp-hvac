@@ -1,8 +1,7 @@
-# app/main.py
 from fastapi import FastAPI
 from app import config
 from app.routers.leads import router as leads_router
-from app.routers.voice import router as voice_router   # <-- add this
+from app.routers.voice import router as voice_router   # <-- make sure this import exists
 
 app = FastAPI(title="HVAC SaaS Bot (MVP)", version="0.1.0")
 
@@ -15,4 +14,4 @@ def health():
     return {"ok": True, "env": config.ENV}
 
 app.include_router(leads_router)
-app.include_router(voice_router)  # <-- add this
+app.include_router(voice_router)  # <-- and this line must be here
