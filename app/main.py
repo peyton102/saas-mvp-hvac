@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from app import config
 from app.routers.leads import router as leads_router
+from app.routers.voice import router as voice_router   # <-- add this
 
 app = FastAPI(title="HVAC SaaS Bot (MVP)", version="0.1.0")
 
@@ -13,5 +14,5 @@ def root():
 def health():
     return {"ok": True, "env": config.ENV}
 
-# plug in the leads endpoints (we'll add more routers later)
 app.include_router(leads_router)
+app.include_router(voice_router)  # <-- add this
