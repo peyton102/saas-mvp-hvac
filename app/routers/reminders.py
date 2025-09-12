@@ -51,3 +51,16 @@ def send_reminders(look_back_minutes: int | None = None):
 def debug_reminders_sent(limit: int = 20):
     items = storage.read_reminders_sent(limit)
     return {"count": len(items), "items": items}
+# app/routers/reminders.py
+from fastapi import APIRouter
+from app.services.reminders import preview_due_reminders
+
+router = APIRouter(prefix="", tags=["reminders"])
+
+@router.get("/debug/run-reminders")
+def run_reminders_preview(look_back_minutes: int | None = None):
+    due = preview_due_reminders(look_back_minutes=look_back_minutes)
+    # Log what would be sent (so you can see it in Render logs)
+    for d in due:
+        print(f"[REMINDER DRY RUN][{d['offset']}] to {d['phone']}: {d['message']}")
+    return {"count": len(due), "items": due}
