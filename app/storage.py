@@ -149,3 +149,50 @@ def read_bookings(limit: int = 20) -> list[dict]:
     with CSV_BOOKINGS.open("r", newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     return list(reversed(rows))[:max(0, limit)]
+# --- reminders sent tracking ---
+from pathlib import Path
+import csv, uuid
+from datetime import datetime, timezone
+
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+CSV_REMINDERS_SENT = DATA_DIR / "reminders_sent.csv"
+REMINDER_SENT_FIELDS = ["sent_id", "created_at", "phone", "start_time_local", "offset"]
+
+def reminder_already_sent(phone: str, start_time_local: str, offset: str) -> bool:
+    if not CSV_REMINDERS_SENT.exists():
+        return False
+    try:
+        with CSV_REMINDERS_SENT.open("r", newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                if (
+                    row.get("phone") == phone
+                    and row.get("start_time_local") == start_time_local
+                    and row.get("offset") == offset
+                ):
+                    return True
+    except Exception:
+        return False
+    return False
+
+def save_reminder_sent(phone: str, start_time_local: str, offset: str) -> None:
+    new_file = not CSV_REMINDERS_SENT.exists() or CSV_REMINDERS_SENT.stat().st_size == 0
+    row = {
+        "sent_id": str(uuid.uuid4()),
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "phone": phone,
+        "start_time_local": start_time_local,
+        "offset": offset,
+    }
+    with CSV_REMINDERS_SENT.open("a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=REMINDER_SENT_FIELDS)
+        if new_file:
+            w.writeheader()
+        w.writerow(row)
+
+def read_reminders_sent(limit: int = 50) -> list[dict]:
+    if not CSV_REMINDERS_SENT.exists():
+        return []
+    with CSV_REMINDERS_SENT.open("r", newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    return list(reversed(rows))[:max(0, limit)]
