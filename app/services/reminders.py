@@ -69,3 +69,12 @@ def preview_due_reminders(now: datetime | None = None, look_back_minutes: int | 
                     "message": msg,
                 })
     return due
+from app.services.sms import send_sms  # add at top or near imports
+
+def send_due_reminders(look_back_minutes: int | None = None):
+    due = preview_due_reminders(look_back_minutes=look_back_minutes)
+    results = []
+    for d in due:
+        ok = send_sms(d["phone"], d["message"])  # DRY_RUN_SMS controls real vs dry
+        results.append({"phone": d["phone"], "ok": ok, "offset": d["offset"]})
+    return results
