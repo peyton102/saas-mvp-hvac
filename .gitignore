@@ -4,3 +4,7 @@ __pycache__/
 .env
 data/*.csv
 .DS_Store
+.env
+data/
+__pycache__/
+*.pyc

@@ -5,6 +5,13 @@ import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app import config
+from pathlib import Path  # (you already have this)
+# Reviews CSV
+REVIEWS_CSV_PATH = Path("data") / "reviews.csv"
+REVIEWS_FIELDS = [
+    "request_id","created_at","source","job_id","name","phone","email","notes","sms_body","sms_sent"
+]
+
 
 # Resolve CSV path (absolute respected; relative goes under project root)
 BASE_DIR = Path(__file__).resolve().parents[1]  # .../SaaSMVP
@@ -142,6 +149,34 @@ def save_booking(event_id: str, invitee_name: str, invitee_email: str, invitee_p
         if new_file:
             w.writeheader()
         w.writerow(row)
+
+def save_review_request(data: dict, sms_body: str, sms_sent: bool, source: str = "api"):
+    REVIEWS_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    new_file = not REVIEWS_CSV_PATH.exists() or REVIEWS_CSV_PATH.stat().st_size == 0
+    row = {
+        "request_id": str(uuid.uuid4()),
+        "created_at": _now_iso(),
+        "source": source,
+        "job_id": data.get("job_id") or "",
+        "name": data.get("name") or "",
+        "phone": data.get("phone") or "",
+        "email": data.get("email") or "",
+        "notes": data.get("notes") or "",
+        "sms_body": sms_body,
+        "sms_sent": "true" if sms_sent else "false",
+    }
+    with REVIEWS_CSV_PATH.open("a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=REVIEWS_FIELDS)
+        if new_file:
+            w.writeheader()
+        w.writerow(row)
+
+def read_reviews(limit: int = 20) -> list[dict]:
+    if not REVIEWS_CSV_PATH.exists():
+        return []
+    with REVIEWS_CSV_PATH.open("r", newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    return list(reversed(rows))[:max(0, limit)]
 
 def read_bookings(limit: int = 20) -> list[dict]:
     if not CSV_BOOKINGS.exists():
