@@ -1,10 +1,14 @@
 fastapi
 uvicorn[standard]
+pydantic[email]
+python-multipart
+phonenumbers
 python-dotenv
 twilio
-pydantic
-email-validator
-tzdata
-phonenumbers
+httpx
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+python-dateutil
 
-python-multipart
