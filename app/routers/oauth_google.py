@@ -23,3 +23,32 @@ def oauth_google_callback(request: Request):
     flow.fetch_token(code=code)
     save_creds(flow.credentials)
     return {"ok": True, "msg": "Google authorized. Call /availability next."}
+import os
+from pathlib import Path
+
+@router.get("/debug/google-config")
+def google_cfg():
+    return {
+        "client_id_prefix": (os.getenv("GOOGLE_CLIENT_ID","")[:20] + "..."),
+        "redirect_uri": os.getenv("GOOGLE_OAUTH_REDIRECT_URI"),
+        "scopes": os.getenv("GOOGLE_SCOPES"),
+        "token_dir": os.getenv("GOOGLE_TOKEN_DIR", "data/google_tokens"),
+    }
+
+@router.get("/debug/google-token")
+def google_token():
+    p = Path(os.getenv("GOOGLE_TOKEN_DIR","data/google_tokens")) / "default.json"
+    return {"path": str(p), "exists": p.exists(), "size": (p.stat().st_size if p.exists() else 0)}
+@router.get("/oauth/google/callback")
+def oauth_google_callback(request: Request):
+    try:
+        code = request.query_params.get("code")
+        if not code:
+            raise HTTPException(400, "Missing code")
+        flow = build_flow()
+        flow.fetch_token(code=code)
+        save_creds(flow.credentials)
+        return {"ok": True, "msg": "Google authorized. Call /availability next."}
+    except Exception as e:
+        # don’t expose secrets; do expose message
+        raise HTTPException(status_code=500, detail=f"OAuth callback failed: {e}")
