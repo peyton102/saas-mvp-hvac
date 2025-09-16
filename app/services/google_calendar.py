@@ -107,3 +107,75 @@ def generate_slots(
             cur += timedelta(minutes=slot_minutes)
         day = day + timedelta(days=1)
     return out
+def create_event(
+    svc,
+    *,
+    calendar_id: str,
+    tz_str: str,
+    start: datetime,
+    end: datetime,
+    summary: str,
+    description: str | None = None,
+    attendees: list[str] | None = None,
+):
+    body = {
+        "summary": summary,
+        "description": description or "",
+        "start": {"dateTime": start.isoformat(), "timeZone": tz_str},
+        "end": {"dateTime": end.isoformat(), "timeZone": tz_str},
+    }
+    if attendees:
+        body["attendees"] = [{"email": e} for e in attendees if e]
+    ev = svc.events().insert(calendarId=calendar_id, body=body).execute()
+    return {"id": ev.get("id"), "htmlLink": ev.get("htmlLink")}
+# --- create event helper (simple MVP)
+def create_event(
+    svc,
+    *,
+    calendar_id: str,
+    summary: str,
+    description: str | None,
+    start_dt,   # datetime (aware or naive)
+    end_dt,     # datetime (aware or naive)
+    tz_str: str,
+    attendee_email: str | None = None,
+    attendee_name: str | None = None,
+) -> dict:
+    """
+    Inserts a timed event into Google Calendar.
+    Returns {'id': ..., 'htmlLink': ..., 'start': ..., 'end': ...}
+    """
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+
+    z = ZoneInfo(tz_str)
+    # normalize to desired timezone and ISO8601
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=timezone.utc)
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=timezone.utc)
+    start_iso = start_dt.astimezone(z).isoformat()
+    end_iso = end_dt.astimezone(z).isoformat()
+
+    attendees = []
+    if attendee_email:
+        att = {"email": attendee_email}
+        if attendee_name:
+            att["displayName"] = attendee_name
+        attendees.append(att)
+
+    body = {
+        "summary": summary,
+        "description": description or "",
+        "start": {"dateTime": start_iso, "timeZone": tz_str},
+        "end": {"dateTime": end_iso, "timeZone": tz_str},
+        "attendees": attendees,
+    }
+
+    ev = svc.events().insert(calendarId=calendar_id, body=body).execute()
+    return {
+        "id": ev.get("id"),
+        "htmlLink": ev.get("htmlLink"),
+        "start": ev.get("start", {}).get("dateTime"),
+        "end": ev.get("end", {}).get("dateTime"),
+    }
