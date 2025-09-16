@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from app.services.google_calendar import build_flow, save_creds
+import os
+from pathlib import Path
 
 router = APIRouter()
 
@@ -23,9 +25,8 @@ def oauth_google_callback(request: Request):
     flow.fetch_token(code=code)
     save_creds(flow.credentials)
     return {"ok": True, "msg": "Google authorized. Call /availability next."}
-import os
-from pathlib import Path
 
+# Optional debug
 @router.get("/debug/google-config")
 def google_cfg():
     return {
@@ -39,16 +40,13 @@ def google_cfg():
 def google_token():
     p = Path(os.getenv("GOOGLE_TOKEN_DIR","data/google_tokens")) / "default.json"
     return {"path": str(p), "exists": p.exists(), "size": (p.stat().st_size if p.exists() else 0)}
-@router.get("/oauth/google/callback")
-def oauth_google_callback(request: Request):
-    try:
-        code = request.query_params.get("code")
-        if not code:
-            raise HTTPException(400, "Missing code")
-        flow = build_flow()
-        flow.fetch_token(code=code)
-        save_creds(flow.credentials)
-        return {"ok": True, "msg": "Google authorized. Call /availability next."}
-    except Exception as e:
-        # don’t expose secrets; do expose message
-        raise HTTPException(status_code=500, detail=f"OAuth callback failed: {e}")
+@router.get("/debug/google-token-touch")
+def google_token_touch():
+    # sanity-check that we can write to GOOGLE_TOKEN_DIR
+    import os
+    from pathlib import Path
+    d = Path(os.getenv("GOOGLE_TOKEN_DIR", "data/google_tokens"))
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "write_test.txt"
+    p.write_text("ok", encoding="utf-8")
+    return {"path": str(p), "exists": p.exists(), "size": (p.stat().st_size if p.exists() else 0)}
