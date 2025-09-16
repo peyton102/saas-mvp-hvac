@@ -179,3 +179,49 @@ def create_event(
         "start": ev.get("start", {}).get("dateTime"),
         "end": ev.get("end", {}).get("dateTime"),
     }
+# --- create event (write) ---
+def create_event(
+    svc,
+    *,
+    calendar_id: str,
+    summary: str,
+    description: str,
+    start_dt,
+    end_dt,
+    tz_str: str,
+    attendee_email: str | None = None,
+    attendee_name: str | None = None,
+):
+    """
+    Inserts a timed event. Datetimes can be naive or tz-aware; we coerce to tz_str.
+    Returns the created event dict (includes 'id' and 'htmlLink').
+    """
+    from zoneinfo import ZoneInfo
+    from datetime import timezone
+
+    def _to_local_iso(dt):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(ZoneInfo(tz_str)).isoformat(timespec="seconds")
+
+    body = {
+        "summary": summary,
+        "description": description or "",
+        "start": {"dateTime": _to_local_iso(start_dt), "timeZone": tz_str},
+        "end":   {"dateTime": _to_local_iso(end_dt),   "timeZone": tz_str},
+    }
+
+    attendees = []
+    if attendee_email:
+        a = {"email": attendee_email}
+        if attendee_name:
+            a["displayName"] = attendee_name
+        attendees.append(a)
+    if attendees:
+        body["attendees"] = attendees
+
+    # You can add reminders policy later if desired (email/sms/popup)
+    # body["reminders"] = {"useDefault": True}
+
+    ev = svc.events().insert(calendarId=calendar_id, body=body).execute()
+    return ev
