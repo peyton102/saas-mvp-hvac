@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from app import config, storage
 from app.services.sms import send_sms
+import os
 
-# This exact name is what main.py imports
 router = APIRouter(tags=["reviews"])
 
 
@@ -21,7 +21,8 @@ class CompleteJobOut(BaseModel):
 
 @router.post("/jobs/complete", response_model=CompleteJobOut)
 def mark_job_complete(payload: CompleteJobIn):
-    review_link = getattr(config, "GOOGLE_REVIEW_LINK", "")
+    # Read from env first, then fall back to config
+    review_link = os.getenv("GOOGLE_REVIEW_LINK") or getattr(config, "GOOGLE_REVIEW_LINK", "")
     if not review_link:
         raise HTTPException(status_code=500, detail="GOOGLE_REVIEW_LINK not set")
 

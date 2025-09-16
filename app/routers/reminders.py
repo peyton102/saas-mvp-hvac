@@ -1,8 +1,10 @@
-# app/routers/reminders.py
+from __future__ import annotations
 from fastapi import APIRouter
 from app.services.reminders import preview_due_reminders
+from app.services.sms import send_sms
+from app import storage
 
-router = APIRouter(prefix="", tags=["reminders"])
+router = APIRouter(tags=["reminders"])
 
 @router.get("/debug/run-reminders")
 def run_reminders_preview(look_back_minutes: int | None = None):
@@ -11,22 +13,17 @@ def run_reminders_preview(look_back_minutes: int | None = None):
     No SMS is sent here—just logs + JSON result.
     """
     due = preview_due_reminders(look_back_minutes=look_back_minutes)
-    # Print DRY-RUN lines so you can see them in Render logs
     for d in due:
         print(f"[REMINDER DRY RUN][{d['offset']}] to {d['phone']}: {d['message']}")
     return {"count": len(due), "items": due}
-from app.services.sms import send_sms
-from app import storage
 
 @router.post("/tasks/send-reminders")
 def send_reminders(look_back_minutes: int | None = None):
     """
-    Send real reminders for bookings that are due now (respects DRY_RUN).
-    De-duped by (phone, start_time_local, offset).
+    Send reminders due now (respects DRY_RUN). De-duped by (phone, start_time_local, offset).
     """
     due = preview_due_reminders(look_back_minutes=look_back_minutes)
     sent, skipped = [], []
-
     for d in due:
         phone = d["phone"]
         start_local = d["start_time_local"]
@@ -40,27 +37,13 @@ def send_reminders(look_back_minutes: int | None = None):
         if ok:
             storage.save_reminder_sent(phone, start_local, offset)
             print(f"[REMINDER SENT][{offset}] to {phone}")
-            sent.append(d)
+            sent.append({**d, "ok": True})
         else:
             print(f"[REMINDER FAILED][{offset}] to {phone}")
             skipped.append({**d, "reason": "send_failed"})
-
-    return {"sent": len(sent), "skipped": len(skipped), "sent_items": sent, "skipped_items": skipped}
+    return {"sent": len(sent), "skipped": len(skipped), "items": sent or skipped}
 
 @router.get("/debug/reminders-sent")
 def debug_reminders_sent(limit: int = 20):
     items = storage.read_reminders_sent(limit)
     return {"count": len(items), "items": items}
-# app/routers/reminders.py
-from fastapi import APIRouter
-from app.services.reminders import preview_due_reminders
-
-router = APIRouter(prefix="", tags=["reminders"])
-
-@router.get("/debug/run-reminders")
-def run_reminders_preview(look_back_minutes: int | None = None):
-    due = preview_due_reminders(look_back_minutes=look_back_minutes)
-    # Log what would be sent (so you can see it in Render logs)
-    for d in due:
-        print(f"[REMINDER DRY RUN][{d['offset']}] to {d['phone']}: {d['message']}")
-    return {"count": len(due), "items": due}
