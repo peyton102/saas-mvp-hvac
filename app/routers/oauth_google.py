@@ -24,9 +24,18 @@ def oauth_google_callback(request: Request):
     flow = build_flow()
     flow.fetch_token(code=code)
     save_creds(flow.credentials)
-    return {"ok": True, "msg": "Google authorized. Call /availability next."}
 
-# Optional debug
+    # Verify the file actually exists where we expect
+    d = Path(os.getenv("GOOGLE_TOKEN_DIR", "data/google_tokens"))
+    p = d / "default.json"
+    return {
+        "ok": True,
+        "msg": "Google authorized. Call /availability next.",
+        "token_path": str(p),
+        "exists": p.exists(),
+        "size": (p.stat().st_size if p.exists() else 0),
+    }
+
 @router.get("/debug/google-config")
 def google_cfg():
     return {
@@ -39,14 +48,4 @@ def google_cfg():
 @router.get("/debug/google-token")
 def google_token():
     p = Path(os.getenv("GOOGLE_TOKEN_DIR","data/google_tokens")) / "default.json"
-    return {"path": str(p), "exists": p.exists(), "size": (p.stat().st_size if p.exists() else 0)}
-@router.get("/debug/google-token-touch")
-def google_token_touch():
-    # sanity-check that we can write to GOOGLE_TOKEN_DIR
-    import os
-    from pathlib import Path
-    d = Path(os.getenv("GOOGLE_TOKEN_DIR", "data/google_tokens"))
-    d.mkdir(parents=True, exist_ok=True)
-    p = d / "write_test.txt"
-    p.write_text("ok", encoding="utf-8")
     return {"path": str(p), "exists": p.exists(), "size": (p.stat().st_size if p.exists() else 0)}
