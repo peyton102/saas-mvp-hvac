@@ -18,23 +18,27 @@ def oauth_google_start():
 
 @router.get("/oauth/google/callback")
 def oauth_google_callback(request: Request):
-    code = request.query_params.get("code")
-    if not code:
-        raise HTTPException(400, "Missing code")
-    flow = build_flow()
-    flow.fetch_token(code=code)
-    save_creds(flow.credentials)
+    try:
+        code = request.query_params.get("code")
+        if not code:
+            raise HTTPException(400, "Missing code")
+        flow = build_flow()
+        flow.fetch_token(code=code)  # <-- if Google rejects, we’ll surface why
+        save_creds(flow.credentials)
 
-    # Verify the file actually exists where we expect
-    d = Path(os.getenv("GOOGLE_TOKEN_DIR", "data/google_tokens"))
-    p = d / "default.json"
-    return {
-        "ok": True,
-        "msg": "Google authorized. Call /availability next.",
-        "token_path": str(p),
-        "exists": p.exists(),
-        "size": (p.stat().st_size if p.exists() else 0),
-    }
+        d = Path(os.getenv("GOOGLE_TOKEN_DIR", "data/google_tokens"))
+        p = d / "default.json"
+        return {
+            "ok": True,
+            "msg": "Google authorized. Call /availability next.",
+            "token_path": str(p),
+            "exists": p.exists(),
+            "size": (p.stat().st_size if p.exists() else 0),
+        }
+    except Exception as e:
+        # show exactly why Google/token exchange failed
+        return {"ok": False, "error": str(e)}
+
 
 @router.get("/debug/google-config")
 def google_cfg():
