@@ -9,6 +9,7 @@ from app.routers.reviews import router as reviews_router
 from app.routers.oauth_google import router as google_oauth_router
 from app.routers.availability import router as availability_router
 from app.routers.bookings import router as bookings_router
+from app.routers.public import router as public_router
 
 app = FastAPI(title="HVAC SaaS Bot (MVP)", version="0.1.0")
 
@@ -29,3 +30,4 @@ app.include_router(google_oauth_router)
 app.include_router(availability_router)
 app.include_router(tasks_router)
 app.include_router(bookings_router)
+app.include_router(public_router)
