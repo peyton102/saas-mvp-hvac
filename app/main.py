@@ -10,6 +10,8 @@ from app.routers.oauth_google import router as google_oauth_router
 from app.routers.availability import router as availability_router
 from app.routers.bookings import router as bookings_router
 from app.routers.public import router as public_router
+from app.db import create_db_and_tables
+from app import models
 
 app = FastAPI(title="HVAC SaaS Bot (MVP)", version="0.1.0")
 
@@ -31,3 +33,10 @@ app.include_router(availability_router)
 app.include_router(tasks_router)
 app.include_router(bookings_router)
 app.include_router(public_router)
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
+    from datetime import datetime
+    from typing import Optional
+    from sqlmodel import SQLModel, Field
+
