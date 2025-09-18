@@ -225,3 +225,25 @@ def create_event(
 
     ev = svc.events().insert(calendarId=calendar_id, body=body).execute()
     return ev
+# --- minimal service getter for routers/bookings.py ---
+
+from pathlib import Path
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from app import config
+
+def get_service():
+    """
+    Return an authorized Google Calendar API service using the saved OAuth token.
+    Token path comes from GOOGLE_TOKEN_DIR (default data/google_tokens)/default.json.
+    """
+    token_dir = getattr(config, "GOOGLE_TOKEN_DIR", "data/google_tokens")
+    token_path = Path(token_dir) / "default.json"
+    if not token_path.exists():
+        raise RuntimeError(f"Google token not found at {token_path}. Re-auth at /oauth/google/start")
+    scopes = str(getattr(config, "GOOGLE_SCOPES", "")).split()
+    if not scopes:
+        scopes = ["https://www.googleapis.com/auth/calendar"]
+    creds = Credentials.from_authorized_user_file(str(token_path), scopes=scopes)
+    # cache_discovery=False avoids filesystem cache issues on Windows/Render
+    return build("calendar", "v3", credentials=creds, cache_discovery=False)
