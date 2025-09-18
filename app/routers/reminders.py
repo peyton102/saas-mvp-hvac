@@ -90,26 +90,36 @@ def _due_items(session: Session, look_back_minutes: int) -> List[Dict[str, Any]]
     return [it for it in items if it["phone"]]
 
 
-@router.get("/debug/run-reminders")
-def debug_run_reminders(
-    look_back_minutes: int = Query(10, ge=0),
+@router.get("/debug/reminders-sent")
+def debug_reminders_sent(
+    limit: int = 20,
+    source: str = "csv",
     session: Session = Depends(get_session),
 ):
-    """Preview which reminders would send (no SMS). Uses DB bookings."""
-    items = _due_items(session, look_back_minutes)
-    # Show only minimal preview fields
-    preview = [
-        {
-            "phone": it["phone"],
-            "name": it["name"],
-            "start": it["start"].isoformat(),
-            "template": it["template"],
-            "body": it["body"],
-        }
-        for it in items
-    ]
-    return {"count": len(preview), "items": preview}
+    if source.lower() == "db":
+        rows = session.exec(
+            select(ReminderModel).order_by(ReminderModel.id.desc()).limit(limit)
+        ).all()
+        items = [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "phone": r.phone,
+                "name": r.name,
+                "booking_start": r.booking_start.isoformat() if r.booking_start else None,
+                "booking_end": r.booking_end.isoformat() if r.booking_end else None,
+                "template": r.template,
+                "message": r.message,
+                "source": r.source,
+                "sms_sent": r.sms_sent,
+            }
+            for r in rows
+        ]
+        return {"count": len(items), "items": items}
 
+    # default: CSV (existing behavior)
+    items = storage.read_reminders_sent(limit) if hasattr(storage, "read_reminders_sent") else []
+    return {"count": len(items), "items": items}
 
 @router.post("/tasks/send-reminders")
 def send_reminders(
