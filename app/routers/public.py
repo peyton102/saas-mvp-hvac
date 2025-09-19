@@ -89,4 +89,9 @@ def lead_widget_js(request: Request, redirect: str = "/thanks"):
   (script.parentElement || document.body).appendChild(iframe);
 }})();
 """.strip()
-    return Response(content=js, media_type="application/javascript")
+    return Response(
+        content=js,
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
+
