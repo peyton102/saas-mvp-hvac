@@ -11,4 +11,9 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 python-dateutil
+sqlmodel
+sqlalchemy
 
+alembic
+sqlmodel
+SQLAlchemy

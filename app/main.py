@@ -36,7 +36,4 @@ app.include_router(public_router)
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
-    from datetime import datetime
-    from typing import Optional
-    from sqlmodel import SQLModel, Field
 
