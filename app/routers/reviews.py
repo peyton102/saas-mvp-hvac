@@ -69,21 +69,30 @@ def job_complete(payload: Dict[str, Any], session: Session = Depends(get_session
 
 
 @router.get("/debug/reviews")
-def debug_reviews(limit: int = 20, session: Session = Depends(get_session)):
-    rows = session.exec(
-        select(ReviewModel).order_by(ReviewModel.id.desc()).limit(limit)
-    ).all()
-    items = [
-        {
-            "id": r.id,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "phone": r.phone,
-            "name": r.name,
-            "job_id": r.job_id,
-            "notes": r.notes,
-            "review_link": r.review_link,
-            "sms_sent": r.sms_sent,
-        }
-        for r in rows
-    ]
+def debug_reviews(
+    limit: int = 20,
+    source: str = "csv",
+    session: Session = Depends(get_session),
+):
+    if source.lower() == "db":
+        rows = session.exec(
+            select(ReviewModel).order_by(ReviewModel.id.desc()).limit(limit)
+        ).all()
+        items = [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "phone": r.phone,
+                "name": r.name,
+                "job_id": r.job_id,
+                "notes": r.notes,
+                "review_link": r.review_link,
+                "sms_sent": r.sms_sent,
+            }
+            for r in rows
+        ]
+        return {"count": len(items), "items": items}
+
+    # default: CSV
+    items = storage.read_reviews(limit)
     return {"count": len(items), "items": items}

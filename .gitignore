@@ -5,3 +5,6 @@ __pycache__/
 data/*.csv
 .DS_Store
 
+
+# Google OAuth tokens
+data/google_tokens/

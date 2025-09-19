@@ -57,19 +57,27 @@ def create_lead(payload: LeadIn, session: Session = Depends(get_session)):
 
 
 @router.get("/debug/leads")
-def debug_leads(limit: int = 20, session: Session = Depends(get_session)):
-    rows = session.exec(
-        select(LeadModel).order_by(LeadModel.id.desc()).limit(limit)
-    ).all()
-    items = [
-        {
-            "id": r.id,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "name": r.name,
-            "phone": r.phone,
-            "email": r.email,
-            "message": r.message,
-        }
-        for r in rows
-    ]
+def debug_leads(
+    limit: int = 20,
+    source: str = "csv",
+    session: Session = Depends(get_session),
+):
+    if source.lower() == "db":
+        rows = session.exec(
+            select(LeadModel).order_by(LeadModel.id.desc()).limit(limit)
+        ).all()
+        items = [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "name": r.name,
+                "phone": r.phone,
+                "email": r.email,
+                "message": r.message,
+            }
+            for r in rows
+        ]
+        return {"count": len(items), "items": items}
+    # default CSV path (keeps existing behavior)
+    items = storage.read_leads(limit)
     return {"count": len(items), "items": items}

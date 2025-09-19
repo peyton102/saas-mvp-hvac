@@ -1,11 +1,20 @@
 # app/routers/calendly.py
-from fastapi import APIRouter
+from datetime import timedelta
+from typing import Dict, Any, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session, select
+from dateutil import parser as dtparse
+
 from app import config, storage
 from app.services.sms import send_sms
+from app.db import get_session
+from app.models import Booking as BookingModel
 
 router = APIRouter(prefix="", tags=["calendly"])
 
-def _extract_phone(p: dict) -> str | None:
+
+def _extract_phone(p: dict) -> Optional[str]:
     invitee = (p.get("invitee") or {})
     # common fields
     for key in ("phone", "phone_number", "mobile", "sms"):
@@ -20,9 +29,11 @@ def _extract_phone(p: dict) -> str | None:
             return a
     return None
 
+
 @router.post("/webhooks/calendly")
-def calendly_webhook(payload: dict):
-    """Handle Calendly invitee.created / invitee.canceled webhook payloads."""
+def calendly_webhook(payload: Dict[str, Any], session: Session = Depends(get_session)):
+    """Handle Calendly invitee.created / invitee.canceled webhook payloads.
+       CSV write preserved; also writes a Booking row to the DB."""
     p = payload.get("payload") or payload
 
     event_id = str(p.get("event") or p.get("event_uuid") or "")
@@ -48,7 +59,7 @@ def calendly_webhook(payload: dict):
         except Exception as e:
             print(f"[BOOKING SMS ERROR] {e}")
 
-    # save booking if supported, else fall back to a lead row
+    # --- CSV write (existing behavior) ---
     if hasattr(storage, "save_booking"):
         storage.save_booking(
             event_id=event_id,
@@ -69,11 +80,67 @@ def calendly_webhook(payload: dict):
             sms_sent=ok,
             source="calendly",
         )
+
+    # --- DB write (new) ---
+    # Parse datetimes; require start for DB row. If missing, skip DB write (CSV already logged).
+    if not start:
+        return {"ok": True}
+    try:
+        start_dt = dtparse.isoparse(start)
+    except Exception:
+        # Invalid start_time -> skip DB write but keep CSV behavior
+        return {"ok": True}
+
+    if end:
+        try:
+            end_dt = dtparse.isoparse(end)
+        except Exception:
+            end_dt = start_dt + timedelta(minutes=60)
+    else:
+        end_dt = start_dt + timedelta(minutes=60)
+
+    session.add(BookingModel(
+        name=name or "",
+        phone=phone or "",
+        email=email or "",
+        start=start_dt,
+        end=end_dt,
+        notes=notes or "",
+        source="calendly",
+    ))
+    session.commit()
+
     return {"ok": True}
 
+
 @router.get("/debug/bookings")
-def debug_bookings(limit: int = 20):
-    if hasattr(storage, "read_bookings"):
-        items = storage.read_bookings(limit)
+def debug_bookings(
+    limit: int = 20,
+    source: str = "csv",
+    session: Session = Depends(get_session),
+):
+    source = (source or "csv").lower()
+    if source == "db":
+        rows = session.exec(
+            select(BookingModel).order_by(BookingModel.id.desc()).limit(limit)
+        ).all()
+        items = [
+            {
+                "id": r.id,
+                "created_at": (r.created_at.isoformat() if r.created_at else None),
+                "name": r.name,
+                "phone": r.phone,
+                "email": r.email,
+                "start": r.start.isoformat() if r.start else None,
+                "end": r.end.isoformat() if r.end else None,
+                "notes": r.notes,
+                "source": r.source,
+            }
+            for r in rows
+        ]
         return {"count": len(items), "items": items}
-    return {"count": 0, "items": []}
+
+    # default: CSV
+    items = storage.read_bookings(limit)
+    return {"count": len(items), "items": items}
+
