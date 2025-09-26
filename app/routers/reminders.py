@@ -1,173 +1,278 @@
 # app/routers/reminders.py
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlmodel import Session, select
-from dateutil import parser as dtparse
 
 from app import config, storage
 from app.services.sms import send_sms
+from app.utils.phone import normalize_us_phone
 from app.db import get_session
 from app.models import Booking as BookingModel, ReminderSent as ReminderModel
 
 router = APIRouter(prefix="", tags=["reminders"])
 
 
-def _parse_offsets(spec: str) -> List[tuple[str, timedelta]]:
+# --------------------------- tenant resolution ---------------------------
+
+def _tenant_keys_map() -> dict:
+    # Supports either config.TENANT_KEYS or config.settings.TENANT_KEYS
+    if hasattr(config, "TENANT_KEYS") and isinstance(config.TENANT_KEYS, dict):
+        return config.TENANT_KEYS
+    if hasattr(config, "settings") and hasattr(config.settings, "TENANT_KEYS"):
+        return getattr(config.settings, "TENANT_KEYS") or {}
+    return {}
+
+def _resolve_tenant(request: Request) -> Optional[str]:
     """
-    Parse '24h,2h,30m' -> [("24h", 24h), ("2h", 2h), ("30m", 30m)]
+    Resolve tenant in priority:
+      1) request.state.tenant_id (set by middleware)
+      2) X-API-Key header mapped via TENANT_KEYS
+      3) Bearer token mapped via TENANT_KEYS
+    Returns None if not found (caller can 401).
     """
-    out: List[tuple[str, timedelta]] = []
-    if not spec:
-        return out
-    for raw in [s.strip() for s in spec.split(",") if s.strip()]:
-        num = "".join(ch for ch in raw if ch.isdigit())
-        unit = "".join(ch for ch in raw if ch.isalpha()).lower() or "m"
-        if not num:
-            continue
-        n = int(num)
-        if unit in ("m", "min", "mins", "minute", "minutes"):
-            out.append((raw, timedelta(minutes=n)))
-        elif unit in ("h", "hr", "hrs", "hour", "hours"):
-            out.append((raw, timedelta(hours=n)))
-        elif unit in ("d", "day", "days"):
-            out.append((raw, timedelta(days=n)))
-        else:
-            # default to minutes if unknown unit
-            out.append((raw, timedelta(minutes=n)))
-    return out
+    # 1) middleware
+    t = getattr(request.state, "tenant_id", None)
+    if t and t != "public":
+        return t
+
+    # 2) X-API-Key
+    api_key = (request.headers.get("x-api-key") or "").strip()
+    if api_key:
+        t = _tenant_keys_map().get(api_key)
+        if t:
+            return t
+
+    # 3) Bearer (only if it’s actually a tenant key)
+    auth = (request.headers.get("authorization") or "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        t = _tenant_keys_map().get(token)
+        if t:
+            return t
+
+    return None
 
 
-def _already_sent_db(session: Session, phone: str, start_dt: datetime, template: str) -> bool:
+# ------------------------------ helpers --------------------------------
+
+def _parse_reminder_list() -> List[Tuple[str, timedelta]]:
+    """
+    Parse REMINDERS like "24h,2h" into [("24h", 24h), ("2h", 2h)].
+    Supports minutes ("m") and hours ("h").
+    """
+    src = getattr(config, "REMINDERS", None)
+    if src is None and hasattr(config, "settings"):
+        src = getattr(config.settings, "REMINDERS", "24h,2h")
+    raw = (src or "24h,2h").split(",")
+    out: List[Tuple[str, timedelta]] = []
+    for tok in [t.strip() for t in raw if t.strip()]:
+        if tok.endswith("h"):
+            try:
+                out.append((tok, timedelta(hours=int(tok[:-1]))))
+            except Exception:
+                continue
+        elif tok.endswith("m"):
+            try:
+                out.append((tok, timedelta(minutes=int(tok[:-1]))))
+            except Exception:
+                continue
+    return out or [("24h", timedelta(hours=24)), ("2h", timedelta(hours=2))]
+
+def _already_sent(session: Session, tenant_id: str, phone: str, template: str, booking_start: datetime) -> bool:
     q = select(ReminderModel).where(
-        ReminderModel.phone == phone,
-        ReminderModel.booking_start == start_dt,
-        ReminderModel.template == template,
-    )
+        (ReminderModel.tenant_id == tenant_id) &
+        (ReminderModel.phone == phone) &
+        (ReminderModel.template == template) &
+        (ReminderModel.booking_start == booking_start.replace(microsecond=0))
+    ).limit(1)
     return session.exec(q).first() is not None
 
+def _make_msg(name: str, start_dt_utc: datetime) -> str:
+    who = (name or "").strip() or "there"
+    tz_name = getattr(config, "TZ", "America/New_York")
+    try:
+        local = start_dt_utc.astimezone(ZoneInfo(tz_name))
+    except Exception:
+        local = start_dt_utc  # fallback
+    when = local.strftime("%a %b %d at %I:%M %p").lstrip("0")
+    return (
+        f"Reminder from {config.FROM_NAME}: your appointment is {when} ({tz_name}). "
+        f"Need to reschedule? {config.BOOKING_LINK}"
+    )
 
-def _due_items(session: Session, look_back_minutes: int) -> List[Dict[str, Any]]:
+def _iter_due(session: Session, tenant_id: str, window_minutes: int) -> List[Dict[str, Any]]:
     """
-    Compute reminders due now (within look-back + small window), from DB bookings.
+    Find bookings for THIS tenant whose reminder trigger time fell within
+    the past `window_minutes` (± padding).
     """
-    now = datetime.utcnow()
-    window_sec = int(getattr(config, "REMINDER_WINDOW_SECONDS", 900))  # default 15 min
-    lower_bound = now - timedelta(minutes=look_back_minutes) - timedelta(seconds=window_sec)
-    upper_bound = now + timedelta(seconds=window_sec)
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(minutes=max(1, window_minutes))
+    window_end = now
 
-    # fetch recent bookings (loose window)
+    pad_src = getattr(config, "REMINDER_WINDOW_SECONDS", None)
+    if pad_src is None and hasattr(config, "settings"):
+        pad_src = getattr(config.settings, "REMINDER_WINDOW_SECONDS", 900)
+    window_pad = int(pad_src or 900)  # default 15m
+
+    # Query this tenant's bookings in a practical window
+    since = now - timedelta(days=2)
+    until = now + timedelta(days=7)
     rows = session.exec(
-        select(BookingModel).where(BookingModel.start >= now - timedelta(days=14)).order_by(BookingModel.start)
+        select(BookingModel)
+        .where(BookingModel.tenant_id == tenant_id)
+        .where(BookingModel.start >= since)
+        .where(BookingModel.start <= until)
+        .order_by(BookingModel.start.asc())
     ).all()
 
-    offsets = _parse_offsets(getattr(config, "REMINDERS", "24h,2h"))
-    items: List[Dict[str, Any]] = []
+    templates = _parse_reminder_list()
+    due: List[Dict[str, Any]] = []
 
-    for b in rows:
-        if not b.start:
+    for r in rows:
+        if not r.start:
             continue
-        for label, delta in offsets:
-            remind_at = b.start - delta
-            if lower_bound <= remind_at <= upper_bound:
-                # Build SMS
-                when_txt = b.start.isoformat()
-                body = (
-                    f"Reminder from {config.FROM_NAME}: your appointment is at {when_txt}. "
-                    f"Need to reschedule? {config.BOOKING_LINK}"
-                )
-                items.append({
-                    "phone": (b.phone or "").strip(),
-                    "name": (b.name or "").strip(),
-                    "start": b.start,
-                    "end": b.end,
-                    "template": label,
-                    "body": body,
-                    "source": "cron",
-                })
-    # Filter items with phones
-    return [it for it in items if it["phone"]]
 
+        # Ensure tz-aware UTC for math
+        start_dt = r.start if r.start.tzinfo else r.start.replace(tzinfo=timezone.utc)
+        name = r.name or ""
+        phone_raw = (r.phone or "").strip()
+        e164 = normalize_us_phone(phone_raw) if phone_raw else ""
+
+        for tpl_name, delta in templates:
+            trigger = start_dt - delta
+            if (window_start - timedelta(seconds=window_pad)) <= trigger <= (window_end + timedelta(seconds=window_pad)):
+                if e164 and not _already_sent(session, tenant_id, e164, tpl_name, start_dt.replace(microsecond=0)):
+                    body = _make_msg(name, start_dt)
+                    due.append({
+                        "tenant_id": tenant_id,
+                        "phone": e164,
+                        "name": name,
+                        "booking_start": start_dt,
+                        "booking_end": r.end,
+                        "template": tpl_name,
+                        "message": body,
+                        "source": r.source or "cron",
+                    })
+
+    return due
+
+
+# ------------------------------ DEBUG ----------------------------------
+# NOTE: Do NOT add any extra bearer checks here; main.py middleware already
+# enforces /debug/* with DEBUG_BEARER_TOKEN (or allows X-API-Key per your config).
+
+@router.get("/debug/reminders-preview")
+def reminders_preview(
+    request: Request,
+    look_back_minutes: int = Query(60, ge=1, le=720),
+    session: Session = Depends(get_session),
+):
+    tenant_id = _resolve_tenant(request)
+    if not tenant_id:
+        raise HTTPException(status_code=401, detail="Missing or unknown tenant key")
+
+    items = _iter_due(session, tenant_id, look_back_minutes)
+    return {"count": len(items), "items": items}
 
 @router.get("/debug/reminders-sent")
 def debug_reminders_sent(
-    limit: int = 20,
-    source: str = "csv",
+    request: Request,
+    limit: int = Query(20, ge=1, le=200),
     session: Session = Depends(get_session),
 ):
-    if source.lower() == "db":
-        rows = session.exec(
-            select(ReminderModel).order_by(ReminderModel.id.desc()).limit(limit)
-        ).all()
-        items = [
-            {
-                "id": r.id,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-                "phone": r.phone,
-                "name": r.name,
-                "booking_start": r.booking_start.isoformat() if r.booking_start else None,
-                "booking_end": r.booking_end.isoformat() if r.booking_end else None,
-                "template": r.template,
-                "message": r.message,
-                "source": r.source,
-                "sms_sent": r.sms_sent,
-            }
-            for r in rows
-        ]
-        return {"count": len(items), "items": items}
+    tenant_id = _resolve_tenant(request)
+    if not tenant_id:
+        raise HTTPException(status_code=401, detail="Missing or unknown tenant key")
 
-    # default: CSV (existing behavior)
-    items = storage.read_reminders_sent(limit) if hasattr(storage, "read_reminders_sent") else []
+    rows = session.exec(
+        select(ReminderModel)
+        .where(ReminderModel.tenant_id == tenant_id)
+        .order_by(ReminderModel.id.desc())
+        .limit(limit)
+    ).all()
+    items = [
+        {
+            "id": r.id,
+            "created_at": (r.created_at.isoformat() if r.created_at else None),
+            "phone": r.phone,
+            "name": r.name or "",
+            "booking_start": (r.booking_start.isoformat() if r.booking_start else None),
+            "booking_end": (r.booking_end.isoformat() if r.booking_end else None),
+            "message": r.message or "",
+            "template": r.template or "",
+            "source": r.source or "",
+            "sms_sent": bool(r.sms_sent),
+            "tenant_id": r.tenant_id,
+        }
+        for r in rows
+    ]
     return {"count": len(items), "items": items}
+
+
+# ---------------------------- SEND & LOG --------------------------------
 
 @router.post("/tasks/send-reminders")
 def send_reminders(
-    look_back_minutes: int = Query(10, ge=0),
+    request: Request,
+    look_back_minutes: int = Query(60, ge=1, le=720),
     session: Session = Depends(get_session),
 ):
-    """
-    Send due reminders. De-dupes using DB (and CSV if available), honors SMS_DRY_RUN.
-    Also logs to CSV (if storage supports) and DB (ReminderSent).
-    """
-    items = _due_items(session, look_back_minutes)
+    # /tasks/* is not under /debug; require a resolvable tenant
+    tenant_id = _resolve_tenant(request)
+    if not tenant_id:
+        raise HTTPException(status_code=401, detail="Missing or unknown tenant key")
+
+    items = _iter_due(session, tenant_id, look_back_minutes)
 
     sent = 0
-    skipped_dup = 0
+    skipped_duplicates = 0
     failures = 0
 
     for it in items:
         phone = it["phone"]
-        start_dt: datetime = it["start"]
-        template = it["template"]
-        body = it["body"]
         name = it["name"]
+        start_dt: datetime = it["booking_start"]
+        end_dt: Optional[datetime] = it.get("booking_end")
+        template = it["template"]
+        body = it["message"]
 
-        # DB dedupe
-        if _already_sent_db(session, phone, start_dt, template):
-            skipped_dup += 1
+        # duplicate guard (race safety)
+        if _already_sent(session, tenant_id, phone, template, start_dt.replace(microsecond=0)):
+            skipped_duplicates += 1
             continue
-
-        # Optional CSV dedupe if your storage tracks it
-        try:
-            if hasattr(storage, "reminder_already_sent"):
-                if storage.reminder_already_sent(phone=phone, start_iso=start_dt.isoformat(), template=template):
-                    skipped_dup += 1
-                    continue
-        except Exception:
-            pass
 
         ok = False
         try:
-            ok = send_sms(phone, body)  # DRY-RUN respected inside send_sms
+            ok = send_sms(phone, body)  # honors SMS_DRY_RUN in Twilio service
         except Exception as e:
-            print(f"[REMINDER SMS ERROR] {e}")
             failures += 1
+            print(f"[REMINDER SMS ERROR] {e}")
 
-        # CSV log (preserve existing behavior)
+        # DB write
+        session.add(ReminderModel(
+            tenant_id=tenant_id,
+            phone=phone,
+            name=name,
+            booking_start=start_dt.replace(microsecond=0),
+            booking_end=(end_dt.replace(microsecond=0) if end_dt else None),
+            template=template,
+            message=body,
+            source=it.get("source", "cron"),
+            sms_sent=bool(ok),
+        ))
+        session.commit()
+
+        # Optional CSV write when DB_FIRST = False
         try:
-            if hasattr(storage, "save_reminder_sent"):
+            db_first = getattr(config, "DB_FIRST", None)
+            if db_first is None and hasattr(config, "settings"):
+                db_first = getattr(config.settings, "DB_FIRST", True)
+            if (not db_first) and hasattr(storage, "save_reminder_sent"):
                 storage.save_reminder_sent({
+                    "tenant_id": tenant_id,
                     "phone": phone,
                     "name": name,
                     "booking_start": start_dt.isoformat(),
@@ -179,44 +284,7 @@ def send_reminders(
         except Exception as e:
             print(f"[REMINDER CSV LOG ERROR] {e}")
 
-        # DB log (new)
-        session.add(ReminderModel(
-            phone=phone,
-            name=name or None,
-            booking_start=start_dt,
-            booking_end=it["end"],
-            message=body,
-            template=template,
-            source=it.get("source", "cron"),
-            sms_sent=bool(ok),
-        ))
-        session.commit()
-
         if ok:
             sent += 1
 
-    return {"ok": True, "sent": sent, "skipped_duplicates": skipped_dup, "failures": failures}
-
-
-@router.get("/debug/reminders-sent")
-def debug_reminders_sent(limit: int = 50, session: Session = Depends(get_session)):
-    """Read recent sent reminders from DB (newest first)."""
-    rows = session.exec(
-        select(ReminderModel).order_by(ReminderModel.id.desc()).limit(limit)
-    ).all()
-    items = [
-        {
-            "id": r.id,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "phone": r.phone,
-            "name": r.name,
-            "booking_start": r.booking_start.isoformat() if r.booking_start else None,
-            "booking_end": r.booking_end.isoformat() if r.booking_end else None,
-            "template": r.template,
-            "message": r.message,
-            "source": r.source,
-            "sms_sent": r.sms_sent,
-        }
-        for r in rows
-    ]
-    return {"count": len(items), "items": items}
+    return {"ok": True, "sent": sent, "skipped_duplicates": skipped_duplicates, "failures": failures}

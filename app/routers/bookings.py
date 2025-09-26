@@ -1,10 +1,13 @@
 ﻿# app/routers/bookings.py
 from datetime import datetime, timedelta, time
 from typing import Optional, List
+from datetime import timedelta, timezone
+from dateutil import parser as dtparse
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session
+from ..deps import get_tenant_id
 
 from app import config, storage
 from app.utils.phone import normalize_us_phone
@@ -12,9 +15,70 @@ from app.services import google_calendar as gcal
 from app.services.sms import send_sms
 from app.db import get_session
 from app.models import Booking as BookingModel
+from fastapi import Request, Depends
+from fastapi import HTTPException
+
+def _tenant_from_headers(request: Request) -> str:
+    # Prefer tenant key from X-API-Key; fall back to Bearer token
+    api_key = (request.headers.get("x-api-key") or "").strip()
+    if api_key:
+        return config.TENANT_KEYS.get(api_key, "public")
+
+    auth = (request.headers.get("authorization") or "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        return config.TENANT_KEYS.get(token, "public")
+
+    return "public"
+
 
 router = APIRouter(prefix="", tags=["booking"])
 
+@router.post("/book")
+def book(
+    payload: dict,
+    request: Request,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),   # <-- add this
+):
+    # ... your existing validation/slot logic up here ...
+    # --- parse/normalize start time ---
+    raw_start = (payload.get("start") or "").strip()
+    if not raw_start:
+        raise HTTPException(status_code=400, detail="start is required (ISO8601)")
+
+    try:
+        start_dt = dtparse.isoparse(raw_start)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid start datetime")
+
+    # make timezone-aware UTC
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=timezone.utc)
+    else:
+        start_dt = start_dt.astimezone(timezone.utc)
+
+    # default 60-minute slot unless you already compute a different end
+    end_dt = start_dt + timedelta(minutes=60)
+
+    # when you create the booking, include tenant_id and return JSON
+    row = BookingModel(
+        name=(payload.get("name") or "").strip(),
+        phone=(payload.get("phone") or "").strip(),
+        email=(payload.get("email") or "").strip() or None,
+        start=start_dt,            # whatever you computed earlier
+        end=end_dt,                # whatever you computed earlier
+        notes=(payload.get("notes") or "").strip(),
+        source="api",
+        tenant_id=tenant_id,       # <-- stamp tenant
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    return {"ok": True, "booking_id": row.id}
+
+    ...
 
 # ===== Schemas =====
 class BookIn(BaseModel):
@@ -126,7 +190,7 @@ def _gcal_create_event(start: datetime, end: datetime, name: str, email: Optiona
 
 
 # ===== Availability =====
-@router.get("/availability")
+@router.get("/availability", operation_id="bookings_availability_get")
 def availability(days: int = Query(7, ge=1, le=14)):
     """Simple availability using BUSINESS_HOURS & SLOT_MINUTES, filtered by Google free/busy."""
     try:
@@ -163,11 +227,9 @@ def availability(days: int = Query(7, ge=1, le=14)):
 
 # ===== Direct Booking =====
 @router.post("/book", response_model=BookOut)
-def book(payload: BookIn, session: Session = Depends(get_session)):
-    """
-    Validate slot against Google Calendar; on success create event, log CSV, SMS confirm,
-    and dual-write to DB. Returns 409 if conflict.
-    """
+def book(request: Request, payload: dict, session: Session = Depends(get_session)):
+    from fastapi import HTTPException
+    raise HTTPException(status_code=409, detail="Time slot not available")
     start = _parse_dt(payload.start)
     end = _parse_dt(payload.end)
     if end <= start:
@@ -193,10 +255,10 @@ def book(payload: BookIn, session: Session = Depends(get_session)):
         except Exception as e:
             print(f"[BOOK SMS ERROR] {e}")
 
-    # CSV log (preserve existing behavior)
+    # CSV log (preserve existing behavior only when DB_FIRST is false)
     try:
-        if hasattr(storage, "save_booking"):
-            tz_str = getattr(config, "TZ", "America/New_York")
+        if (not getattr(config, "DB_FIRST", True)) and hasattr(storage, "save_booking"):
+            tz_str = str(start.tzinfo or "")
             storage.save_booking(
                 event_id=event_id,
                 invitee_name=payload.name,
@@ -224,4 +286,4 @@ def book(payload: BookIn, session: Session = Depends(get_session)):
     ))
     session.commit()
 
-    return BookOut(ok=True, event_id=event_id or None, sms_sent=bool(sms_ok))
+

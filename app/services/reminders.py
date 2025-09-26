@@ -1,80 +1,134 @@
-# app/services/reminders.py
-from __future__ import annotations
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from typing import List, Dict, Any
+# app/routers/reviews.py
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query, Request
+from sqlmodel import Session, select
+
 from app import config, storage
+from app.services.sms import send_sms
+from app.services.email import send_email  # <-- added
+from app.db import get_session
+from app.models import Review as ReviewModel
+from app.utils.phone import normalize_us_phone
 
-def _tz():
-    try:
-        return ZoneInfo(getattr(config, "TZ", "America/New_York"))
-    except ZoneInfoNotFoundError:
-        return timezone.utc
+router = APIRouter(prefix="", tags=["reviews"])
 
-def _parse_iso(s: str | None) -> datetime | None:
-    if not s:
-        return None
-    try:
-        if s.endswith("Z"):
-            s = s.replace("Z", "+00:00")
-        dt = datetime.fromisoformat(s)
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-    except Exception:
-        return None
 
-def _reminder_offsets() -> list[timedelta]:
-    spec = getattr(config, "REMINDERS", "24h,2h")
-    out: list[timedelta] = []
-    for part in spec.split(","):
-        p = part.strip().lower()
-        if not p: continue
-        if p.endswith("h"): out.append(timedelta(hours=float(p[:-1])))
-        elif p.endswith("m"): out.append(timedelta(minutes=float(p[:-1])))
-    return out or [timedelta(hours=24), timedelta(hours=2)]
+def _tenant_from_headers(request: Request) -> str:
+    auth = (request.headers.get("authorization") or "")
+    api_key = (request.headers.get("x-api-key") or "")
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else api_key.strip()
+    return config.TENANT_KEYS.get(token, "public")
 
-def preview_due_reminders(now: datetime | None = None, look_back_minutes: int | None = None) -> List[Dict[str, Any]]:
-    tz = _tz()
-    now_local = now.astimezone(tz) if now else datetime.now(tz)
-    window_sec = int(getattr(config, "REMINDER_WINDOW_SECONDS", 600))
-    offsets = _reminder_offsets()
 
-    bookings = storage.read_bookings(limit=1000)
-    due: list[dict] = []
+@router.post("/jobs/complete")
+def mark_job_complete(
+    payload: dict,
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    """
+    Body: { phone, name?, job_id?, notes?, email? }
+    Sends review SMS (DRY-RUN honored) + optional email copy, logs to DB (+ CSV if DB_FIRST=false).
+    """
+    tenant_id = _tenant_from_headers(request)
 
-    for b in bookings:
-        phone = (b.get("invitee_phone") or "").strip()
-        if not phone:
-            continue
-        start_dt = _parse_iso(b.get("start_time") or "")
-        if not start_dt:
-            continue
-        start_local = start_dt.astimezone(tz)
+    phone = normalize_us_phone(payload.get("phone") or "")
+    email = (payload.get("email") or "").strip()  # <-- optional
+    name = (payload.get("name") or "").strip() or "there"
+    job_id = (payload.get("job_id") or "").strip() or None
+    notes = (payload.get("notes") or "").strip() or None
 
-        for off in offsets:
-            target = start_local - off
-            delta_s = (now_local - target).total_seconds()
-            if abs(delta_s) <= window_sec or (look_back_minutes and 0 <= delta_s <= look_back_minutes * 60):
-                total_min = int(off.total_seconds() // 60)
-                hrs, mins = divmod(total_min, 60)
-                when_txt = f"{hrs}h" if mins == 0 else (f"{mins}m" if hrs == 0 else f"{hrs}h{mins}m")
-                time_str = start_local.strftime("%I:%M %p on %a %b %d").lstrip("0")
-                msg = (
-                    f"Reminder: your appointment with {config.FROM_NAME} is at {time_str} "
-                    f"({getattr(config, 'TZ', 'America/New_York')}). To reschedule: {config.BOOKING_LINK}"
-                )
-                due.append({
-                    "phone": phone,
-                    "offset": when_txt,
-                    "start_time_local": start_local.isoformat(timespec="minutes"),
-                    "message": msg,
-                })
-    return due
-from app.services.sms import send_sms  # add at top or near imports
+    review_link = getattr(config, "GOOGLE_REVIEW_LINK", "") or ""
+    msg = f"Thanks {name} for choosing {config.FROM_NAME}! If we did a great job, would you leave a review? {review_link}".strip()
 
-def send_due_reminders(look_back_minutes: int | None = None):
-    due = preview_due_reminders(look_back_minutes=look_back_minutes)
-    results = []
-    for d in due:
-        ok = send_sms(d["phone"], d["message"])  # DRY_RUN_SMS controls real vs dry
-        results.append({"phone": d["phone"], "ok": ok, "offset": d["offset"]})
-    return results
+    sms_ok = False
+    if phone:
+        try:
+            sms_ok = send_sms(phone, msg)
+        except Exception as e:
+            print(f"[REVIEW SMS ERROR] {e}")
+
+    # Optional email copy (DRY-RUN in email service)
+    email_ok = False
+    if email:
+        try:
+            sub = f"Thanks from {config.FROM_NAME} — quick review?"
+            txt = f"Hi {name if name!='there' else ''},\n\n{msg}\n"
+            html = f"<p>Hi {name if name!='there' else ''},</p><p>{msg}</p>"
+            email_ok = send_email(email, sub, txt, html)
+        except Exception as e:
+            print(f"[REVIEW EMAIL ERROR] {e}")
+
+    # CSV write ONLY if DB_FIRST is false (kept for backup compatibility)
+    if not getattr(config, "DB_FIRST", True):
+        storage.save_review(
+            {
+                "phone": phone,
+                "name": name,
+                "job_id": job_id or "",
+                "notes": notes or "",
+                "tenant_id": tenant_id,
+            },
+            sms_body=msg,
+            sms_sent=sms_ok,
+            source="api",
+        )
+
+    # DB write (primary)
+    session.add(
+        ReviewModel(
+            phone=phone,
+            name=name if name != "there" else "",
+            job_id=job_id,
+            notes=notes,
+            review_link=review_link or None,
+            sms_sent=bool(sms_ok),
+            tenant_id=tenant_id,
+        )
+    )
+    session.commit()
+
+    return {"ok": True, "sms_sent": bool(sms_ok), "email_sent": bool(email_ok)}
+
+
+@router.get("/debug/reviews")
+def debug_reviews(
+    request: Request,
+    limit: int = Query(20, ge=1, le=200),
+    source: str = Query("db", pattern="^(csv|db)$"),
+    session: Session = Depends(get_session),
+):
+    """
+    source=csv: read data/reviews.csv (not tenant-filtered unless CSV has tenant_id)
+    source=db: read Review table, scoped to tenant
+    """
+    tenant_id = _tenant_from_headers(request)
+
+    if source == "db":
+        rows = session.exec(
+            select(ReviewModel)
+            .where(ReviewModel.tenant_id == tenant_id)
+            .order_by(ReviewModel.id.desc())
+            .limit(limit)
+        ).all()
+        items = [
+            {
+                "id": r.id,
+                "created_at": (r.created_at.isoformat() if r.created_at else None),
+                "name": r.name or "",
+                "phone": r.phone or "",
+                "job_id": r.job_id or "",
+                "notes": r.notes or "",
+                "sms_sent": bool(r.sms_sent),
+                "source": "jobs.complete",
+                "tenant_id": r.tenant_id,
+            } for r in rows
+        ]
+        return {"count": len(items), "items": items}
+
+    # CSV fallback
+    items = storage.read_reviews(limit)
+    # filter CSV if it has tenant_id; otherwise return raw
+    filtered = [it for it in items if (it.get("tenant_id") == tenant_id)] if items and isinstance(items[0], dict) and "tenant_id" in items[0] else items
+    return {"count": len(filtered), "items": filtered}

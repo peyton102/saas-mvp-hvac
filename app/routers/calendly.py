@@ -1,18 +1,45 @@
 # app/routers/calendly.py
-from datetime import timedelta
-from typing import Dict, Any, Optional
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlmodel import Session, select
 from dateutil import parser as dtparse
-
+from sqlalchemy.exc import IntegrityError
+from pydantic import BaseModel
+from typing import Dict, Any, Optional
+from datetime import timedelta
+import hashlib
+from app.tenant import brand
 from app import config, storage
-from app.services.sms import send_sms
 from app.db import get_session
-from app.models import Booking as BookingModel
+from app.models import Booking as BookingModel, WebhookDedup
+from app.services.sms import send_sms
+from ..deps import get_tenant_id
 
 router = APIRouter(prefix="", tags=["calendly"])
 
+# ---- (Optional) model if you want typed payloads later ----
+class _Invitee(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+class CalendlyPayload(BaseModel):
+    invitee: Optional[_Invitee] = None
+    invitee_phone: Optional[str] = None
+    start_time: str
+    timezone: Optional[str] = None
+    notes: Optional[str] = None
+    event_id: Optional[str] = None
+
+# ---- helpers ----
+def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
+    """Return True if first time seen; False if duplicate."""
+    try:
+        session.add(WebhookDedup(source=source, event_id=event_id))
+        session.commit()
+        return True
+    except IntegrityError:
+        session.rollback()
+        return False
 
 def _extract_phone(p: dict) -> Optional[str]:
     invitee = (p.get("invitee") or {})
@@ -29,100 +56,135 @@ def _extract_phone(p: dict) -> Optional[str]:
             return a
     return None
 
-
+# ---- routes ----
 @router.post("/webhooks/calendly")
-def calendly_webhook(payload: Dict[str, Any], session: Session = Depends(get_session)):
-    """Handle Calendly invitee.created / invitee.canceled webhook payloads.
-       CSV write preserved; also writes a Booking row to the DB."""
+def calendly_webhook(
+    payload: Dict[str, Any],
+    request: Request,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    # Secret verification (only if configured)
+    secret_expected = getattr(config, "CALENDLY_WEBHOOK_SECRET", "") or ""
+    if secret_expected:
+        secret_got = (request.headers.get("x-webhook-secret") or "").strip()
+        if secret_got != secret_expected:
+            raise HTTPException(status_code=401, detail="Invalid Calendly secret")
+
+    # Calendly sometimes nests under "payload"
     p = payload.get("payload") or payload
 
-    event_id = str(p.get("event") or p.get("event_uuid") or "")
+    # ---- Idempotency key ----
     invitee = p.get("invitee") or {}
+    event_uuid = (p.get("event_uuid") or p.get("event_id") or p.get("event") or "").strip()
+    if event_uuid:
+        event_id = event_uuid
+    else:
+        phone = (p.get("invitee_phone") or invitee.get("phone") or "").strip()
+        email = (invitee.get("email") or p.get("email") or "").strip().lower()
+        start = (p.get("start_time") or "").strip()
+        tz = (p.get("timezone") or p.get("event_timezone") or "").strip()
+        base = f"{email}|{phone}|{start}|{tz}"
+        event_id = hashlib.sha256(base.encode("utf-8")).hexdigest()
+
+    first_time = _dedupe_insert(session, source=f"calendly:{tenant_id}", event_id=event_id)
+    if not first_time:
+        return {"ok": True, "deduped": True}
+
+    # ---- Extract fields ----
     name = invitee.get("name") or p.get("name") or ""
     email = invitee.get("email") or p.get("email") or ""
     phone = (_extract_phone(p) or "").strip()
-
     start = p.get("start_time") or ""
     end = p.get("end_time") or ""
     tz = p.get("timezone") or p.get("event_timezone") or "America/New_York"
     notes = (p.get("cancellation") or {}).get("reason") or p.get("notes") or ""
 
-    # SMS confirm (DRY RUN if enabled)
+    # ---- Optional branded confirm SMS (DRY RUN honored) ----
     ok = False
     if phone and not storage.sent_recently(phone, minutes=getattr(config, "ANTI_SPAM_MINUTES", 120)):
+        b = brand(tenant_id)
         msg = (
-            f"You're booked with {config.FROM_NAME}. "
-            f"Start: {start} ({tz}). To reschedule: {config.BOOKING_LINK}"
+            f"You're booked with {b['FROM_NAME']}. "
+            f"Start: {start} ({tz}). To reschedule: {b['BOOKING_LINK']}"
         )
         try:
             ok = send_sms(phone, msg)
         except Exception as e:
             print(f"[BOOKING SMS ERROR] {e}")
 
-    # --- CSV write (existing behavior) ---
-    if hasattr(storage, "save_booking"):
-        storage.save_booking(
-            event_id=event_id,
-            invitee_name=name,
-            invitee_email=email,
-            invitee_phone=phone,
-            start_time=start,
-            end_time=end,
-            tz_str=tz,
-            notes=notes,
-            sms_sent=ok,
-            source="calendly",
-        )
-    else:
-        storage.save_lead(
-            {"name": name, "phone": phone, "email": email, "message": f"Booking {event_id} {start}"},
-            sms_body="calendly",
-            sms_sent=ok,
-            source="calendly",
-        )
-
-    # --- DB write (new) ---
-    # Parse datetimes; require start for DB row. If missing, skip DB write (CSV already logged).
-    if not start:
-        return {"ok": True}
-    try:
-        start_dt = dtparse.isoparse(start)
-    except Exception:
-        # Invalid start_time -> skip DB write but keep CSV behavior
-        return {"ok": True}
-
-    if end:
+    # ---- CSV write (only when DB_FIRST is false) ----
+    if not getattr(config, "DB_FIRST", True):
         try:
-            end_dt = dtparse.isoparse(end)
-        except Exception:
+            storage.save_booking(
+                event_id=event_id,
+                invitee_name=name,
+                invitee_email=email,
+                invitee_phone=phone,
+                start_time=start,
+                end_time=end,
+                tz_str=tz,
+                notes=notes,
+                sms_sent=ok,
+                source="calendly",
+                tenant_id=tenant_id,
+            )
+        except TypeError:
+            storage.save_booking(
+                event_id=event_id,
+                invitee_name=name,
+                invitee_email=email,
+                invitee_phone=phone,
+                start_time=start,
+                end_time=end,
+                tz_str=tz,
+                notes=notes,
+                sms_sent=ok,
+                source="calendly",
+            )
+
+    # ---- DB write (primary) ----
+    try:
+        start_dt = dtparse.isoparse(start) if start else None
+    except Exception:
+        start_dt = None
+
+    if start_dt:
+        if end:
+            try:
+                end_dt = dtparse.isoparse(end)
+            except Exception:
+                end_dt = start_dt + timedelta(minutes=60)
+        else:
             end_dt = start_dt + timedelta(minutes=60)
-    else:
-        end_dt = start_dt + timedelta(minutes=60)
 
-    session.add(BookingModel(
-        name=name or "",
-        phone=phone or "",
-        email=email or "",
-        start=start_dt,
-        end=end_dt,
-        notes=notes or "",
-        source="calendly",
-    ))
-    session.commit()
+        session.add(BookingModel(
+            name=name or "",
+            phone=phone or "",
+            email=email or "",
+            start=start_dt,
+            end=end_dt,
+            notes=notes or "",
+            source="calendly",
+            tenant_id=tenant_id,
+        ))
+        session.commit()
 
-    return {"ok": True}
-
+    return {"ok": True, "deduped": False}
 
 @router.get("/debug/bookings")
 def debug_bookings(
     limit: int = 20,
-    source: str = "csv",
+    source: str = Query("db", pattern="^(csv|db)$"),
     session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),     # ✅ tenant injected
 ):
-    source = (source or "csv").lower()
     if source == "db":
         rows = session.exec(
-            select(BookingModel).order_by(BookingModel.id.desc()).limit(limit)
+            select(BookingModel)
+            .where(BookingModel.tenant_id == tenant_id)  # ✅ filter
+            .order_by(BookingModel.id.desc())
+            .limit(limit)
         ).all()
         items = [
             {
@@ -135,12 +197,14 @@ def debug_bookings(
                 "end": r.end.isoformat() if r.end else None,
                 "notes": r.notes,
                 "source": r.source,
+                "tenant_id": r.tenant_id,
             }
             for r in rows
         ]
         return {"count": len(items), "items": items}
 
-    # default: CSV
+    # CSV fallback
     items = storage.read_bookings(limit)
+    if items and isinstance(items[0], dict) and "tenant_id" in items[0]:
+        items = [it for it in items if it.get("tenant_id") == tenant_id]
     return {"count": len(items), "items": items}
-
