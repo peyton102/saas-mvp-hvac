@@ -127,10 +127,8 @@ def _gcal_create_event(
         if svc:
             break
     if svc is None:
-        raise HTTPException(
-            status_code=502,
-            detail="calendar service unavailable (no get_service/build_service)",
-        )
+        print("[GCAL] No calendar service configured – skipping calendar event.")
+        return ""
 
     try:
         ev = gcal.create_event(
