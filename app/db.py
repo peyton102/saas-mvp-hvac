@@ -18,3 +18,8 @@ def create_db_and_tables() -> None:
 def get_session():
     with Session(engine) as session:
         yield session
+def get_db(): yield from get_session()
+try:
+    from app import models_reviews as _models_reviews  # noqa: F401
+except Exception:
+    pass

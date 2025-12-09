@@ -1,84 +1,30 @@
 ﻿# app/routers/bookings.py
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, timezone
 from typing import Optional, List
-from datetime import timedelta, timezone
+
 from dateutil import parser as dtparse
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, EmailStr
-from sqlmodel import Session
-from ..deps import get_tenant_id
+from sqlmodel import Session, select
+from zoneinfo import ZoneInfo  # 👈 add this
 
 from app import config, storage
-from app.utils.phone import normalize_us_phone
-from app.services import google_calendar as gcal
-from app.services.sms import send_sms
 from app.db import get_session
-from app.models import Booking as BookingModel
-from fastapi import Request, Depends
-from fastapi import HTTPException
+from app.deps import get_tenant_id
+from app.models import Booking as BookingModel, ReminderSent
 
-def _tenant_from_headers(request: Request) -> str:
-    # Prefer tenant key from X-API-Key; fall back to Bearer token
-    api_key = (request.headers.get("x-api-key") or "").strip()
-    if api_key:
-        return config.TENANT_KEYS.get(api_key, "public")
-
-    auth = (request.headers.get("authorization") or "")
-    if auth.lower().startswith("bearer "):
-        token = auth[7:].strip()
-        return config.TENANT_KEYS.get(token, "public")
-
-    return "public"
-
+from app.services import google_calendar as gcal
+from app.services.sms import (
+    booking_confirmation_sms,
+    booking_office_notify_sms,
+    booking_reminder_sms,
+)
+from app.services.email import send_booking_confirmation
+from app.utils.phone import normalize_us_phone
 
 router = APIRouter(prefix="", tags=["booking"])
 
-@router.post("/book")
-def book(
-    payload: dict,
-    request: Request,
-    session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_tenant_id),   # <-- add this
-):
-    # ... your existing validation/slot logic up here ...
-    # --- parse/normalize start time ---
-    raw_start = (payload.get("start") or "").strip()
-    if not raw_start:
-        raise HTTPException(status_code=400, detail="start is required (ISO8601)")
-
-    try:
-        start_dt = dtparse.isoparse(raw_start)
-    except Exception:
-        raise HTTPException(status_code=400, detail="invalid start datetime")
-
-    # make timezone-aware UTC
-    if start_dt.tzinfo is None:
-        start_dt = start_dt.replace(tzinfo=timezone.utc)
-    else:
-        start_dt = start_dt.astimezone(timezone.utc)
-
-    # default 60-minute slot unless you already compute a different end
-    end_dt = start_dt + timedelta(minutes=60)
-
-    # when you create the booking, include tenant_id and return JSON
-    row = BookingModel(
-        name=(payload.get("name") or "").strip(),
-        phone=(payload.get("phone") or "").strip(),
-        email=(payload.get("email") or "").strip() or None,
-        start=start_dt,            # whatever you computed earlier
-        end=end_dt,                # whatever you computed earlier
-        notes=(payload.get("notes") or "").strip(),
-        source="api",
-        tenant_id=tenant_id,       # <-- stamp tenant
-    )
-    session.add(row)
-    session.commit()
-    session.refresh(row)
-
-    return {"ok": True, "booking_id": row.id}
-
-    ...
 
 # ===== Schemas =====
 class BookIn(BaseModel):
@@ -94,19 +40,30 @@ class BookOut(BaseModel):
     ok: bool
     event_id: Optional[str] = None
     sms_sent: Optional[bool] = None
+    email_sent: Optional[bool] = None
 
 
 # ===== Helpers =====
 def _parse_dt(val: str) -> datetime:
-    from dateutil import parser as dtparse
+    """
+    Parse ISO string from the portal.
+
+    - If it has a timezone (Z or offset), keep it.
+    - If it's naive (no timezone), treat it as config.TZ (e.g. America/New_York).
+    """
     try:
-        return dtparse.isoparse(val)
+        dt = dtparse.isoparse(val)
     except Exception:
-        # Fallback: allow Z → +00:00
         try:
-            return datetime.fromisoformat(val.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
         except Exception:
             raise HTTPException(status_code=422, detail=f"Invalid datetime: {val}")
+
+    if dt.tzinfo is None:
+        tz = ZoneInfo(getattr(config, "TZ", "America/New_York"))
+        dt = dt.replace(tzinfo=tz)
+
+    return dt
 
 
 def _gcal_is_free(start: datetime, end: datetime) -> bool:
@@ -132,10 +89,16 @@ def _gcal_is_free(start: datetime, end: datetime) -> bool:
     return True
 
 
-def _gcal_create_event(start: datetime, end: datetime, name: str, email: Optional[str], phone: Optional[str], notes: Optional[str]) -> str:
+def _gcal_create_event(
+    start: datetime,
+    end: datetime,
+    name: str,
+    email: Optional[str],
+    phone: Optional[str],
+    notes: Optional[str],
+) -> str:
     """
     Call google_calendar.create_event(svc, calendar_id=..., summary=..., description=..., start_dt=..., end_dt=..., tz_str=...)
-    Your helper requires the first positional arg 'svc' (the Google Calendar service).
     """
     summary = f"Estimate: {name}"
     description = (
@@ -164,9 +127,11 @@ def _gcal_create_event(start: datetime, end: datetime, name: str, email: Optiona
         if svc:
             break
     if svc is None:
-        raise HTTPException(status_code=502, detail="calendar service unavailable (no get_service/build_service)")
+        raise HTTPException(
+            status_code=502,
+            detail="calendar service unavailable (no get_service/build_service)",
+        )
 
-    # --- create event using required kwargs (no attendees, per your helper) ---
     try:
         ev = gcal.create_event(
             svc,
@@ -178,15 +143,14 @@ def _gcal_create_event(start: datetime, end: datetime, name: str, email: Optiona
             tz_str=tz_str,
         )
     except Exception as e:
-        print(f"[GCAL CREATE_EVENT ERROR] {e!r}")
-        raise HTTPException(status_code=502, detail=f"calendar.create_event failed: {e}")
+        print(f"[GCAL CREATE_EVENT ERROR] {e!r}  (continuing without calendar event)")
+        return ""
 
-    # normalize return
     if isinstance(ev, dict):
         return ev.get("id") or ev.get("event_id") or ev.get("event", {}).get("id") or ""
     if isinstance(ev, str):
         return ev
-    return ""  # OK if helper returns None
+    return ""
 
 
 # ===== Availability =====
@@ -201,11 +165,12 @@ def availability(days: int = Query(7, ge=1, le=14)):
         bh, slot_min, buf_min = "09:00-17:00", 60, 0
 
     try:
-        start_s, end_s = bh.split("-")
-        start_t = time.fromisoformat(start_s)
-        end_t = time.fromisoformat(end_s)
+        start_str, end_str = bh.split("-")
+        start_t = time.fromisoformat(start_str)
+        end_t = time.fromisoformat(end_str)
     except Exception:
-        raise HTTPException(status_code=500, detail="Invalid BUSINESS_HOURS format")
+        start_t = time(9, 0)
+        end_t = time(17, 0)
 
     now = datetime.now().astimezone()
     out: List[str] = []
@@ -225,33 +190,63 @@ def availability(days: int = Query(7, ge=1, le=14)):
     return {"slots": out}
 
 
-# ===== Direct Booking =====
+@router.get("/public/availability", operation_id="public_bookings_availability_get")
+def public_availability(days: int = Query(7, ge=1, le=14)):
+    return availability(days)
+
+
+# ===== Upcoming Bookings (per-tenant) =====
+@router.get("/upcoming")
+def list_upcoming_bookings(
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """
+    Return ALL bookings for this tenant.
+    Frontend controls hiding: past, completed, incomplete.
+    """
+    rows = session.exec(
+        select(BookingModel)
+        .where(BookingModel.tenant_id == tenant_id)
+        .order_by(BookingModel.start.asc())
+    ).all()
+
+    return [r.dict() for r in rows]
+
+
+# ===== Direct Booking (per-tenant) =====
 @router.post("/book", response_model=BookOut)
-def book(request: Request, payload: dict, session: Session = Depends(get_session)):
-    from fastapi import HTTPException
-    raise HTTPException(status_code=409, detail="Time slot not available")
+def book(
+    request: Request,
+    payload: BookIn,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
     start = _parse_dt(payload.start)
     end = _parse_dt(payload.end)
     if end <= start:
         raise HTTPException(status_code=422, detail="end must be after start")
 
-    # check availability
     if not _gcal_is_free(start, end):
         raise HTTPException(status_code=409, detail="Time slot is not available")
 
-    # create event
-    event_id = _gcal_create_event(start, end, payload.name, payload.email, payload.phone, payload.notes)
+    event_id = _gcal_create_event(
+        start, end, payload.name, payload.email, payload.phone, payload.notes
+    )
 
-    # SMS confirmation (honors SMS_DRY_RUN)
     e164 = normalize_us_phone(payload.phone) if payload.phone else ""
     sms_ok = False
     if e164:
-        msg = (
-            f"You're booked with {config.FROM_NAME}. "
-            f"Start: {start.isoformat()}. To reschedule: {config.BOOKING_LINK}"
-        )
         try:
-            sms_ok = send_sms(e164, msg)
+            sms_ok = booking_confirmation_sms(
+                tenant_id,
+                {
+                    "name": payload.name,
+                    "phone": e164,
+                    "service": "appointment",
+                    "starts_at_iso": start.isoformat(),
+                },
+            )
         except Exception as e:
             print(f"[BOOK SMS ERROR] {e}")
 
@@ -274,16 +269,173 @@ def book(request: Request, payload: dict, session: Session = Depends(get_session
     except Exception as e:
         print(f"[BOOK CSV LOG ERROR] {e}")
 
-    # DB write
-    session.add(BookingModel(
-        name=payload.name or "",
-        phone=e164 or "",
-        email=(payload.email or None),
-        start=start,
-        end=end,
-        notes=(payload.notes or None),
-        source="api",
-    ))
+    # DB write (per-tenant)
+    session.add(
+        BookingModel(
+            tenant_id=tenant_id,
+            name=payload.name or "",
+            phone=e164 or "",
+            email=(payload.email or None),
+            start=start,
+            end=end,
+            notes=(payload.notes or None),
+            source="api",
+        )
+    )
     session.commit()
 
+    # Office SMS notify
+    try:
+        office_payload = {
+            "name": payload.name,
+            "phone": e164 or (payload.phone or ""),
+            "service": "appointment",
+            "starts_at_iso": start.isoformat(),
+        }
+        booking_office_notify_sms(tenant_id, office_payload)
+    except Exception as e:
+        print(f"[BOOK OFFICE SMS ERROR] {e}")
 
+    # ===== Booking confirmation EMAIL (office + customer) =====
+    email_ok = False
+    try:
+        email_payload = {
+            "name": payload.name,
+            "email": (payload.email or "").strip(),
+            "phone": e164 or (payload.phone or ""),
+            "address": "",
+            "service": "appointment",
+            "starts_at_iso": start.isoformat(),
+            "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
+        }
+        email_ok = send_booking_confirmation(tenant_id, email_payload)
+    except Exception as e:
+        print(f"[BOOK EMAIL ERROR] {e}")
+
+    return BookOut(
+        ok=True,
+        event_id=event_id,
+        sms_sent=bool(sms_ok),
+        email_sent=bool(email_ok),
+    )
+
+
+# ===== Debug endpoint: tenant-aware =====
+@router.get("/upcoming/debug")
+def list_upcoming_bookings_debug(
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    now = datetime.now(timezone.utc)
+
+    bookings = session.exec(
+        select(BookingModel)
+        .where(BookingModel.tenant_id == tenant_id)
+        .where(BookingModel.start >= now)
+        .order_by(BookingModel.start)
+        .limit(50)
+    ).all()
+
+    return {
+        "tenant_id": tenant_id,
+        "count": len(bookings),
+        "items": bookings,
+    }
+
+
+@router.post("/bookings/{booking_id}/complete")
+def complete_booking(
+    booking_id: int,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """
+    Mark a booking as completed and queue a review SMS to send ~2 hours later.
+    """
+    booking = session.exec(
+        select(BookingModel)
+        .where(BookingModel.id == booking_id)
+        .where(BookingModel.tenant_id == tenant_id)
+    ).first()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    booking.completed_at = datetime.now(timezone.utc)
+    session.add(booking)
+
+    if booking.phone:
+        reminder = ReminderSent(
+            phone=booking.phone,
+            name=booking.name,
+            booking_start=booking.start,
+            booking_end=booking.end,
+            message=None,
+            template="review-queue",
+            source="booking-complete",
+            sms_sent=False,
+            tenant_id=tenant_id,
+        )
+        session.add(reminder)
+
+    session.commit()
+
+    return {"ok": True, "booking_id": booking_id, "tenant_id": tenant_id}
+
+
+@router.post("/bookings/reminders/run")
+def run_review_reminders(
+    session: Session = Depends(get_session),
+):
+    """
+    Find queued review reminders (template='review-queue') older than 2 hours
+    and send review SMS using booking_reminder_sms(kind='review').
+    """
+    now = datetime.utcnow()
+    cutoff = now - timedelta(hours=2)
+
+    rows = session.exec(
+        select(ReminderSent)
+        .where(ReminderSent.template == "review-queue")
+        .where((ReminderSent.sms_sent == False) | (ReminderSent.sms_sent.is_(None)))
+        .where(ReminderSent.created_at <= cutoff)
+    ).all()
+
+    sent = 0
+    for r in rows:
+        if not r.phone:
+            continue
+
+        tenant_id = r.tenant_id or "default"
+        starts_at = r.booking_start or now
+
+        payload = {
+            "name": r.name or "there",
+            "phone": r.phone,
+            "service": "appointment",
+            "starts_at_iso": starts_at.isoformat(),
+        }
+
+        ok = booking_reminder_sms(tenant_id, payload, "review")
+        if ok:
+            r.sms_sent = True
+            r.message = (r.message or "") + " [review sent]"
+            sent += 1
+
+    session.commit()
+    return {"ok": True, "sent": sent}
+
+
+@router.delete("/tenant/bookings/{booking_id}")
+def delete_booking_for_tenant(
+    booking_id: int,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    booking = session.get(BookingModel, booking_id)
+    if not booking or booking.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    session.delete(booking)
+    session.commit()
+    return {"ok": True, "deleted": booking_id}

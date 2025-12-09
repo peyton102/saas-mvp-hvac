@@ -17,7 +17,7 @@ from app.db import get_session
 from app.services.sms import send_sms
 from app.models import WebhookDedup, Lead as LeadModel
 from ..deps import get_tenant_id
-from app.tenant import brand
+from app.tenantold import brand
 from app.utils.phone import normalize_us_phone
 
 router = APIRouter(prefix="", tags=["voice"])
@@ -62,9 +62,23 @@ def _after_hours(now: datetime | None = None) -> bool:
 def _force_header_allowed() -> bool:
     return getattr(config, "ENV", "dev") != "prod"
 
+from fastapi import Request
+
 def _is_after_hours(request: Request) -> bool:
-    force = request.headers.get("x-force-after-hours") == "1"
-    return _after_hours() or (force and _force_header_allowed())
+    # existing header override (works with tools that can set headers)
+    force_hdr = (request.headers.get("x-force-after-hours") or "").strip() == "1"
+
+    # NEW: query override so Twilio Console URL can force voicemail
+    force_q = (request.query_params.get("force_after_hours") or "").strip().lower() in ("1", "true", "yes", "y")
+
+    # Your existing business-hours check + allow-list for header if you have it
+    try:
+        header_ok = _force_header_allowed()  # keep if you already have this helper
+    except NameError:
+        header_ok = True  # safe default if you don't use that helper
+
+    return _after_hours() or (force_hdr and header_ok) or force_q
+
 
 # ----------------------- helpers -----------------------
 

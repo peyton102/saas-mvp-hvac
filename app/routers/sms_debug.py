@@ -1,29 +1,24 @@
 # app/routers/sms_debug.py
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Depends, Request
 from app import config
-from app.services.sms import send_sms
+from app.services.sms import send_sms, is_dry_run
+from ..deps import get_tenant_id
 
-router = APIRouter(prefix="", tags=["debug-sms"])
+router = APIRouter(prefix="", tags=["sms-debug"])
 
 @router.get("/debug/sms-config")
-def sms_config():
-    """Show current Twilio/SMS settings (no secrets), useful before turning DRY_RUN off."""
+def sms_config(request: Request, tenant_id: str = Depends(get_tenant_id)):
     return {
-        "SMS_DRY_RUN": bool(getattr(config, "SMS_DRY_RUN", True)),
-        "TWILIO_ACCOUNT_SID_set": bool(getattr(config, "TWILIO_ACCOUNT_SID", "")),
-        "TWILIO_AUTH_TOKEN_set": bool(getattr(config, "TWILIO_AUTH_TOKEN", "")),
-        "TWILIO_FROM": getattr(config, "TWILIO_FROM", "") or "",
-        "TWILIO_MESSAGING_SERVICE_SID": getattr(config, "TWILIO_MESSAGING_SERVICE_SID", "") or "",
+        "tenant_id": tenant_id,
+        "account_sid_len": len(config.settings.TWILIO_ACCOUNT_SID or ""),
+        "messaging_service_sid_len": len(config.settings.TWILIO_MESSAGING_SERVICE_SID or ""),
+        "from_number": config.settings.TWILIO_FROM or "",
+        "dry_run": is_dry_run(),  # <- live read each call
     }
 
 @router.post("/debug/sms-test")
-def sms_test(payload: dict = Body(...)):
-    """
-    Send a test SMS (honors SMS_DRY_RUN). Body: {"to":"+1XXXXXXXXXX","message":"hello"}
-    """
+def sms_test(payload: dict, tenant_id: str = Depends(get_tenant_id)):
     to = (payload.get("to") or "").strip()
-    msg = (payload.get("message") or "Test from HVAC MVP").strip()
-    if not to:
-        return {"ok": False, "error": "Missing 'to'."}
-    ok = send_sms(to, msg)
-    return {"ok": bool(ok), "dry_run": bool(getattr(config, "SMS_DRY_RUN", True))}
+    body = (payload.get("body") or "test").strip()
+    ok = send_sms(to, body)
+    return {"ok": bool(ok), "dry_run": is_dry_run()}

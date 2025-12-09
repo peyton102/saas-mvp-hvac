@@ -13,7 +13,5 @@ google-auth-httplib2
 python-dateutil
 sqlmodel
 sqlalchemy
-
 alembic
-sqlmodel
-SQLAlchemy
+python-jose[cryptography]

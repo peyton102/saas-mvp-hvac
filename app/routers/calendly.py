@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional
 from datetime import timedelta
 import hashlib
-from app.tenant import brand
+from app.tenantold import brand
 from app import config, storage
 from app.db import get_session
 from app.models import Booking as BookingModel, WebhookDedup

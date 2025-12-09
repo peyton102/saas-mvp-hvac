@@ -6,13 +6,15 @@ from sqlmodel import Session, select
 
 from app import config, storage
 from app.services.sms import send_sms
+from app.services.email import send_email
 from app.db import get_session
 from app.models import Review as ReviewModel
 from app.utils.phone import normalize_us_phone
 from app.deps import get_tenant_id  # ✅ tenant resolver
-from app.tenant import brand
+from app.tenantold import brand
 
 router = APIRouter(prefix="", tags=["reviews"])
+
 
 # ----------------------- helpers -----------------------
 
@@ -20,16 +22,34 @@ def _blocked_number(phone: str) -> bool:
     bl = (getattr(config, "SMS_BLOCKLIST", "") or "").split(",")
     return phone in [x.strip() for x in bl if x.strip()]
 
-def _review_link_for_tenant(tenant_id: str) -> str:
-    # Prefer GOOGLE_REVIEW_LINK; fallback to BOOKING_LINK from brand() if present
+
+def _review_link_for_tenant(tenant_id: str, session: Session) -> str:
+    """
+    Prefer per-tenant REVIEW_GOOGLE_URL via brand(…, db=session).
+    Fallbacks:
+      - config.GOOGLE_REVIEW_LINK (legacy)
+      - brand(..., db=session)['BOOKING_LINK'] (last resort)
+    """
+    try:
+        b = brand(tenant_id, db=session)
+        link = (b.get("REVIEW_GOOGLE_URL") or "").strip()
+        if link:
+            return link
+    except Exception:
+        pass
+
+    # legacy global fallback
     link = (getattr(config, "GOOGLE_REVIEW_LINK", "") or "").strip()
     if link:
         return link
+
+    # last resort: booking link
     try:
-        b = brand(tenant_id)
+        b = brand(tenant_id, db=session)
         return (b.get("BOOKING_LINK") or "").strip()
     except Exception:
         return ""
+
 
 def _from_name_for_tenant(tenant_id: str) -> str:
     try:
@@ -37,6 +57,7 @@ def _from_name_for_tenant(tenant_id: str) -> str:
         return b.get("FROM_NAME") or getattr(config, "FROM_NAME", "Our Team")
     except Exception:
         return getattr(config, "FROM_NAME", "Our Team")
+
 
 # ------------------------- routes -------------------------
 
@@ -49,24 +70,30 @@ def mark_job_complete(
 ):
     """
     After-job review request.
+    Body: { phone, name?, job_id?, notes?, email?, message? }
+
     - Normalizes phone
     - Throttles via storage.sent_recently (ANTI_SPAM_MINUTES)
     - Honors SMS_BLOCKLIST
+    - Sends SMS + optional email copy
     - DB-first to Review table; CSV only if DB_FIRST=false
     - Stamps tenant_id
     """
     phone = normalize_us_phone(payload.get("phone") or "")
+    email = (payload.get("email") or "").strip()
     name = (payload.get("name") or "").strip() or "there"
     job_id = (payload.get("job_id") or "").strip() or None
     notes = (payload.get("notes") or "").strip() or None
 
-    review_link = _review_link_for_tenant(tenant_id)
+    # per-tenant review link + from name
+    review_link = _review_link_for_tenant(tenant_id, session)
     from_name = _from_name_for_tenant(tenant_id)
 
     # Allow custom message override
     msg = (payload.get("message") or
            f"Thanks {name} for choosing {from_name}! If we did a great job, would you leave a review? {review_link}").strip()
 
+    # SMS
     sms_ok = False
     if phone and not _blocked_number(phone):
         minutes = int(getattr(config, "ANTI_SPAM_MINUTES", 120))
@@ -77,6 +104,18 @@ def mark_job_complete(
                 print(f"[REVIEWS] Throttled SMS to {phone} ({minutes}m)")
         except Exception as e:
             print(f"[REVIEW SMS ERROR] {e}")
+
+    # Email (optional)
+    email_ok = False
+    if email:
+        try:
+            sub = f"Thanks from {from_name} — quick review?"
+            hi_name = name if name != "there" else ""
+            txt = f"Hi {hi_name},\n\n{msg}\n"
+            html = f"<p>Hi {hi_name},</p><p>{msg}</p>"
+            email_ok = send_email(email, sub, txt, html)
+        except Exception as e:
+            print(f"[REVIEW EMAIL ERROR] {e}")
 
     # CSV write ONLY if DB_FIRST is false (kept for backup compatibility)
     if not getattr(config, "DB_FIRST", True):
@@ -121,7 +160,8 @@ def mark_job_complete(
     )
     session.commit()
 
-    return {"ok": True, "sms_sent": bool(sms_ok)}
+    return {"ok": True, "sms_sent": bool(sms_ok), "email_sent": bool(email_ok)}
+
 
 @router.get("/debug/reviews")
 def debug_reviews(

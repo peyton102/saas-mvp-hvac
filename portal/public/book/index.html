@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Book an appointment</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 16px; background:#f7f7f8; }
+    .card { max-width: 520px; margin: 0 auto; background:#fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 16px; }
+    h1 { font-size: 20px; margin: 0 0 10px; }
+    label { display:block; font-size: 12px; color:#333; margin:10px 0 6px; }
+    input, textarea, select { width:100%; box-sizing:border-box; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px; }
+    button { width:100%; margin-top:14px; padding:12px; border:0; border-radius:8px; background:#2563eb; color:#fff; font-weight:600; cursor:pointer; }
+    .hint { font-size:12px; color:#667; margin-top:8px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .ok { color:#065f46; background:#ecfdf5; padding:8px; border-radius:8px; margin-top:10px; display:none; }
+    .err{ color:#7f1d1d; background:#fef2f2; padding:8px; border-radius:8px; margin-top:10px; display:none; }
+
+    /* Tabs */
+    .tabs { display:flex; gap:8px; margin-bottom:12px; }
+    .tab-btn {
+      flex:1;
+      padding:8px 10px;
+      border-radius:999px;
+      border:1px solid #d4d4d8;
+      background:#e4e4e7;
+      font-size:13px;
+      font-weight:500;
+      cursor:pointer;
+      color:#111111;
+    }
+    .tab-btn.active {
+      background:#2563eb;
+      border-color:#2563eb;
+      color:#ffffff;
+    }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Book an appointment</h1>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button id="tabBooking" class="tab-btn active" type="button">Book appointment</button>
+      <button id="tabContact" class="tab-btn" type="button">Contact us</button>
+    </div>
+
+    <!-- BOOKING PANEL -->
+    <div id="bookingPanel" class="tab-panel active">
+      <div class="row">
+        <div>
+          <label>Service</label>
+          <select id="service">
+            <option value="repair">Repair</option>
+            <option value="service">Service</option>
+            <option value="tuneup">Tune-up</option>
+          </select>
+        </div>
+        <div>
+          <label>Day</label>
+          <input id="day" type="date"/>
+        </div>
+      </div>
+
+      <label>Available times (local)</label>
+      <select id="slot">
+        <option value="">Select a day first</option>
+      </select>
+
+      <label>Name</label>
+      <input id="name" placeholder="Full name"/>
+
+      <div class="row">
+        <div>
+          <label>Phone</label>
+          <input id="phone" placeholder="+1XXXXXXXXXX"/>
+        </div>
+        <div>
+          <label>Email</label>
+          <input id="email" type="email" placeholder="you@example.com"/>
+        </div>
+      </div>
+
+      <label>Address</label>
+      <input id="address" placeholder="123 Main St"/>
+
+      <label>Notes</label>
+      <textarea id="notes" rows="3" placeholder="Gate code, pets, etc."></textarea>
+
+      <button id="bookBtn">Book</button>
+    </div>
+
+    <!-- CONTACT PANEL -->
+    <div id="contactPanel" class="tab-panel">
+      <label>Name</label>
+      <input id="contactName" placeholder="Full name"/>
+
+      <label>Phone *</label>
+      <input id="contactPhone" placeholder="+1XXXXXXXXXX"/>
+
+      <label>Email</label>
+      <input id="contactEmail" type="email" placeholder="you@example.com"/>
+
+      <label>How can we help?</label>
+      <textarea id="contactMessage" rows="3" placeholder="Describe the issue or question"></textarea>
+
+      <button id="contactBtn">Send message</button>
+    </div>
+
+    <div id="ok" class="ok">Booked! Check your email for a confirmation.</div>
+    <div id="err" class="err"></div>
+    <div class="hint">This page uses the tenant from ?tenant= and your live API.</div>
+  </div>
+
+<script>
+  // --- tenant & API base ---
+  const qs = new URLSearchParams(location.search);
+  const tenant = qs.get("tenant") || "default";  // e.g. ?tenant=test-biz-99
+  const reschedToken = qs.get("reschedule");
+  const isReschedule = !!reschedToken;
+
+  // DEV: local FastAPI
+  const API = window.location.origin.replace(/\/$/, "");
+
+
+  const COMMON_HEADERS = {
+    "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
+  };
+
+  // ---- DOM refs ----
+  const serviceEl = document.getElementById('service');
+  const dayEl     = document.getElementById('day');
+  const slotEl    = document.getElementById('slot');
+  const nameEl    = document.getElementById('name');
+  const phoneEl   = document.getElementById('phone');
+  const emailEl   = document.getElementById('email');
+  const addressEl = document.getElementById('address');
+  const notesEl   = document.getElementById('notes');
+  const okEl      = document.getElementById('ok');
+  const errEl     = document.getElementById('err');
+  const btn       = document.getElementById('bookBtn');
+
+  const tabBookingBtn  = document.getElementById('tabBooking');
+  const tabContactBtn  = document.getElementById('tabContact');
+  const bookingPanel   = document.getElementById('bookingPanel');
+  const contactPanel   = document.getElementById('contactPanel');
+
+  const contactNameEl    = document.getElementById('contactName');
+  const contactPhoneEl   = document.getElementById('contactPhone');
+  const contactEmailEl   = document.getElementById('contactEmail');
+  const contactMessageEl = document.getElementById('contactMessage');
+  const contactBtn       = document.getElementById('contactBtn');
+
+  if (isReschedule) {
+    document.title = "Reschedule appointment";
+    tabBookingBtn.textContent = "Reschedule";
+    btn.textContent = "Reschedule";
+  }
+
+  function setActiveTab(which) {
+    if (which === 'booking') {
+      tabBookingBtn.classList.add('active');
+      tabContactBtn.classList.remove('active');
+      bookingPanel.classList.add('active');
+      contactPanel.classList.remove('active');
+    } else {
+      tabBookingBtn.classList.remove('active');
+      tabContactBtn.classList.add('active');
+      bookingPanel.classList.remove('active');
+      contactPanel.classList.add('active');
+    }
+    okEl.style.display = 'none';
+    errEl.style.display = 'none';
+  }
+
+  tabBookingBtn.addEventListener('click', () => setActiveTab('booking'));
+  tabContactBtn.addEventListener('click', () => setActiveTab('contact'));
+
+  function formatTimeLabel(dateString) {
+    const d = new Date(dateString);
+    return d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  // ✅ SIMPLE AVAILABILITY: always 7–18, don’t try to hide already-booked slots (for now)
+  async function renderTimesForDay() {
+    const dayValue = dayEl.value; // "YYYY-MM-DD"
+    console.log("[renderTimesForDay] day =", dayValue);
+    if (!dayValue) {
+      slotEl.innerHTML = '<option value="">Select a day first</option>';
+      return;
+    }
+
+    const startHour = 7;
+    const endHour   = 18;
+
+    const options = [];
+    for (let hour = startHour; hour <= endHour; hour++) {
+      const hh = hour.toString().padStart(2, "0");
+      const localWall = `${dayValue}T${hh}:00:00`;  // local wall time
+      const label = formatTimeLabel(localWall);
+      options.push(`<option value="${localWall}">${label}</option>`);
+    }
+
+    slotEl.innerHTML = options.join('');
+  }
+
+  dayEl.addEventListener('change', () => { renderTimesForDay(); });
+  serviceEl.addEventListener('change', () => {
+    if (dayEl.value) renderTimesForDay();
+  });
+
+  // ---- BOOKING submit ----
+  btn.addEventListener('click', async () => {
+    okEl.style.display = 'none';
+    errEl.style.display = 'none';
+
+    const startsLocal = slotEl.value;    // "YYYY-MM-DDTHH:00:00"
+    const name        = nameEl.value.trim();
+
+    if (!startsLocal || (!isReschedule && !name)) {
+      errEl.textContent = !startsLocal ? 'Please select a time.' : 'Please enter your name.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const service = serviceEl.value || 'tuneup';
+    const phone   = phoneEl.value.trim()   || null;
+    const email   = emailEl.value.trim()   || null;
+    const address = addressEl.value.trim() || null;
+    const notes   = notesEl.value.trim()   || null;
+
+    const startsIso = new Date(startsLocal).toISOString();
+
+    try {
+      const endpoint = isReschedule
+        ? `${API}/public/bookings/reschedule?tenant=${encodeURIComponent(tenant)}`
+        : `${API}/public/bookings?tenant=${encodeURIComponent(tenant)}`;
+
+      const payload = isReschedule
+        ? { token: reschedToken, starts_at_iso: startsIso }
+        : {
+            tenant,
+            service,
+            name,
+            phone,
+            email,
+            address,
+            notes,
+            starts_at_iso: startsIso,
+          };
+
+      console.log("[BOOK POST] endpoint =", endpoint, "payload =", payload);
+
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: COMMON_HEADERS,
+        body: JSON.stringify(payload)
+      });
+
+      const respText = await r.text();
+      let resp; try { resp = JSON.parse(respText); } catch { resp = respText; }
+      console.log("[BOOK RESP]", r.status, resp);
+
+      if (!r.ok) {
+        const msg = (resp && resp.detail) ? resp.detail : (typeof resp === 'string' ? resp : `HTTP ${r.status}`);
+        throw new Error(msg);
+      }
+
+      okEl.textContent = isReschedule
+        ? "Rescheduled! Check your email for an update."
+        : "Booked! Check your email for a confirmation.";
+      okEl.style.display = 'block';
+
+      if (!isReschedule) {
+        const savedDay = dayEl.value;  // keep same day
+
+        nameEl.value = '';
+        phoneEl.value = '';
+        emailEl.value = '';
+        addressEl.value = '';
+        notesEl.value = '';
+
+        if (savedDay) {
+          dayEl.value = savedDay;
+          await renderTimesForDay();
+        } else {
+          dayEl.value = '';
+          slotEl.innerHTML = '<option value="">Select a day first</option>';
+        }
+      }
+    } catch (e) {
+      errEl.textContent = `Booking failed: ${e.message || e}`;
+      errEl.style.display = 'block';
+      console.error(e);
+    }
+  });
+
+  // ---- CONTACT submit (copies working lead logic) ----
+  contactBtn.addEventListener('click', async () => {
+    okEl.style.display = 'none';
+    errEl.style.display = 'none';
+
+    const name    = contactNameEl.value.trim();
+    const phone   = contactPhoneEl.value.trim();
+    const email   = contactEmailEl.value.trim();
+    const message = contactMessageEl.value.trim();
+
+    if (!phone) {
+      errEl.textContent = 'Please enter your phone number.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    try {
+      // Use the same pattern as your working lead form: /lead?tenant_key=...
+      const url = `${API}/lead?tenant_key=${encodeURIComponent(tenant)}`;
+
+      const payload = {
+        name: name || null,
+        phone,
+        email: email || null,
+        message: message || null
+      };
+
+      console.log("[LEAD POST] url =", url, "payload =", payload);
+
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: COMMON_HEADERS,
+        body: JSON.stringify(payload),
+      });
+
+      const respText = await r.text();
+      let resp; try { resp = JSON.parse(respText); } catch { resp = respText; }
+      console.log("[LEAD RESP]", r.status, resp);
+
+      if (!r.ok) {
+        const msg = (resp && resp.detail) ? resp.detail : (typeof resp === 'string' ? resp : `HTTP ${r.status}`);
+        throw new Error(msg);
+      }
+
+      okEl.textContent = "Thanks, we’ve got your message. We’ll be in touch soon.";
+      okEl.style.display = 'block';
+      errEl.style.display = 'none';
+
+      contactNameEl.value = '';
+      contactPhoneEl.value = '';
+      contactEmailEl.value = '';
+      contactMessageEl.value = '';
+    } catch (e) {
+      errEl.textContent = `Message failed: ${e.message || e}`;
+      errEl.style.display = 'block';
+      console.error(e);
+    }
+  });
+</script>
+</body>
+</html>
