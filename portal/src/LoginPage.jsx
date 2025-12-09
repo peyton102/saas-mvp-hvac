@@ -4,8 +4,7 @@ import { setToken } from "./auth";
 
 const API_BASE =
   import.meta?.env?.VITE_API_BASE ||
-  window.location.origin.replace(/\/$/, ""); // your FastAPI backend
-
+  "https://saas-mvp-hvac.onrender.com"; // backend on Render
 
 export default function LoginPage({ onLoggedIn }) {
   const [email, setEmail] = useState("");
@@ -13,34 +12,43 @@ export default function LoginPage({ onLoggedIn }) {
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
+  e.preventDefault();
+  setError("");
 
+  try {
+    const resp = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    let data = null;
     try {
-      const resp = await fetch(`${API_BASE}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.detail || "Login failed");
-      }
-
-      const data = await resp.json(); // { access_token, tenant_slug, api_key }
-
-      setToken(data.access_token);
-
-      if (onLoggedIn) {
-        onLoggedIn(data);
-      }
-    } catch (err) {
-      setError(err.message || "Login failed");
+      data = await resp.json();
+    } catch {
+      data = null;
     }
+
+    if (!resp.ok) {
+      const msg =
+        (data && data.detail) ||
+        (typeof data === "string" ? data : "Login failed");
+      throw new Error(msg);
+    }
+
+    // data is now the parsed JSON from backend
+    setToken(data.access_token);
+
+    if (onLoggedIn) {
+      onLoggedIn(data);
+    }
+  } catch (err) {
+    setError(err.message || "Login failed");
   }
+}
+
 
   return (
     <div style={{ maxWidth: 320, margin: "80px auto", padding: 16 }}>

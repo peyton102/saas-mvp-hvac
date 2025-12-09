@@ -9,8 +9,10 @@ import { getToken, setToken, clearToken } from "./auth";
 // ====== CONFIG ======
 const API_BASE =
   import.meta?.env?.VITE_API_BASE ||
-  window.location.origin.replace(/\/$/, "");
+  "https://saas-mvp-hvac.onrender.com";   // 👈 fallback to Render backend
+
 const BASE = API_BASE;
+
 const params = new URLSearchParams(window.location.search || "");
 const TENANT_KEY = params.get("tenant") || "default";   // 👈 read from ?tenant=
 const NGROK_HEADER = { "ngrok-skip-browser-warning": "true" };

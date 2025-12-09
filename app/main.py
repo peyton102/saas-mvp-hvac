@@ -241,6 +241,9 @@ def _bucket_for_path(path: str) -> Optional[str]:
         return "calendly"
     return None
 
+PORT = int(os.getenv("PORT", "8799"))
+
+API_BASE = os.getenv("API_BASE", f"http://127.0.0.1:{PORT}")
 
 # (rate limit middleware can be added back later if you want)
 
@@ -290,11 +293,12 @@ async def _reminder_cron():
             while True:
                 try:
                     resp = await client.post(
-                        f"http://127.0.0.1:{PORT}/tasks/send-reminders-all",
+                        f"{API_BASE}/tasks/send-reminders-all",
                         params={"look_back_minutes": 60},
                         json={},
                         headers={"X-API-Key": "devkey"},
                     )
+
                     print(
                         "[reminder-cron] ALL TENANTS status:",
                         resp.status_code,
