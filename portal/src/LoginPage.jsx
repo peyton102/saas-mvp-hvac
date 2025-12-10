@@ -2,9 +2,10 @@
 import { useState } from "react";
 import { setToken } from "./auth";
 
+// Always talk to the backend on Render
 const API_BASE =
   import.meta?.env?.VITE_API_BASE ||
-  "https://saas-mvp-hvac.onrender.com"; // backend on Render
+  "https://saas-mvp-hvac.onrender.com";
 
 export default function LoginPage({ onLoggedIn }) {
   const [email, setEmail] = useState("");
@@ -12,43 +13,47 @@ export default function LoginPage({ onLoggedIn }) {
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
-  e.preventDefault();
-  setError("");
+    e.preventDefault();
+    setError("");
 
-  try {
-    const resp = await fetch(`${API_BASE}/auth/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    let data = null;
     try {
-      data = await resp.json();
-    } catch {
-      data = null;
-    }
+      const resp = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (!resp.ok) {
-      const msg =
-        (data && data.detail) ||
-        (typeof data === "string" ? data : "Login failed");
-      throw new Error(msg);
-    }
+      // Read the body ONCE
+      const text = await resp.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = {};
+      }
 
-    // data is now the parsed JSON from backend
-    setToken(data.access_token);
+      if (!resp.ok) {
+        throw new Error(
+          data.detail || `Login failed (HTTP ${resp.status})`
+        );
+      }
 
-    if (onLoggedIn) {
-      onLoggedIn(data);
+      // expect { access_token, tenant_slug, api_key }
+      if (!data.access_token) {
+        throw new Error("No access_token in response");
+      }
+
+      setToken(data.access_token);
+
+      if (onLoggedIn) {
+        onLoggedIn(data);
+      }
+    } catch (err) {
+      setError(err.message || "Login failed");
     }
-  } catch (err) {
-    setError(err.message || "Login failed");
   }
-}
-
 
   return (
     <div style={{ maxWidth: 320, margin: "80px auto", padding: 16 }}>

@@ -324,10 +324,48 @@ def booking_reminder_sms(tenant_id: str, payload: dict, kind: str) -> bool:
     return send_sms(phone, body)
 
 
+def _booking_link_for_slug(tenant_slug: str) -> str | None:
+    """
+    Build a tenant-specific booking link from config.BOOKING_LINK.
+
+    If BOOKING_LINK is like:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?
+
+    Then return:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
+    """
+    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
+    if not base:
+        return None
+
+    # drop any existing ?query
+    base = base.split("?", 1)[0]
+    return f"{base}?tenant={tenant_slug}"
+
+
+def _booking_link_for_slug(tenant_slug: str) -> str | None:
+    """
+    Build a tenant-specific booking link from config.BOOKING_LINK.
+
+    If BOOKING_LINK is like:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?
+
+    Then return:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
+    """
+    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
+    if not base:
+        return None
+
+    # drop any existing ?query
+    base = base.split("?", 1)[0]
+    return f"{base}?tenant={tenant_slug}"
+
+
 def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
     """
     Auto-reply to a new lead.
-    payload expects: name, phone, (optional) source, booking_link
+    payload expects: name, phone, (optional) source
     """
     phone = (payload.get("phone") or "").strip()
     if not phone:
@@ -337,8 +375,13 @@ def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
     business_name = brand.get("business_name") or tenant_id
 
     name = payload.get("name") or "there"
-    # if caller doesn't pass a custom booking_link, fall back to brand booking_link
-    booking_link = payload.get("booking_link") or brand.get("booking_link")
+
+    # 🚫 DO NOT trust payload["booking_link"] anymore – it may be a /public/* backend URL.
+    # ✅ Always derive from config / brand.
+    booking_link = (
+        brand.get("booking_link")
+        or _booking_link_for_slug(tenant_id)
+    )
 
     if booking_link:
         body = (
@@ -351,6 +394,7 @@ def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
             f"Thanks for reaching out to {business_name}! "
             f"We got your request, {name}. We'll contact you shortly."
         )
+
 
     return send_sms(phone, body)
 
