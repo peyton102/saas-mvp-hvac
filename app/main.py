@@ -12,6 +12,7 @@ import asyncio
 import httpx
 import os
 import urllib.request
+from app.routers import backup as backup_router
 from app.logging_config import setup_logging
 from app.services.alerts import alert_error
 from app.routers.auth import parse_token
@@ -264,6 +265,7 @@ app.include_router(admin_tenants_router)
 app.include_router(google_oauth_router)
 app.include_router(availability_router)
 app.include_router(tasks_router)
+app.include_router(backup_router.router)
 app.include_router(public_router)
 app.include_router(admin_router)
 app.include_router(sms_debug_router)
