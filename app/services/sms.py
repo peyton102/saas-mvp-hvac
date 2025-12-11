@@ -136,11 +136,19 @@ def is_dry_run() -> bool:
 
 
 def _client() -> Client:
-    sid = os.getenv("TWILIO_ACCOUNT_SID", getattr(config, "TWILIO_ACCOUNT_SID", ""))
-    tok = os.getenv("TWILIO_AUTH_TOKEN", getattr(config, "TWILIO_AUTH_TOKEN", ""))
-    if not sid or not tok:
-        raise RuntimeError("Missing TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN")
-    return Client(sid, tok)
+    """
+    Build a Twilio client using API Key auth:
+
+      Client(api_key_sid, api_key_secret, account_sid)
+    """
+    api_key = os.getenv("TWILIO_API_KEY", getattr(config, "TWILIO_API_KEY", ""))
+    secret = os.getenv("TWILIO_AUTH_TOKEN", getattr(config, "TWILIO_AUTH_TOKEN", ""))
+    account = os.getenv("TWILIO_ACCOUNT_SID", getattr(config, "TWILIO_ACCOUNT_SID", ""))
+
+    if not (api_key and secret and account):
+        raise RuntimeError("Missing TWILIO_API_KEY / TWILIO_AUTH_TOKEN / TWILIO_ACCOUNT_SID")
+
+    return Client(api_key, secret, account)
 
 
 def _normalize_phone(phone: Optional[str]) -> Optional[str]:
@@ -395,7 +403,6 @@ def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
             f"We got your request, {name}. We'll contact you shortly."
         )
 
-
     return send_sms(phone, body)
 
 
@@ -504,6 +511,8 @@ def booking_office_notify_sms(tenant_id: str, payload: dict) -> bool:
     )
 
     return send_sms(office_to, msg)
+
+
 # ---------- System alert SMS (add-only block) ----------
 
 # Hard-coded alert destination for server errors (Peyton)
