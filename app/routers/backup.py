@@ -20,19 +20,17 @@ from app.models_finance import Revenue, Cost
 router = APIRouter(prefix="/backup", tags=["backup"])
 
 
-# ====== AUTH FOR ADMIN BACKUPS ======
+# ============================================================
+# ADMIN AUTH
+# ============================================================
 def _require_admin_bearer(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> None:
     """
-    Accepts: Authorization: Bearer <token>
-
-    Token must match ANY of:
-      - ADMIN_BEARER
-      - DEBUG_BEARER
-      - DEBUG_BEARER_TOKEN
-    from environment.
+    Accepts Authorization: Bearer <token>
+    Must match ADMIN_BEARER OR DEBUG_BEARER OR DEBUG_BEARER_TOKEN
     """
+
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
 
@@ -40,20 +38,22 @@ def _require_admin_bearer(
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(status_code=401, detail="Invalid Authorization header")
 
-    token = parts[1]
+    token = parts[1].strip()
 
-    expected = (
-        os.getenv("ADMIN_BEARER")
-        or os.getenv("DEBUG_BEARER")
-        or os.getenv("DEBUG_BEARER_TOKEN")
-        or ""
-    ).strip()
+    # Pull all accepted admin tokens from env
+    admin = (os.getenv("ADMIN_BEARER") or "").strip()
+    debug = (os.getenv("DEBUG_BEARER") or "").strip()
+    debug_legacy = (os.getenv("DEBUG_BEARER_TOKEN") or "").strip()
 
-    if not expected or token != expected:
+    allowed = {admin, debug, debug_legacy} - {""}
+
+    if token not in allowed:
         raise HTTPException(status_code=401, detail="Invalid bearer token")
 
 
-# ====== CSV HELPERS ======
+# ============================================================
+# CSV HELPERS
+# ============================================================
 def _csv_stream(name: str, s: io.StringIO) -> StreamingResponse:
     s.seek(0)
     return StreamingResponse(
@@ -63,7 +63,9 @@ def _csv_stream(name: str, s: io.StringIO) -> StreamingResponse:
     )
 
 
-# ====== LEADS BACKUP (PER TENANT) ======
+# ============================================================
+# LEADS CSV (TENANT-SPECIFIC)
+# ============================================================
 @router.get("/leads.csv")
 def backup_leads_csv(
     session: Session = Depends(get_session),
@@ -80,6 +82,7 @@ def backup_leads_csv(
     w.writerow(
         ["id", "created_at", "name", "phone", "email", "message", "status", "tenant_id"]
     )
+
     for r in rows:
         w.writerow(
             [
@@ -93,10 +96,13 @@ def backup_leads_csv(
                 r.tenant_id or "",
             ]
         )
+
     return _csv_stream("leads.csv", buf)
 
 
-# ====== FINANCE BACKUP (PER TENANT) ======
+# ============================================================
+# FINANCE CSV (TENANT-SPECIFIC)
+# ============================================================
 @router.get("/finance.csv")
 def backup_finance_csv(
     session: Session = Depends(get_session),
@@ -178,19 +184,20 @@ def backup_finance_csv(
     return _csv_stream("finance.csv", buf)
 
 
-# ====== FULL SQLITE BACKUP (ADMIN ONLY) ======
+# ============================================================
+# FULL SQLITE BACKUP (ADMIN ONLY)
+# ============================================================
 @router.post("/sqlite")
 def backup_sqlite(_: None = Depends(_require_admin_bearer)):
     """
-    Admin-only: return a ZIP containing the SQLite DB.
+    Returns sqlite-backup.zip containing your SQLite DB file.
+    Admin-only.
     """
-    # Figure out DB path – default matches your local setup
     db_url = os.getenv("DATABASE_URL", "sqlite:///data/app.db")
-    # crude parse for sqlite:///... style
+
     if db_url.startswith("sqlite:///"):
         db_path = Path(db_url.replace("sqlite:///", "", 1))
     else:
-        # fallback: assume same as local
         db_path = Path("data/app.db")
 
     if not db_path.exists():
@@ -204,19 +211,31 @@ def backup_sqlite(_: None = Depends(_require_admin_bearer)):
     return StreamingResponse(
         buf,
         media_type="application/zip",
-        headers={
-            "Content-Disposition": 'attachment; filename="sqlite-backup.zip"'
-        },
+        headers={"Content-Disposition": 'attachment; filename="sqlite-backup.zip"'},
     )
+
+
+# ============================================================
+# SAFE DEBUG ENDPOINTS (NO SECRETS)
+# ============================================================
+
 @router.get("/debug-admin-env")
-def debug_admin_env():
-    """
-    Dev-only helper to check if ADMIN/DEBUG bearer env vars
-    are actually set on this backend.
-    Does NOT return the secrets, only booleans.
-    """
+def debug_admin_env(_: None = Depends(_require_admin_bearer)):
     return {
         "ADMIN_BEARER_set": bool(os.getenv("ADMIN_BEARER")),
         "DEBUG_BEARER_set": bool(os.getenv("DEBUG_BEARER")),
         "DEBUG_BEARER_TOKEN_set": bool(os.getenv("DEBUG_BEARER_TOKEN")),
+    }
+
+
+@router.get("/debug-env")
+def debug_env():
+    """
+    No secrets shown — only true/false presence flags.
+    Allows us to test Render env without needing admin auth.
+    """
+    return {
+        "ADMIN_PRESENT": bool(os.getenv("ADMIN_BEARER")),
+        "DEBUG_PRESENT": bool(os.getenv("DEBUG_BEARER")),
+        "DEBUG_TOKEN_PRESENT": bool(os.getenv("DEBUG_BEARER_TOKEN")),
     }
