@@ -158,6 +158,7 @@ OPEN_PREFIXES = (
     "/lead",            # public lead form
     "/twilio/voice",    # Twilio webhook
     "/webhooks/calendly",
+    "/backup/",
 )
 
 
