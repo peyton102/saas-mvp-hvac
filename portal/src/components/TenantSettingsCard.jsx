@@ -1,7 +1,11 @@
 // portal/src/components/TenantSettingsCard.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-export default function TenantSettingsCard({ apiBase, commonHeaders }) {
+export default function TenantSettingsCard({
+  apiBase,
+  commonHeaders,
+  tenantSlug, // <-- REQUIRED: pass tenant_slug from /auth/login
+}) {
   const [form, setForm] = useState({
     business_name: "",
     booking_link: "",
@@ -17,8 +21,23 @@ export default function TenantSettingsCard({ apiBase, commonHeaders }) {
   const [error, setError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
+  // Base URL for the portal (Render in prod, localhost in dev)
+  const frontendBase =
+    import.meta?.env?.VITE_APP_BASE_URL ||
+    "https://saas-mvp-hvac-1.onrender.com";
+
+  // Computed booking link for THIS tenant (multi-tenant safe)
+  const computedBookingLink = useMemo(() => {
+    if (!tenantSlug) return "";
+    return `${frontendBase}/book/index.html?tenant=${encodeURIComponent(
+      tenantSlug
+    )}`;
+  }, [tenantSlug, frontendBase]);
+
   // ---- Load current settings from backend (GET /tenant/settings) ----
   useEffect(() => {
+    let isMounted = true;
+
     async function loadSettings() {
       setLoading(true);
       setError("");
@@ -34,7 +53,9 @@ export default function TenantSettingsCard({ apiBase, commonHeaders }) {
         }
         const data = await res.json();
 
-        setForm({
+        if (!isMounted) return;
+
+        const loaded = {
           business_name: data.business_name ?? "",
           booking_link: data.booking_link ?? "",
           office_sms_to: data.office_sms_to ?? "",
@@ -42,17 +63,50 @@ export default function TenantSettingsCard({ apiBase, commonHeaders }) {
           review_google_url: data.review_google_url ?? "",
           email: data.email ?? "",
           phone: data.phone ?? "",
-        });
+        };
+
+        // If booking_link is empty in DB, auto-fill it using tenantSlug + portal base
+        // This does NOT overwrite if the backend already has a value.
+       const raw = (loaded.booking_link || "").trim();
+
+// treat prefix-only values as invalid (needs tenant slug)
+const looksLikePrefixOnly =
+  raw === `${frontendBase}/book/index.html?tenant=` ||
+  raw.endsWith("/book/index.html?tenant=") ||
+  raw.endsWith("/book/index.html?") ||
+  raw.endsWith("?") ||
+  !raw.includes("tenant=");
+
+if ((!raw || looksLikePrefixOnly) && computedBookingLink) {
+  loaded.booking_link = computedBookingLink;
+}
+
+
+        setForm(loaded);
       } catch (e) {
         console.error(e);
-        setError("Could not load settings");
+        if (isMounted) setError("Could not load settings");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
 
     loadSettings();
-  }, [apiBase, commonHeaders]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiBase, commonHeaders, computedBookingLink]);
+
+  // If tenantSlug arrives AFTER settings load (race), and booking_link is still blank,
+  // fill it once. This won't overwrite an existing value.
+  useEffect(() => {
+    if (!computedBookingLink) return;
+    setForm((prev) => {
+      if (prev.booking_link) return prev;
+      return { ...prev, booking_link: computedBookingLink };
+    });
+  }, [computedBookingLink]);
 
   function bind(field) {
     return {
@@ -71,6 +125,12 @@ export default function TenantSettingsCard({ apiBase, commonHeaders }) {
     setError("");
     setSaveMessage("");
 
+    // Guard: if they somehow blanked it, force the correct computed link
+    const payload = {
+      ...form,
+      booking_link: form.booking_link || computedBookingLink || "",
+    };
+
     try {
       const res = await fetch(`${apiBase}/tenant/settings`, {
         method: "POST",
@@ -78,7 +138,7 @@ export default function TenantSettingsCard({ apiBase, commonHeaders }) {
           ...commonHeaders,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -92,10 +152,10 @@ export default function TenantSettingsCard({ apiBase, commonHeaders }) {
         throw new Error(detail || `Save failed (HTTP ${res.status})`);
       }
 
-      // PREMIUM UX: keep current form values as-is, just show success
+      // Keep current values, just show success
+      setForm(payload);
       setSaveMessage("Saved ✓");
 
-      // Optionally clear the message after a few seconds
       setTimeout(() => {
         setSaveMessage("");
       }, 3000);
@@ -174,9 +234,21 @@ export default function TenantSettingsCard({ apiBase, commonHeaders }) {
           <input
             type="url"
             style={{ width: "100%", marginTop: 4 }}
-            placeholder="https://your-booking-link.com"
+            placeholder="Auto-filled from your tenant"
             {...bind("booking_link")}
           />
+          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+            {tenantSlug ? (
+              <>
+                Expected:{" "}
+                <span style={{ fontFamily: "monospace" }}>
+                  {computedBookingLink}
+                </span>
+              </>
+            ) : (
+              <>Login must provide tenant_slug to auto-fill this.</>
+            )}
+          </div>
         </label>
 
         <label style={{ fontSize: 13 }}>

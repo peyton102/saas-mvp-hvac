@@ -39,6 +39,9 @@ function PortalApp({ me }) {
   const [includeRevenue, setIncludeRevenue] = useState(true);
   const [includeCost, setIncludeCost] = useState(true);
   const needsSetup = me?.needs_setup;
+  const TENANT_SLUG =
+  localStorage.getItem("TENANT_SLUG") ||
+  "default";
   const token = getToken();
 
   function handleLogout() {
@@ -349,8 +352,13 @@ const headers = useMemo(() => {
         </div>
       )}
 {tab === "settings" && (
-  <TenantSettingsCard apiBase={BASE} commonHeaders={headers} />
+  <TenantSettingsCard
+    apiBase={BASE}
+    commonHeaders={headers}
+    tenantSlug={TENANT_SLUG}
+  />
 )}
+
 
       {tab==="finance" && (
         <>
@@ -593,10 +601,22 @@ function App() {
     }
   }, []);
 
-  function handleLoggedIn(loginData) {
-    // loginData: { access_token, tenant_slug, api_key }
-    fetchMe(loginData.access_token);
+function handleLoggedIn(loginData) {
+  // loginData: { access_token, tenant_slug, api_key }
+
+  // 1️⃣ store tenant slug so Settings can read it
+  if (loginData?.tenant_slug) {
+    localStorage.setItem("TENANT_SLUG", loginData.tenant_slug);
   }
+
+  // 2️⃣ store api key (you already read this elsewhere)
+  if (loginData?.api_key) {
+    localStorage.setItem("API_KEY", loginData.api_key);
+  }
+
+  // 3️⃣ continue existing flow
+  fetchMe(loginData.access_token);
+}
 
   if (authLoading) {
     return <div style={{ padding: 16 }}>Loading…</div>;
