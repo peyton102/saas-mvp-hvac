@@ -70,6 +70,7 @@ app.add_middleware(
 )
 
 PORT = int(os.getenv("PORT", "8799"))
+
 # ---------- GLOBAL ERROR HANDLER ----------
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -142,13 +143,20 @@ OPEN_PATHS = {
     "/_int/whoami-raw",
     "/whoami",
     "/debug/whoami-verbose",
+    # docs + schema
+    "/openapi.json",
+    "/docs",
+    "/redoc",
+    # backup admin endpoints (they do their own bearer auth)
+    "/backup/debug-admin-env",
+    "/backup/sqlite",
 }
 
 OPEN_PREFIXES = (
-    "/public/",  # any public-facing routes you might have
-    "/book",  # public booking form
-    "/lead",  # public lead form
-    "/twilio/voice",  # Twilio webhook
+    "/public/",         # any public-facing routes you might have
+    "/book",            # public booking form
+    "/lead",            # public lead form
+    "/twilio/voice",    # Twilio webhook
     "/webhooks/calendly",
 )
 
@@ -242,12 +250,12 @@ def _bucket_for_path(path: str) -> Optional[str]:
         return "calendly"
     return None
 
+
 PORT = int(os.getenv("PORT", "8799"))
 
 API_BASE = os.getenv("API_BASE", f"http://127.0.0.1:{PORT}")
 
 # (rate limit middleware can be added back later if you want)
-
 
 
 # ---------- Routers ----------
