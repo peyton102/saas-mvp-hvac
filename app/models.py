@@ -10,7 +10,10 @@ from sqlmodel import SQLModel, Field, Relationship
 
 class Lead(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True
+    )
     name: str
     phone: str
     email: Optional[str] = None
@@ -21,7 +24,7 @@ class Lead(SQLModel, table=True):
 
 class Booking(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     name: str
     phone: str
     email: Optional[str] = None
@@ -34,7 +37,7 @@ class Booking(SQLModel, table=True):
 
 class Review(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     phone: str
     name: Optional[str] = None
     job_id: Optional[str] = None
@@ -51,7 +54,7 @@ class Tenant(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, default="")
     slug: str = Field(index=True, unique=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     is_active: bool = Field(default=True, index=True)
 
     # business meta
@@ -99,12 +102,13 @@ class TenantSettings(SQLModel, table=True):
     office_sms_to: Optional[str] = Field(default="", max_length=50)
     office_email_to: Optional[str] = Field(default="", max_length=255)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
 
 
 class ReminderSent(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     phone: str
     name: Optional[str] = None
     booking_start: Optional[datetime] = None
@@ -136,7 +140,7 @@ class ApiKey(SQLModel, table=True):
     # NEVER store raw tokens once we switch—this will hold a hash later
     hashed_key: str = Field(index=True, unique=True)
     label: str = Field(default="")  # e.g., “Front desk iPad”, “Zapier hook”
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     last_used_at: Optional[datetime] = Field(default=None, index=True)
     is_active: bool = Field(default=True, index=True)
 

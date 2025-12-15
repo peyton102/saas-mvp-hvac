@@ -166,7 +166,7 @@ class _Settings:
                          f"Set TENANT_OFFICE_MAP or EMAIL_OFFICE.")
 
 # build settings from env (example; adapt to your loader)
-# NOTE: CHANGED NAME so it doesn't overwrite the main `settings` above.
+# NOTE: CHANGED NAME so it doesn't overwrok so is this fill the booking link thing problem and timezone if so send me the full updated config ite the main `settings` above.
 OFFICE_SETTINGS = _Settings(   # <-- was `settings = _Settings(`; renamed
     TZ=os.getenv("TZ", "America/New_York"),
     FROM_NAME=os.getenv("FROM_NAME", "Torevez"),

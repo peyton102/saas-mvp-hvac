@@ -24,7 +24,6 @@ export default function NumbersCallsCard({ tenantKey }) {
       const data = await apiFetch("/settings/numbers");
       setInfo(data);
     } catch (e) {
-      // If not configured yet or endpoint returns 404/empty, keep null so the "Get My Texting Line" button shows
       setInfo(null);
     } finally {
       setLoading(false);

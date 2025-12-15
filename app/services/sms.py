@@ -393,14 +393,14 @@ def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
 
     if booking_link:
         body = (
-            f"Thanks for reaching out to {business_name}! "
-            f"We got your request, {name}. "
-            f"You can also book online here: {booking_link}"
+            f"Thanks for reaching out to {business_name}, {name}. "
+            f"Here’s the next step:\n"
+            f"{booking_link}"
         )
     else:
         body = (
-            f"Thanks for reaching out to {business_name}! "
-            f"We got your request, {name}. We'll contact you shortly."
+            f"Thanks for reaching out to {business_name}, {name}. "
+            f"We’ll contact you shortly."
         )
 
     return send_sms(phone, body)

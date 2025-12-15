@@ -75,18 +75,28 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   [commonHeaders]
 );
 
-  // ---- central API helper (now uses BASE + merged headers)
   async function apiFetch(path, opts = {}) {
-    const res = await fetch(`${BASE}${path}`, {
-      ...opts,
-      headers: { ...headers, ...(opts.headers || {}) },
-    });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(txt || `HTTP ${res.status}`);
-    }
-    return res.json();
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    headers: { ...headers, ...(opts.headers || {}) },
+  });
+
+  // ✅ 204 = No Content (DELETE). Don't parse JSON.
+  if (res.status === 204) return null;
+
+  const txt = await res.text().catch(() => "");
+
+  // try JSON if possible
+  let data = null;
+  try { data = txt ? JSON.parse(txt) : null; } catch {}
+
+  if (!res.ok) {
+    throw new Error((data && data.detail) ? data.detail : (txt || `HTTP ${res.status}`));
   }
+
+  return data;
+}
+
 
   const loadLeads = useCallback(async () => {
     setLoading(true);

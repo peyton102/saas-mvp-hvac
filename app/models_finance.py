@@ -10,7 +10,7 @@ from sqlalchemy import DateTime, text
 
 
 def utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(timezone.utc)
 
 
 class FinanceRevenue(SQLModel, table=True):

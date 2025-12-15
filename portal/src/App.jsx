@@ -263,18 +263,49 @@ const headers = useMemo(() => {
   }
 
       return (
-    <div style={{ padding: 16, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h1 style={{ margin: 0 }}>Welcome to Torevez</h1>
+  <div
+    style={{
+      minHeight: "100vh",
+      width: "100%",
+      boxSizing: "border-box",
+      padding: 24,
+      background:
+        "radial-gradient(900px 520px at 50% 0%, rgba(249,115,22,0.14), rgba(0,0,0,0) 65%), linear-gradient(180deg, #0b1220 0%, #05070d 100%)",
+      color: "#e5e7eb",
+      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
+    }}
+  >
+    {/* centered page container */}
+    <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto" }}>
+      {/* top bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 18,
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: 0.2 }}>
+            <span style={{ color: "#e5e7eb" }}>Tore</span>
+            <span style={{ color: "#f97316" }}>vez</span>
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+            Client management, bookings, and finance — in one place.
+          </div>
+        </div>
+
         <button
           onClick={handleLogout}
           style={{
-            padding: "4px 10px",
-             color: "#111827",
+            padding: "10px 14px",
+            color: "#111827",
             fontSize: 13,
-            borderRadius: 6,
-            border: "1px solid #9CA3AF",
-            background: "#E5E7EB",
+            fontWeight: 800,
+            borderRadius: 10,
+            border: "none",
+            background: "#f97316",
             cursor: "pointer",
           }}
         >
@@ -282,285 +313,338 @@ const headers = useMemo(() => {
         </button>
       </div>
 
-
+      {/* setup banner */}
       {needsSetup && (
         <div
           style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 8,
-            background: "#FEF3C7",
-            border: "1px solid #FBBF24",
-            color: "#92400E",
+            marginBottom: 14,
+            padding: 14,
+            borderRadius: 14,
+            background: "rgba(249,115,22,0.10)",
+            border: "1px solid rgba(249,115,22,0.35)",
+            color: "#fde68a",
             fontSize: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
           }}
         >
-          <strong>Finish your setup:</strong>{" "}
-          Fill out your business phone, email, and review link in the Settings card below so reminders and messages go
-          to the right place.
+          <div style={{ color: "rgba(229,231,235,0.9)" }}>
+            <strong style={{ color: "#fde68a" }}>Finish your setup:</strong>{" "}
+            Add business phone, email, and review link in Settings so reminders go to the right place.
+          </div>
+
           <button
-  type="button"
-  onClick={() => {
-    setTab("settings");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }}
-  style={{
-    marginLeft: 8,
-    padding: "4px 10px",
-    borderRadius: 6,
-    border: "1px solid #92400E",
-    background: "#FCD34D",
-    cursor: "pointer",
-    fontSize: 13,
-  }}
->
-  Go to settings
-</button>
-
+            type="button"
+            onClick={() => {
+              setTab("settings");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(249,115,22,0.55)",
+              background: "rgba(249,115,22,0.18)",
+              color: "#f97316",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 900,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Go to settings
+          </button>
         </div>
       )}
 
-      {/* Settings card */}
-      <div id="tenant-settings">
-        <NumbersCallsCard tenantKey={TENANT_KEY} />
+      {/* tabs */}
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          padding: 10,
+          borderRadius: 16,
+          border: "1px solid rgba(255,255,255,0.10)",
+          background: "rgba(255,255,255,0.04)",
+          backdropFilter: "blur(10px)",
+          marginBottom: 16,
+        }}
+      >
+        <TopTab label="Home" active={tab === "home"} onClick={() => setTab("home")} />
+        <TopTab label="Finance" active={tab === "finance"} onClick={() => setTab("finance")} />
+        <TopTab label="Leads" active={tab === "leads"} onClick={() => setTab("leads")} />
+        <TopTab label="Bookings" active={tab === "bookings"} onClick={() => setTab("bookings")} />
+        <TopTab label="Settings" active={tab === "settings"} onClick={() => setTab("settings")} />
       </div>
 
+      {/* page body */}
+      <div
+        style={{
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.10)",
+          background: "rgba(255,255,255,0.03)",
+          backdropFilter: "blur(10px)",
+          padding: 18,
+        }}
+      >
+        {/* Settings card mount */}
+        <div id="tenant-settings"></div>
 
-      <div style={{ display:"flex", gap:8, margin:"8px 0 16px" }}>
-        <button onClick={()=>setTab("home")}    disabled={tab==="home"}>Home</button>
-        <button onClick={()=>setTab("finance")} disabled={tab==="finance"}>Finance</button>
-        <button onClick={()=>setTab("leads")}   disabled={tab==="leads"}>Leads</button>
-        <button onClick={()=>setTab("bookings")} disabled={tab==="bookings"}>Bookings</button>
-         <button onClick={()=>setTab("settings")} disabled={tab==="settings"}>Settings</button>
-      </div>
+        {tab === "bookings" && (
+          <BookingBlank
+            tenantKey={TENANT_KEY}
+            tenantSlug={TENANT_KEY} // 👈 match the URL tenant
+            apiBase={API_BASE}
+            commonHeaders={headers}
+          />
+        )}
 
-      {tab==="bookings" && (
-        <BookingBlank
-          tenantKey={TENANT_KEY}
-          tenantSlug={TENANT_KEY}   // 👈 match the URL tenant
-          apiBase={API_BASE}
-          commonHeaders={headers}
-        />
-      )}
-
-      {tab==="home" && (
-        <div style={{ display:"grid", gap:12 }}>
-          <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16 }}>
-            <h2 style={{ margin:0 }}>Welcome</h2>
-            <p style={{ marginTop:8 }}>Choose a section above to get started.</p>
-          </div>
-        </div>
-      )}
-{tab === "settings" && (
-  <TenantSettingsCard
-    apiBase={BASE}
-    commonHeaders={headers}
-    tenantSlug={TENANT_SLUG}
-  />
-)}
-
-
-      {tab==="finance" && (
-        <>
-          {/* Totals range */}
-          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
-            <label>Totals View:</label>
-            <select value={rangeKey} onChange={(e)=>setRangeKey(e.target.value)}>
-              <option value="today">Today</option>
-              <option value="month">Month</option>
-              <option value="custom">Custom</option>
-            </select>
-            {rangeKey === "custom" && (
-              <>
-                <label>Start</label>
-                <input type="date" value={customStart} onChange={(e)=>setCustomStart(e.target.value)} />
-                <label>End</label>
-                <input type="date" value={customEnd} onChange={(e)=>setCustomEnd(e.target.value)} />
-              </>
-            )}
-          </div>
-
-          {/* Summary cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 }}>
-            <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16 }}>
-              <div style={{ color:"#6b7280", fontSize:12 }}>Revenue</div>
-              <div style={{ fontSize:24, fontWeight:600 }}>${fmtMoney(summary?.revenue_total||"0")}</div>
+        {tab === "home" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div
+              style={{
+                border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 16,
+                padding: 18,
+                background: "rgba(0,0,0,0.12)",
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: 22 }}>Welcome</h2>
+              <p style={{ marginTop: 8, color: "rgba(229,231,235,0.75)" }}>
+                Choose a section above to get started.
+              </p>
             </div>
-            <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16 }}>
-              <div style={{ color:"#6b7280", fontSize:12 }}>Costs</div>
-              <div style={{ fontSize:24, fontWeight:600 }}>${fmtMoney(summary?.cost_total||"0")}</div>
+          </div>
+        )}
+
+        {tab === "settings" && (
+          <TenantSettingsCard apiBase={BASE} commonHeaders={headers} tenantSlug={TENANT_SLUG} />
+        )}
+
+        {/* ✅ FINANCE: UNCHANGED — DO NOT EDIT THIS BLOCK */}
+        {tab === "finance" && (
+          <>
+            {/* Totals range */}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+              <label>Totals View:</label>
+              <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value)}>
+                <option value="today">Today</option>
+                <option value="month">Month</option>
+                <option value="custom">Custom</option>
+              </select>
+              {rangeKey === "custom" && (
+                <>
+                  <label>Start</label>
+                  <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                  <label>End</label>
+                  <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                </>
+              )}
             </div>
-            <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16 }}>
-              <div style={{ color:"#6b7280", fontSize:12 }}>Profit / Margin</div>
-              <div style={{ fontSize:24, fontWeight:600 }}>
-                ${fmtMoney(summary?.gross_profit||"0")} • {summary?.margin_pct ?? "0"}%
+
+            {/* Summary cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 }}>
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>Revenue</div>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>${fmtMoney(summary?.revenue_total || "0")}</div>
               </div>
-            </div>
-          </div>
-
-          {/* labor totals */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16 }}>
-            <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16 }}>
-              <div style={{ color:"#6b7280", fontSize:12 }}>Labor (This View)</div>
-              <div style={{ fontSize:18, fontWeight:600 }}>
-                Hours: {fmtNum(summary?.labor_hours)} &nbsp;•&nbsp; Cost: ${fmtMoney(summary?.labor_total)}
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>Costs</div>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>${fmtMoney(summary?.cost_total || "0")}</div>
               </div>
-            </div>
-          </div>
-
-          {/* CSV Export controls */}
-          <div style={{ display:"flex", gap:12, alignItems:"center", margin:"8px 0 12px" }}>
-            <label style={{ display:"flex", gap:6, alignItems:"center" }}>
-              <input
-                type="checkbox"
-                checked={includeRevenue}
-                onChange={e=>setIncludeRevenue(e.target.checked)}
-              />
-              Include Revenue
-            </label>
-            <label style={{ display:"flex", gap:6, alignItems:"center" }}>
-              <input
-                type="checkbox"
-                checked={includeCost}
-                onChange={e=>setIncludeCost(e.target.checked)}
-              />
-              Include Costs
-            </label>
-
-            <button onClick={exportFinanceCsv}>Export CSV</button>
-          </div>
-
-          {/* add revenue / cost */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-            <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16 }}>
-              <h2 style={{ margin:0 }}>Add Revenue</h2>
-              <form onSubmit={submitRevenue} style={{ display:"grid", gap:8, marginTop:8 }}>
-                <input placeholder="Amount" value={revForm.amount} onChange={e=>setRevForm(f=>({...f,amount:e.target.value}))}/>
-                <input placeholder="Source" value={revForm.source} onChange={e=>setRevForm(f=>({...f,source:e.target.value}))}/>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                  <input placeholder="Part Code" value={revForm.part_code} onChange={e=>setRevForm(f=>({...f,part_code:e.target.value}))}/>
-                  <input placeholder="Job Type" value={revForm.job_type} onChange={e=>setRevForm(f=>({...f,job_type:e.target.value}))}/>
-                </div>
-                <input placeholder="Notes" value={revForm.notes} onChange={e=>setRevForm(f=>({...f,notes:e.target.value}))}/>
-                <button type="submit">Save Revenue</button>
-              </form>
-            </div>
-
-            <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16 }}>
-              <h2 style={{ margin:0 }}>Add Cost</h2>
-              <form onSubmit={submitCost} style={{ display:"grid", gap:8, marginTop:8 }}>
-                <input placeholder="Amount" value={costForm.amount} onChange={e=>setCostForm(f=>({...f,amount:e.target.value}))}/>
-                <input placeholder="Category" value={costForm.category} onChange={e=>setCostForm(f=>({...f,category:e.target.value}))}/>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <input placeholder="Hours (e.g. 3.5)" value={costForm.hours} onChange={e=>setCostForm(f=>({...f, hours: e.target.value}))} />
-                  <input placeholder="Hourly Rate (e.g. 45)" value={costForm.hourly_rate} onChange={e=>setCostForm(f=>({...f, hourly_rate: e.target.value}))} />
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                  <input placeholder="Part Code" value={costForm.part_code} onChange={e=>setCostForm(f=>({...f,part_code:e.target.value}))}/>
-                  <input placeholder="Job Type" value={costForm.job_type} onChange={e=>setCostForm(f=>({...f,job_type:e.target.value}))}/>
-                </div>
-                <input placeholder="Vendor (optional)" value={costForm.vendor} onChange={e=>setCostForm(f=>({...f,vendor:e.target.value}))}/>
-                <input placeholder="Notes" value={costForm.notes} onChange={e=>setCostForm(f=>({...f,notes:e.target.value}))}/>
-                <button type="submit">Save Cost</button>
-              </form>
-            </div>
-          </div>
-
-          {/* recent entries */}
-          <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16, marginBottom:16 }}>
-            <h2 style={{ margin:"0 0 8px" }}>Recent Entries</h2>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-              <div>
-                <h3 style={{ margin:"0 0 6px", fontSize:14 }}>Revenue</h3>
-                <div style={{ maxHeight:240, overflow:"auto", borderTop:"1px solid #f3f4f6" }}>
-                  <table style={{ width:"100%", fontSize:14, borderCollapse:"collapse" }}>
-                    <thead><tr><th>ID</th><th>Amt</th><th>Source</th><th>Part/Job</th><th></th></tr></thead>
-                    <tbody>
-                      {recent.revenue.map(r=>(
-                        <tr key={r.id}><td>{r.id}</td><td>${fmtMoney(r.amount)}</td><td>{r.source}</td>
-                        <td>{r.part_code}/{r.job_type}</td>
-                        <td><button onClick={()=>deleteRev(r.id)}>Delete</button></td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div>
-                <h3 style={{ margin:"0 0 6px", fontSize:14 }}>Costs</h3>
-                <div style={{ maxHeight:240, overflow:"auto", borderTop:"1px solid #f3f4f6" }}>
-                  <table style={{ width:"100%", fontSize:14, borderCollapse:"collapse" }}>
-                    <thead><tr><th>ID</th><th>Amt</th><th>Category</th><th>Part/Job</th><th></th></tr></thead>
-                    <tbody>
-                      {recent.costs.map(c=>(
-                        <tr key={c.id}><td>{c.id}</td><td>${fmtMoney(c.amount)}</td><td>{c.category}</td>
-                        <td>{c.part_code}/{c.job_type}</td>
-                        <td><button onClick={()=>deleteCost(c.id)}>Delete</button></td></tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>Profit / Margin</div>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>
+                  ${fmtMoney(summary?.gross_profit || "0")} • {summary?.margin_pct ?? "0"}%
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* parts summary */}
-          <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:16, marginBottom:24 }}>
-            <h2 style={{ margin:"0 0 8px" }}>Parts Performance</h2>
+            {/* labor totals */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16 }}>
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>Labor (This View)</div>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>
+                  Hours: {fmtNum(summary?.labor_hours)} &nbsp;•&nbsp; Cost: ${fmtMoney(summary?.labor_total)}
+                </div>
+              </div>
+            </div>
 
-            <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:8 }}>
-              <label style={{ display:"flex", gap:6, alignItems:"center" }}>
-                <input type="checkbox" checked={showHours} onChange={e=>setShowHours(e.target.checked)} />
-                Show Hours
+            {/* CSV Export controls */}
+            <div style={{ display: "flex", gap: 12, alignItems: "center", margin: "8px 0 12px" }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="checkbox" checked={includeRevenue} onChange={(e) => setIncludeRevenue(e.target.checked)} />
+                Include Revenue
               </label>
-              <label style={{ display:"flex", gap:6, alignItems:"center" }}>
-                <input type="checkbox" checked={showLaborCost} onChange={e=>setShowLaborCost(e.target.checked)} />
-                Show Labor Cost
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="checkbox" checked={includeCost} onChange={(e) => setIncludeCost(e.target.checked)} />
+                Include Costs
               </label>
+
+              <button onClick={exportFinanceCsv}>Export CSV</button>
             </div>
 
-            <div style={{ overflow:"auto", borderTop:"1px solid #f3f4f6" }}>
-              <table style={{ width:"100%", fontSize:14, borderCollapse:"collapse" }}>
-                <thead>
-                  <tr>
-                    <th>Part</th>
-                    <th>Job</th>
-                    {showHours && <th>Hours</th>}
-                    {showLaborCost && <th>Labor Cost</th>}
-                    <th>Revenue</th>
-                    <th>Cost</th>
-                    <th>Profit</th>
-                    <th>Margin %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {partsRows.map((r,i)=>(
-                    <tr key={i}>
-                      <td>{r.part_code}</td>
-                      <td>{r.job_type}</td>
-                      {showHours && <td>{fmtNum(r.hours_total)}</td>}
-                      {showLaborCost && <td>${fmtMoney(r.labor_cost_total)}</td>}
-                      <td>${fmtMoney(r.revenue_total)}</td>
-                      <td>${fmtMoney(r.cost_total)}</td>
-                      <td>${fmtMoney(r.profit)}</td>
-                      <td>{r.margin_pct}%</td>
+            {/* add revenue / cost */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
+                <h2 style={{ margin: 0 }}>Add Revenue</h2>
+                <form onSubmit={submitRevenue} style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  <input placeholder="Amount" value={revForm.amount} onChange={(e) => setRevForm((f) => ({ ...f, amount: e.target.value }))} />
+                  <input placeholder="Source" value={revForm.source} onChange={(e) => setRevForm((f) => ({ ...f, source: e.target.value }))} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <input placeholder="Part Code" value={revForm.part_code} onChange={(e) => setRevForm((f) => ({ ...f, part_code: e.target.value }))} />
+                    <input placeholder="Job Type" value={revForm.job_type} onChange={(e) => setRevForm((f) => ({ ...f, job_type: e.target.value }))} />
+                  </div>
+                  <input placeholder="Notes" value={revForm.notes} onChange={(e) => setRevForm((f) => ({ ...f, notes: e.target.value }))} />
+                  <button type="submit">Save Revenue</button>
+                </form>
+              </div>
+
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
+                <h2 style={{ margin: 0 }}>Add Cost</h2>
+                <form onSubmit={submitCost} style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  <input placeholder="Amount" value={costForm.amount} onChange={(e) => setCostForm((f) => ({ ...f, amount: e.target.value }))} />
+                  <input placeholder="Category" value={costForm.category} onChange={(e) => setCostForm((f) => ({ ...f, category: e.target.value }))} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <input placeholder="Hours (e.g. 3.5)" value={costForm.hours} onChange={(e) => setCostForm((f) => ({ ...f, hours: e.target.value }))} />
+                    <input placeholder="Hourly Rate (e.g. 45)" value={costForm.hourly_rate} onChange={(e) => setCostForm((f) => ({ ...f, hourly_rate: e.target.value }))} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <input placeholder="Part Code" value={costForm.part_code} onChange={(e) => setCostForm((f) => ({ ...f, part_code: e.target.value }))} />
+                    <input placeholder="Job Type" value={costForm.job_type} onChange={(e) => setCostForm((f) => ({ ...f, job_type: e.target.value }))} />
+                  </div>
+                  <input placeholder="Vendor (optional)" value={costForm.vendor} onChange={(e) => setCostForm((f) => ({ ...f, vendor: e.target.value }))} />
+                  <input placeholder="Notes" value={costForm.notes} onChange={(e) => setCostForm((f) => ({ ...f, notes: e.target.value }))} />
+                  <button type="submit">Save Cost</button>
+                </form>
+              </div>
+            </div>
+
+            {/* recent entries */}
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <h2 style={{ margin: "0 0 8px" }}>Recent Entries</h2>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>Revenue</h3>
+                  <div style={{ maxHeight: 240, overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
+                    <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr><th>ID</th><th>Amt</th><th>Source</th><th>Part/Job</th><th></th></tr>
+                      </thead>
+                      <tbody>
+                        {recent.revenue.map((r) => (
+                          <tr key={r.id}>
+                            <td>{r.id}</td><td>${fmtMoney(r.amount)}</td><td>{r.source}</td>
+                            <td>{r.part_code}/{r.job_type}</td>
+                            <td><button onClick={() => deleteRev(r.id)}>Delete</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>Costs</h3>
+                  <div style={{ maxHeight: 240, overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
+                    <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr><th>ID</th><th>Amt</th><th>Category</th><th>Part/Job</th><th></th></tr>
+                      </thead>
+                      <tbody>
+                        {recent.costs.map((c) => (
+                          <tr key={c.id}>
+                            <td>{c.id}</td><td>${fmtMoney(c.amount)}</td><td>{c.category}</td>
+                            <td>{c.part_code}/{c.job_type}</td>
+                            <td><button onClick={() => deleteCost(c.id)}>Delete</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* parts summary */}
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, marginBottom: 24 }}>
+              <h2 style={{ margin: "0 0 8px" }}>Parts Performance</h2>
+
+              <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={showHours} onChange={(e) => setShowHours(e.target.checked)} />
+                  Show Hours
+                </label>
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={showLaborCost} onChange={(e) => setShowLaborCost(e.target.checked)} />
+                  Show Labor Cost
+                </label>
+              </div>
+
+              <div style={{ overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
+                <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th>Part</th>
+                      <th>Job</th>
+                      {showHours && <th>Hours</th>}
+                      {showLaborCost && <th>Labor Cost</th>}
+                      <th>Revenue</th>
+                      <th>Cost</th>
+                      <th>Profit</th>
+                      <th>Margin %</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {partsRows.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.part_code}</td>
+                        <td>{r.job_type}</td>
+                        {showHours && <td>{fmtNum(r.hours_total)}</td>}
+                        {showLaborCost && <td>${fmtMoney(r.labor_cost_total)}</td>}
+                        <td>${fmtMoney(r.revenue_total)}</td>
+                        <td>${fmtMoney(r.cost_total)}</td>
+                        <td>${fmtMoney(r.profit)}</td>
+                        <td>{r.margin_pct}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
 
-      {tab==="leads" && (
-        <LeadsCard
-          tenantKey={TENANT_KEY}
-          apiBase={BASE}
-          commonHeaders={headers}
-        />
-      )}
+        {tab === "leads" && (
+          <LeadsCard tenantKey={TENANT_KEY} apiBase={BASE} commonHeaders={headers} />
+        )}
+      </div>
     </div>
+  </div>
+);
+
+/** inline helper component for tabs */
+function TopTab({ label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={active}
+      style={{
+        padding: "10px 12px",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: active ? "rgba(249,115,22,0.18)" : "rgba(255,255,255,0.04)",
+        color: active ? "#f97316" : "rgba(229,231,235,0.85)",
+        fontWeight: 900,
+        cursor: active ? "default" : "pointer",
+      }}
+    >
+      {label}
+    </button>
   );
+}
+
 }
 
 // ---------- Auth wrapper ----------
@@ -602,21 +686,20 @@ function App() {
   }, []);
 
 function handleLoggedIn(loginData) {
-  // loginData: { access_token, tenant_slug, api_key }
+  // 0️⃣ SAVE TOKEN (this is what you're missing)
+  setToken(loginData.access_token);
 
-  // 1️⃣ store tenant slug so Settings can read it
   if (loginData?.tenant_slug) {
     localStorage.setItem("TENANT_SLUG", loginData.tenant_slug);
   }
 
-  // 2️⃣ store api key (you already read this elsewhere)
   if (loginData?.api_key) {
     localStorage.setItem("API_KEY", loginData.api_key);
   }
 
-  // 3️⃣ continue existing flow
   fetchMe(loginData.access_token);
 }
+
 
   if (authLoading) {
     return <div style={{ padding: 16 }}>Loading…</div>;

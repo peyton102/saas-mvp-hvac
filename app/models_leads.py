@@ -6,7 +6,7 @@ from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import DateTime, text
 
 def utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(timezone.utc)
 
 class Lead(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

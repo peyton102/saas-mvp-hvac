@@ -9,7 +9,6 @@ import hashlib
 from typing import Optional
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Column, DateTime, text
-from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app import config, storage
@@ -200,7 +199,7 @@ async def twilio_voice(
     first = caller.split(" ")[0] if caller else "there"
     msg = (
         f"Hey {first}, thanks for contacting {b['FROM_NAME']}! "
-        f"Grab the next available slot here: {b['BOOKING_LINK']}. "
+        f"{b['BOOKING_LINK']} "
         f"Prefer a call? Reply here."
     )
 
@@ -260,7 +259,7 @@ async def twilio_voice_recorded(
             print(f"[VOICE] voicemail attach error: {e}")
 
     b = brand(tenant_id)
-    body = f"Thanks for the voicemail! Book here: {b['BOOKING_LINK']}"
+    body = f"Thanks for the voicemail! {b['BOOKING_LINK']}"
     try:
         if from_num and not _blocked_number(from_num) and _after_hours():
             if not storage.sent_recently(from_num, minutes=getattr(config, "ANTI_SPAM_MINUTES", 120)):

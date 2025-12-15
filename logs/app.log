@@ -1,0 +1,21 @@
+2025-12-15 19:46:47,825 | INFO | app | ✅ Logging initialized
+2025-12-15 19:46:47,871 | INFO | root | ✅ Startup complete
+2025-12-15 19:46:47,872 | INFO | uvicorn.error | Application startup complete.
+2025-12-15 21:14:20,113 | INFO | uvicorn.error | Shutting down
+2025-12-15 21:14:20,290 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-15 21:14:20,355 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-15 21:14:20,360 | INFO | uvicorn.error | Finished server process [52604]
+2025-12-15 21:14:25,268 | INFO | app | ✅ Logging initialized
+2025-12-15 21:14:25,282 | INFO | root | ✅ Startup complete
+2025-12-15 21:14:25,283 | INFO | uvicorn.error | Application startup complete.
+2025-12-15 21:25:01,735 | INFO | uvicorn.error | Shutting down
+2025-12-15 21:25:01,860 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-15 21:25:01,870 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-15 21:25:01,872 | INFO | uvicorn.error | Finished server process [51820]
+2025-12-15 21:25:06,655 | INFO | app | ✅ Logging initialized
+2025-12-15 21:25:06,660 | INFO | root | ✅ Startup complete
+2025-12-15 21:25:06,661 | INFO | uvicorn.error | Application startup complete.
+2025-12-15 21:27:21,847 | INFO | uvicorn.error | Shutting down
+2025-12-15 21:27:21,956 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-15 21:27:21,959 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-15 21:27:21,959 | INFO | uvicorn.error | Finished server process [47044]

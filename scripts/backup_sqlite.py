@@ -2,7 +2,7 @@
 import shutil
 import datetime
 from pathlib import Path
-
+from datetime import timezone
 # ✅ This is your real DB
 DB_RELATIVE_PATH = Path("data/app.db")
 
@@ -16,7 +16,7 @@ def backup_sqlite():
 
     BACKUP_DIR.mkdir(exist_ok=True)
 
-    ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    ts = datetime.datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     backup_name = f"app_{ts}.db"
     backup_path = BACKUP_DIR / backup_name
 
