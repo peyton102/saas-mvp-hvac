@@ -237,7 +237,7 @@ def public_create_booking(
                     payload.notes,   # handles "notes" or alias "note"
                     payload.service,
                     starts.isoformat(),
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
             booking_id = conn.exec_driver_sql("SELECT last_insert_rowid()").scalar_one()
@@ -391,7 +391,8 @@ def public_availability(
         local_tz = ZoneInfo("America/New_York")
 
     # ---- time window
-    now_local = datetime.now(local_tz)
+    now_local = datetime.now(timezone.utc)
+
     now_utc = now_local.astimezone(timezone.utc)
 
     # if a specific date is provided, start from that local day if it's in the future
@@ -547,7 +548,7 @@ def run_email_reminders():
     """
     Find bookings ~24h and ~2h from now (±5 minutes), send reminders (once), record sent.
     """
-    now_utc = datetime.utcnow()
+    now_utc = datetime.now(timezone.utc)
     tolerance_min = 5
 
     # windows to check
@@ -603,7 +604,7 @@ def run_email_reminders():
                     if email_ok or sms_ok:
                         conn.exec_driver_sql(
                             "INSERT INTO booking_reminders (booking_id, kind, sent_at) VALUES (?, ?, ?)",
-                            (r["id"], kind, datetime.utcnow().isoformat()),
+                            (r["id"], kind, datetime.now(timezone.utc).isoformat()),
                         )
                         sent_counts[kind] += 1
 
@@ -769,7 +770,7 @@ def public_complete_booking(
                     INSERT INTO booking_reviews (booking_id, tenant_key, sent_at)
                     VALUES (?, ?, ?)
                     """,
-                    (row["id"], tenant_val, datetime.utcnow().isoformat()),
+                    (row["id"], tenant_val, datetime.now(timezone.utc).isoformat()),
                 )
 
         return {"ok": True, "booking_id": booking_id, "tenant": tenant_val}

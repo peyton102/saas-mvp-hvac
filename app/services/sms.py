@@ -4,6 +4,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 from sqlmodel import select
 
@@ -529,7 +531,8 @@ def alert_sms(message: str) -> bool:
         print("[ALERT SMS] No ALERT_SMS_TO set; skipping.")
         return False
 
-    prefix = datetime.now().strftime("%m/%d %H:%M")
+    prefix = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).strftime("%m/%d %H:%M")
+
     body = f"[ALERT {prefix}] {message}"
     if len(body) > 320:
         body = body[:320]

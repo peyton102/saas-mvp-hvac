@@ -13,6 +13,7 @@ from app.db import get_session
 from app.models import Booking as BookingModel, WebhookDedup
 from app.services.sms import send_sms
 from ..deps import get_tenant_id
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="", tags=["calendly"])
 
@@ -189,7 +190,14 @@ def debug_bookings(
         items = [
             {
                 "id": r.id,
-                "created_at": (r.created_at.isoformat() if r.created_at else None),
+                "created_at": (
+    (r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc))
+    .astimezone(timezone.utc)
+    .isoformat(timespec="seconds")
+    .replace("+00:00", "Z")
+    if r.created_at else None
+),
+
                 "name": r.name,
                 "phone": r.phone,
                 "email": r.email,

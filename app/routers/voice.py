@@ -52,7 +52,8 @@ BUSINESS_CLOSE_HOUR = int(getattr(config, "BUSINESS_CLOSE_HOUR", 17))
 BUSINESS_OPEN_DOWS  = set(map(int, (getattr(config, "BUSINESS_OPEN_DOWS", "0,1,2,3,4").split(","))))
 
 def _after_hours(now: datetime | None = None) -> bool:
-    now = now or datetime.now(BUSINESS_TZ)
+    now = now or datetime.now(timezone.utc)
+
     if now.weekday() not in BUSINESS_OPEN_DOWS:
         return True
     return not (BUSINESS_OPEN_HOUR <= now.hour < BUSINESS_CLOSE_HOUR)

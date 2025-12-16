@@ -1,5 +1,5 @@
 # app/routers/leads.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
 from sqlalchemy import text
@@ -16,6 +16,14 @@ from ..deps import get_tenant_id  # tenant resolver
 from app.services.sms import lead_auto_reply_sms, lead_office_notify_sms  # already imported
 
 router = APIRouter(prefix="", tags=["leads"])
+def to_utc_z(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 @router.get("/whoami")
@@ -81,7 +89,7 @@ async def create_lead(
 
     sms_ok = True
     if recent:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if (now - recent.created_at) < timedelta(minutes=minutes):
             print(f"[THROTTLE] Skipping SMS to {e164} (within {minutes}m) tenant={tenant_id}")
             sms_ok = False
@@ -189,7 +197,14 @@ def debug_leads(
         items = [
             {
                 "id": r.id,
-                "created_at": (r.created_at.isoformat() if r.created_at else None),
+                "created_at": (
+    (r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc))
+    .astimezone(timezone.utc)
+    .isoformat(timespec="seconds")
+    .replace("+00:00", "Z")
+    if r.created_at else None
+),
+
                 "name": r.name,
                 "phone": r.phone,
                 "email": r.email or "",
@@ -342,7 +357,14 @@ def list_leads(
     items = [
         {
             "id": r.id,
-            "created_at": (r.created_at.isoformat() if r.created_at else None),
+            "created_at": (
+    (r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc))
+    .astimezone(timezone.utc)
+    .isoformat(timespec="seconds")
+    .replace("+00:00", "Z")
+    if r.created_at else None
+),
+
             "name": r.name,
             "phone": r.phone,
             "email": r.email or "",

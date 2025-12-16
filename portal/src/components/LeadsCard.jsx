@@ -2,27 +2,49 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 
 const BASE_FALLBACK = "/api";
+function parseISO(iso) {
+  if (!iso) return null;
+
+  // If backend forgot timezone (no 'Z' and no ±hh:mm), force UTC
+  const s = /[zZ]$|[+\-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`;
+
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
 
 // date helpers
 function formatDate(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
+  const d = parseISO(iso);
+  if (!d) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
+  }).format(d);
 }
+
 function formatDateTime(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d)) return iso;
-  return d.toISOString().slice(0, 19).replace("T", " ");
+  const d = parseISO(iso);
+  if (!d) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(d);
 }
+
 function isThisMonthUTC(iso) {
   if (!iso) return false;
-  const d = new Date(iso);
+ const d = parseISO(iso);
+  if (!d) return false;
   const now = new Date();
   return d.getUTCFullYear() === now.getUTCFullYear() &&
          d.getUTCMonth() === now.getUTCMonth();
@@ -108,7 +130,8 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
       const now = new Date();
       items = items.filter((r) => {
         if (!r.created_at) return false;
-        const t = new Date(r.created_at);
+        const t = parseISO(r.created_at);
+        if (!t) return false;
         if (range === "today") return t.toDateString() === now.toDateString();
         if (range === "7d")   return now - t <= 7  * 24 * 60 * 60 * 1000;
         if (range === "30d")  return now - t <= 30 * 24 * 60 * 60 * 1000;

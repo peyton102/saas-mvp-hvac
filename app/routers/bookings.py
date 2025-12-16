@@ -170,7 +170,7 @@ def availability(days: int = Query(7, ge=1, le=14)):
         start_t = time(9, 0)
         end_t = time(17, 0)
 
-    now = datetime.now().astimezone()
+    now = datetime.now(timezone.utc)
     out: List[str] = []
     step = timedelta(minutes=slot_min + buf_min)
 
@@ -389,7 +389,7 @@ def run_review_reminders(
     Find queued review reminders (template='review-queue') older than 2 hours
     and send review SMS using booking_reminder_sms(kind='review').
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=2)
 
     rows = session.exec(

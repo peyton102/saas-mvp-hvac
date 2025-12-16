@@ -1,4 +1,6 @@
 ﻿import sqlite3, re, time, datetime
+from datetime import timezone
+
 db = "data/app.db"
 con = sqlite3.connect(db)
 cur = con.cursor()
@@ -15,7 +17,13 @@ def base_type(t):
 text_like = {"TEXT","VARCHAR","NVARCHAR","CHAR","CLOB"}
 num_like  = {"INTEGER","INT","BIGINT","REAL","FLOAT","NUMERIC","DECIMAL"}
 
-now_iso = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+now_iso = (
+    datetime.datetime.now(timezone.utc)
+    .replace(microsecond=0)
+    .isoformat()
+    .replace("+00:00", "Z")
+)
+
 now_epoch = int(time.time())
 
 values = {}

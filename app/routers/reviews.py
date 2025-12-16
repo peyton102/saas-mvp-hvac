@@ -3,6 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlmodel import Session, select
+from datetime import datetime, timedelta, timezone
 
 from app import config, storage
 from app.services.sms import send_sms
@@ -184,7 +185,14 @@ def debug_reviews(
         items = [
             {
                 "id": r.id,
-                "created_at": (r.created_at.isoformat() if r.created_at else None),
+                "created_at": (
+    (r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc))
+    .astimezone(timezone.utc)
+    .isoformat(timespec="seconds")
+    .replace("+00:00", "Z")
+    if r.created_at else None
+),
+
                 "phone": r.phone,
                 "name": r.name,
                 "job_id": r.job_id,

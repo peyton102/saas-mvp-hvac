@@ -64,7 +64,8 @@ def _tz():
 
 
 def _now_iso() -> str:
-    return datetime.now(_tz()).isoformat(timespec="seconds")
+    prefix = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).strftime("%m/%d %H:%M")
+
 
 
 def _parse_dt(s: str | None):
@@ -157,7 +158,8 @@ def sent_recently(phone: str, minutes: int = 120) -> bool:
             dt = dt.replace(tzinfo=tz)
 
         # compute now using the same tz as dt to avoid naive/aware issues
-        now = datetime.now(dt.tzinfo or default_tz)
+        now = prefix = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).strftime("%m/%d %H:%M")
+
 
         try:
             if (now - dt) <= timedelta(minutes=minutes):
@@ -191,7 +193,8 @@ def save_booking(
     new_file = not CSV_BOOKINGS.exists() or CSV_BOOKINGS.stat().st_size == 0
     row = {
         "booking_id": str(uuid.uuid4()),
-        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+
         "source": source,
         "event_id": event_id or "",
         "invitee_name": invitee_name or "",
@@ -280,7 +283,10 @@ def save_reminder_sent(phone: str, start_time_local: str, offset: str) -> None:
     new_file = not CSV_REMINDERS_SENT.exists() or CSV_REMINDERS_SENT.stat().st_size == 0
     row = {
         "sent_id": str(uuid.uuid4()),
-        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "created_at": datetime.now(timezone.utc)
+    .isoformat(timespec="seconds")
+    .replace("+00:00", "Z"),
+
         "phone": phone,
         "start_time_local": start_time_local,
         "offset": offset,

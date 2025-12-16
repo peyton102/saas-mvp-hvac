@@ -12,7 +12,8 @@ class Lead(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
     created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
+        sa_column=Column(DateTime(timezone=True), server_default=text("(strftime('%Y-%m-%dT%H:%M:%SZ','now'))")
+),
         default_factory=utcnow,
     )
 

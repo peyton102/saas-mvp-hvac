@@ -46,7 +46,7 @@ def slugify(name: str) -> str:
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -189,7 +189,7 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         # column already exists, ignore
         pass
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     booking_link_default = getattr(config, "BOOKING_LINK", "") or ""
 
     # 5) create Tenant row via SQLModel

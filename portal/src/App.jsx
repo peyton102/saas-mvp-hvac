@@ -51,7 +51,8 @@ function PortalApp({ me }) {
   function computeCsvDates() {
   if (rangeKey === "today") {
     const d = todayISO();
-    return { start: d, end: d };
+    return { start: `${d}T00:00:00Z`, end: `${d}T23:59:59Z` };
+
   }
   if (rangeKey === "month") {
     return { start: startOfMonthISO(), end: todayISO() };

@@ -210,7 +210,14 @@ def debug_reminders_sent(
     items = [
         {
             "id": r.id,
-            "created_at": (r.created_at.isoformat() if r.created_at else None),
+            "created_at": (
+    (r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc))
+    .astimezone(timezone.utc)
+    .isoformat(timespec="seconds")
+    .replace("+00:00", "Z")
+    if r.created_at else None
+),
+
             "phone": r.phone,
             "name": r.name or "",
             "booking_start": (r.booking_start.isoformat() if r.booking_start else None),
