@@ -90,7 +90,20 @@ async def create_lead(
     sms_ok = True
     if recent:
         now = datetime.now(timezone.utc)
-        if (now - recent.created_at) < timedelta(minutes=minutes):
+        sms_ok = True
+        if recent and recent.created_at:
+            now_utc = datetime.now(timezone.utc)
+
+            recent_dt = recent.created_at
+            if recent_dt.tzinfo is None:
+                recent_dt = recent_dt.replace(tzinfo=timezone.utc)
+            else:
+                recent_dt = recent_dt.astimezone(timezone.utc)
+
+            if (now_utc - recent_dt) < timedelta(minutes=minutes):
+                print(f"[THROTTLE] Skipping SMS to {e164} (within {minutes}m) tenant={tenant_id}")
+                sms_ok = False
+
             print(f"[THROTTLE] Skipping SMS to {e164} (within {minutes}m) tenant={tenant_id}")
             sms_ok = False
 

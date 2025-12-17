@@ -146,6 +146,22 @@ export default function BookingsCard({
     return res.json();
   }
 
+  function localWallToZonedIso(localWall) {
+  // localWall: "YYYY-MM-DDTHH:mm" or "YYYY-MM-DDTHH:mm:ss"
+  const wall = localWall.length === 16 ? `${localWall}:00` : localWall;
+  const d = new Date(wall);
+
+  // getTimezoneOffset() = minutes behind UTC (NY winter = 300)
+  const offMin = d.getTimezoneOffset();
+  const sign = offMin > 0 ? "-" : "+";
+  const abs = Math.abs(offMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+
+  return `${wall}${sign}${hh}:${mm}`;
+}
+
+
   // ---- load list ----
   const loadBookings = useCallback(
     async () => {
@@ -196,23 +212,18 @@ export default function BookingsCard({
     }
     setAdding(true);
     try {
-      // form.startsAt is "YYYY-MM-DDTHH:MM" in LOCAL time from the browser.
-// Send it as-is (no UTC conversion) so the API stores exactly what you picked.
-const startIso = `${form.startsAt}:00`;
+const startWall =
+  form.startsAt.length === 16 ? `${form.startsAt}:00` : form.startsAt;
 
-// Compute end = start + 1 hour in LOCAL time
-const startLocal = new Date(form.startsAt);
-const endLocal = new Date(startLocal.getTime() + 60 * 60 * 1000);
+const startDate = new Date(startWall);
+const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
-const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
-const endIso =
-  `${endLocal.getFullYear()}-` +
-  `${pad(endLocal.getMonth() + 1)}-` +
-  `${pad(endLocal.getDate())}T` +
-  `${pad(endLocal.getHours())}:` +
-  `${pad(endLocal.getMinutes())}:00`;
+const toWall = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T` +
+  `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 
-
+const startIso = localWallToZonedIso(startWall);
+const endIso = localWallToZonedIso(toWall(endDate));
 
       // POST to /book (tenant comes from JWT)
       await apiJson(CREATE_PATH, {

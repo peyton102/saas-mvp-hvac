@@ -209,7 +209,32 @@ def list_upcoming_bookings(
         .order_by(BookingModel.start.asc())
     ).all()
 
-    return [r.dict() for r in rows]
+    def _to_utc_z(dt):
+        if not dt:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    out = []
+    for r in rows:
+        out.append({
+            "id": r.id,
+            "tenant_id": r.tenant_id,
+            "name": r.name,
+            "email": r.email,
+            "phone": r.phone,
+            "notes": r.notes,
+            "source": r.source,
+            "start": _to_utc_z(r.start),
+            "end": _to_utc_z(r.end),
+            "created_at": _to_utc_z(getattr(r, "created_at", None)),
+            "completed_at": _to_utc_z(getattr(r, "completed_at", None)),
+        })
+
+    return out
 
 
 # ===== Direct Booking (per-tenant) =====
@@ -220,16 +245,22 @@ def book(
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    start = _parse_dt(payload.start)
-    end = _parse_dt(payload.end)
-    if end <= start:
+    start_local = _parse_dt(payload.start)
+    end_local = _parse_dt(payload.end)
+
+    if end_local <= start_local:
         raise HTTPException(status_code=422, detail="end must be after start")
 
-    if not _gcal_is_free(start, end):
+    # ✅ store in DB as UTC (naive) to avoid tz dropping bugs in SQLite
+    start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc = end_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+    # ✅ use LOCAL (tz-aware) for Google Calendar free/busy + event creation
+    if not _gcal_is_free(start_local, end_local):
         raise HTTPException(status_code=409, detail="Time slot is not available")
 
     event_id = _gcal_create_event(
-        start, end, payload.name, payload.email, payload.phone, payload.notes
+        start_local, end_local, payload.name, payload.email, payload.phone, payload.notes
     )
 
     e164 = normalize_us_phone(payload.phone) if payload.phone else ""
@@ -242,7 +273,8 @@ def book(
                     "name": payload.name,
                     "phone": e164,
                     "service": "appointment",
-                    "starts_at_iso": start.isoformat(),
+                    "starts_at_iso": start_local.isoformat(),
+
                 },
             )
         except Exception as e:
@@ -251,14 +283,14 @@ def book(
     # CSV log (preserve existing behavior only when DB_FIRST is false)
     try:
         if (not getattr(config, "DB_FIRST", True)) and hasattr(storage, "save_booking"):
-            tz_str = str(start.tzinfo or "")
+            tz_str=str(start_local.tzinfo or ""),
             storage.save_booking(
                 event_id=event_id,
                 invitee_name=payload.name,
                 invitee_email=(payload.email or ""),
                 invitee_phone=e164,
-                start_time=start.isoformat(),
-                end_time=end.isoformat(),
+                start_time=start_local.isoformat(),
+                end_time=end_local.isoformat(),
                 tz_str=tz_str,
                 notes=(payload.notes or ""),
                 sms_sent=bool(sms_ok),
@@ -274,8 +306,9 @@ def book(
             name=payload.name or "",
             phone=e164 or "",
             email=(payload.email or None),
-            start=start,
-            end=end,
+            start=start_utc,
+            end=end_utc,
+
             notes=(payload.notes or None),
             source="api",
         )
@@ -288,7 +321,7 @@ def book(
             "name": payload.name,
             "phone": e164 or (payload.phone or ""),
             "service": "appointment",
-            "starts_at_iso": start.isoformat(),
+            "starts_at_iso": start_local.isoformat(),
         }
         booking_office_notify_sms(tenant_id, office_payload)
     except Exception as e:
@@ -303,7 +336,7 @@ def book(
             "phone": e164 or (payload.phone or ""),
             "address": "",
             "service": "appointment",
-            "starts_at_iso": start.isoformat(),
+            "starts_at_iso": start_local.isoformat(),
             "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
         }
         email_ok = send_booking_confirmation(tenant_id, email_payload)

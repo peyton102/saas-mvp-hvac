@@ -246,13 +246,19 @@ def public_create_booking(
 
     # ---------- B) mirror into BookingModel so /upcoming & portal see it ----------
     try:
+        from zoneinfo import ZoneInfo
+
+        BUSINESS_TZ = ZoneInfo("America/New_York")
+
         # Normalize to UTC for BookingModel
         if starts.tzinfo is None:
-            starts_utc = starts.replace(tzinfo=timezone.utc)
+            # starts came from public HTML → treat as business local time
+            starts_utc = starts.replace(tzinfo=BUSINESS_TZ).astimezone(timezone.utc)
         else:
+            # already tz-aware → just normalize
             starts_utc = starts.astimezone(timezone.utc)
 
-        end_utc = starts_utc + timedelta(hours=1)  # 1-hour slot
+        end_utc = starts_utc + timedelta(hours=1)
 
         booking_row = BookingModel(
             tenant_id=tenant_val,

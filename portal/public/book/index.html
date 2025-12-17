@@ -216,6 +216,20 @@
   serviceEl.addEventListener('change', () => {
     if (dayEl.value) renderTimesForDay();
   });
+function localWallToZonedIso(localWall) {
+  // localWall: "YYYY-MM-DDTHH:mm:ss" (NO offset)
+  const d = new Date(localWall);
+
+  // getTimezoneOffset() = minutes behind UTC (NY winter = 300)
+  const offMin = d.getTimezoneOffset();
+  const sign = offMin > 0 ? "-" : "+";
+  const abs = Math.abs(offMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+
+  return `${localWall}${sign}${hh}:${mm}`;
+}
+
 
   // ---- BOOKING submit ----
   btn.addEventListener('click', async () => {
@@ -237,7 +251,9 @@
     const address = addressEl.value.trim() || null;
     const notes   = notesEl.value.trim()   || null;
 
-    const startsIso = new Date(startsLocal).toISOString();
+    const startsIso = localWallToZonedIso(startsLocal);
+
+
 
     try {
       const endpoint = isReschedule
