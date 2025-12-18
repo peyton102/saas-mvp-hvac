@@ -300,26 +300,25 @@ def on_startup():
 async def _reminder_cron():
     async def _loop():
         await asyncio.sleep(30)
+
+        api_base = (API_BASE or "").strip()
+        if not api_base:
+            print("[reminder-cron] DISABLED: API_BASE is not set (must be your Render URL).")
+            return
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             while True:
                 try:
                     resp = await client.post(
-                        f"{API_BASE}/tasks/send-reminders-all",
-                        params={"look_back_minutes": 60},
+                        f"{API_BASE.rstrip('/')}/bookings/reminders/run",
                         json={},
                         headers={"X-API-Key": "devkey"},
                     )
-
-                    print(
-                        "[reminder-cron] ALL TENANTS status:",
-                        resp.status_code,
-                        "body:",
-                        resp.text[:200],
-                    )
+                    print("[reminder-cron] /bookings/reminders/run", resp.status_code, resp.text[:200])
                 except Exception as e:
                     print("[reminder-cron] error:", e)
 
-                print("[reminder-cron] sleeping 300s…")
                 await asyncio.sleep(300)
 
     asyncio.create_task(_loop())
+
