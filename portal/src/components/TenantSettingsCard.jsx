@@ -5,6 +5,7 @@ export default function TenantSettingsCard({
   apiBase,
   commonHeaders,
   tenantSlug, // <-- REQUIRED: pass tenant_slug from /auth/login
+  onCompleteChange, // <-- add this
 }) {
   const [form, setForm] = useState({
     business_name: "",
@@ -16,10 +17,24 @@ export default function TenantSettingsCard({
     phone: "",
   });
 
+  const isSettingsComplete = useMemo(() => {
+    const business = (form.business_name || "").trim();
+    const review = (form.review_google_url || "").trim();
+    const booking = (form.booking_link || "").trim();
+    return Boolean(business && review && booking);
+  }, [form.business_name, form.review_google_url, form.booking_link]);
+
+  useEffect(() => {
+    if (typeof onCompleteChange === "function") {
+      onCompleteChange(isSettingsComplete);
+    }
+  }, [isSettingsComplete, onCompleteChange]);
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
+
 
   // Base URL for the portal (Render in prod, localhost in dev)
   const frontendBase =

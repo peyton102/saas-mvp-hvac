@@ -36,6 +36,8 @@ function startOfMonthISO() { const d = new Date(); d.setDate(1); return d.toISOS
 function PortalApp({ me }) {
   const [tab, setTab] = useState("home");
   const [apiHealth, setApiHealth] = useState("checking…");
+  const [settingsComplete, setSettingsComplete] = useState(false);
+
   const [includeRevenue, setIncludeRevenue] = useState(true);
   const [includeCost, setIncludeCost] = useState(true);
   const needsSetup = me?.needs_setup;
@@ -315,7 +317,8 @@ const headers = useMemo(() => {
       </div>
 
       {/* setup banner */}
-      {needsSetup && (
+      {needsSetup && !settingsComplete && (
+
         <div
           style={{
             marginBottom: 14,
@@ -420,8 +423,14 @@ const headers = useMemo(() => {
         )}
 
         {tab === "settings" && (
-          <TenantSettingsCard apiBase={BASE} commonHeaders={headers} tenantSlug={TENANT_SLUG} />
-        )}
+  <TenantSettingsCard
+    apiBase={BASE}
+    commonHeaders={headers}
+    tenantSlug={TENANT_SLUG}
+    onCompleteChange={setSettingsComplete}
+  />
+)}
+
 
         {/* ✅ FINANCE: UNCHANGED — DO NOT EDIT THIS BLOCK */}
         {tab === "finance" && (
