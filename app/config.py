@@ -1,11 +1,14 @@
 # app/config.py
 import os
-from dotenv import load_dotenv
 from pathlib import Path
-# load .env into process env vars
-load_dotenv(override=True)
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parents[1]
-load_dotenv( Path(__file__).resolve().parents[1] / ".env" )
+ENV_FILE = ROOT / ".env"
+
+# Load the project .env and FORCE override anything already set
+load_dotenv(dotenv_path=ENV_FILE, override=True)
+
 
 def _as_bool(name: str, default: bool = False) -> bool:
     val = os.getenv(name)

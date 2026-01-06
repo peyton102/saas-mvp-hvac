@@ -87,5 +87,5 @@ async def get_tenant_id(
         if slug:
             return slug
 
-    # 6) Last resort
-    return "default"
+    raise HTTPException(status_code=401, detail="Tenant not resolved")
+

@@ -33,9 +33,8 @@ class FinanceRevenue(SQLModel, table=True):
     lead_id: Optional[int] = None
     notes: Optional[str] = None
 
-    # part & job type tracking
-    part_code: Optional[str] = Field(default=None, max_length=100)
-    job_type:  Optional[str] = Field(default=None, max_length=50)  # e.g. "install", "repair"
+    part_code: Optional[str] = Field(default=None, index=True)
+    job_type: Optional[str] = Field(default=None, index=True)
 
 
 class FinanceCost(SQLModel, table=True):
@@ -61,9 +60,8 @@ class FinanceCost(SQLModel, table=True):
     hours: Decimal = Field(default=Decimal("0"))
     hourly_rate: Decimal = Field(default=Decimal("0"))
 
-    # part & job type tracking
-    part_code: Optional[str] = Field(default=None, max_length=100)
-    job_type:  Optional[str] = Field(default=None, max_length=50)  # e.g. "install", "repair"
+    part_code: Optional[str] = Field(default=None, index=True)
+    job_type: Optional[str] = Field(default=None, index=True)
 
 
 # Optional aliases (in case other modules import these names)

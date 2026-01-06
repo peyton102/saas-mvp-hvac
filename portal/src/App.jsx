@@ -217,11 +217,19 @@ const headers = useMemo(() => {
   });
 
   async function submitRevenue(e) {
-    e.preventDefault();
-    await apiFetch(`/finance/revenue`, { method: "POST", body: JSON.stringify(revForm) });
-    setRevForm({ amount: "", category: "", vendor: "", part_code: "", job_type: "", notes: "" });
-    refreshAll();
-  }
+  e.preventDefault();
+
+  console.log("SUBMIT REV PAYLOAD", revForm); // <--- ADD THIS
+
+  await apiFetch(`/finance/revenue`, {
+    method: "POST",
+    body: JSON.stringify(revForm),
+  });
+
+  setRevForm({ amount: "", source: "", part_code: "", job_type: "", notes: "" });
+  refreshAll();
+}
+
   async function submitCost(e) {
     e.preventDefault();
     await apiFetch(`/finance/cost`, { method: "POST", body: JSON.stringify(costForm) });
@@ -271,7 +279,7 @@ const headers = useMemo(() => {
       minHeight: "100vh",
       width: "100%",
       boxSizing: "border-box",
-      padding: 24,
+      padding: "24px 0",
       background:
         "radial-gradient(900px 520px at 50% 0%, rgba(249,115,22,0.14), rgba(0,0,0,0) 65%), linear-gradient(180deg, #0b1220 0%, #05070d 100%)",
       color: "#e5e7eb",
@@ -538,15 +546,28 @@ const headers = useMemo(() => {
                 <div>
                   <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>Revenue</h3>
                   <div style={{ maxHeight: 240, overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
-                    <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+                    <table
+  style={{
+    width: "100%",
+    fontSize: 14,
+    borderCollapse: "collapse",
+    textAlign: "center",
+  }}
+>
+
                       <thead>
-                        <tr><th>ID</th><th>Amt</th><th>Source</th><th>Part/Job</th><th></th></tr>
+                        <tr><th>ID</th><th>Amt</th><th>Source</th><th>Part</th><th>Job</th><th></th></tr>
+
                       </thead>
                       <tbody>
                         {recent.revenue.map((r) => (
                           <tr key={r.id}>
                             <td>{r.id}</td><td>${fmtMoney(r.amount)}</td><td>{r.source}</td>
-                            <td>{r.part_code}/{r.job_type}</td>
+                            <td>{String(r.part_code ?? r.partCode ?? "").trim() || "—"}</td>
+<td>{String(r.job_type ?? r.jobType ?? "").trim() || "—"}</td>
+
+
+
                             <td><button onClick={() => deleteRev(r.id)}>Delete</button></td>
                           </tr>
                         ))}
@@ -558,15 +579,27 @@ const headers = useMemo(() => {
                 <div>
                   <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>Costs</h3>
                   <div style={{ maxHeight: 240, overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
-                    <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+                    <table
+  style={{
+    width: "100%",
+    fontSize: 14,
+    borderCollapse: "collapse",
+    textAlign: "center",
+  }}
+>
+
                       <thead>
-                        <tr><th>ID</th><th>Amt</th><th>Category</th><th>Part/Job</th><th></th></tr>
+                        <tr><th>ID</th><th>Amt</th><th>Source</th><th>Part</th><th>Job</th><th></th></tr>
+
                       </thead>
                       <tbody>
                         {recent.costs.map((c) => (
                           <tr key={c.id}>
                             <td>{c.id}</td><td>${fmtMoney(c.amount)}</td><td>{c.category}</td>
-                            <td>{c.part_code}/{c.job_type}</td>
+                            <td>{String(c.part_code ?? c.partCode ?? "").trim() || "—"}</td>
+<td>{String(c.job_type ?? c.jobType ?? "").trim() || "—"}</td>
+
+
                             <td><button onClick={() => deleteCost(c.id)}>Delete</button></td>
                           </tr>
                         ))}
@@ -593,33 +626,44 @@ const headers = useMemo(() => {
               </div>
 
               <div style={{ overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
-                <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+                <table
+  style={{
+    width: "100%",
+    fontSize: 14,
+    borderCollapse: "collapse",
+    textAlign: "center",
+  }}
+>
+
                   <thead>
-                    <tr>
-                      <th>Part</th>
-                      <th>Job</th>
-                      {showHours && <th>Hours</th>}
-                      {showLaborCost && <th>Labor Cost</th>}
-                      <th>Revenue</th>
-                      <th>Cost</th>
-                      <th>Profit</th>
-                      <th>Margin %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {partsRows.map((r, i) => (
-                      <tr key={i}>
-                        <td>{r.part_code}</td>
-                        <td>{r.job_type}</td>
-                        {showHours && <td>{fmtNum(r.hours_total)}</td>}
-                        {showLaborCost && <td>${fmtMoney(r.labor_cost_total)}</td>}
-                        <td>${fmtMoney(r.revenue_total)}</td>
-                        <td>${fmtMoney(r.cost_total)}</td>
-                        <td>${fmtMoney(r.profit)}</td>
-                        <td>{r.margin_pct}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
+  <tr>
+    <th>Part</th>
+    <th>Job</th>
+    {showHours && <th>Hours</th>}
+    <th>Parts Cost</th>
+    {showLaborCost && <th>Labor Cost</th>}
+    <th>Revenue</th>
+    <th>Total Cost</th>
+    <th>Profit</th>
+    <th>Margin %</th>
+  </tr>
+</thead>
+<tbody>
+  {partsRows.map((r, i) => (
+    <tr key={i}>
+      <td>{r.part_code ?? r.partCode ?? "—"}</td>
+<td>{r.job_type ?? r.jobType ?? "—"}</td>
+      {showHours && <td>{fmtNum(r.hours_total)}</td>}
+      <td>${fmtMoney(r.parts_cost_total)}</td>
+      {showLaborCost && <td>${fmtMoney(r.labor_cost_total)}</td>}
+      <td>${fmtMoney(r.revenue_total)}</td>
+      <td>${fmtMoney(r.cost_total)}</td>
+      <td>${fmtMoney(r.profit)}</td>
+      <td>{r.margin_pct}%</td>
+    </tr>
+  ))}
+</tbody>
+
                 </table>
               </div>
             </div>

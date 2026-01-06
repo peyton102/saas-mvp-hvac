@@ -54,14 +54,19 @@ def recent(
             "category": getattr(r, "category", None),
             "vendor": getattr(r, "vendor", None),
             "notes": getattr(r, "notes", None),
+
+            # ✅ ADD THESE:
+            "part_code": getattr(r, "part_code", None),
+            "job_type": getattr(r, "job_type", None),
+
             "created_at": getattr(r, "created_at", None),
             "kind": kind,
         }
-
     return {
         "revenue": [row_r(r, "revenue") for r in revs],
         "costs": [row_r(c, "cost") for c in costs],
     }
+
 
 @router.delete("/revenue/{item_id}")
 def delete_revenue(

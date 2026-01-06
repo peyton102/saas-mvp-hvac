@@ -64,7 +64,6 @@ def add_revenue(payload: dict,
         booking_id=payload.get("booking_id"),
         lead_id=payload.get("lead_id"),
         notes=payload.get("notes"),
-        # store part & job type when provided
         part_code=payload.get("part_code"),
         job_type=payload.get("job_type"),
     )
@@ -138,11 +137,16 @@ def summary(
     ).all()
 
     # Compute totals (parts amount + labor = hours*rate)
-    rev_total   = sum((x.amount for x in rev),  Decimal("0"))
-    parts_total = sum((x.amount for x in cost), Decimal("0"))
-    labor_total = sum(((x.hours or Decimal("0")) * (x.hourly_rate or Decimal("0"))) for x in cost)
-    labor_hours = sum((x.hours or Decimal("0")) for x in cost)
-    cost_total  = parts_total + labor_total
+    rev_total = sum((x.amount for x in rev), Decimal("0"))
+
+    labor_costs = [x for x in cost if (x.category or "").lower() == "labor"]
+    part_costs = [x for x in cost if (x.category or "").lower() != "labor"]
+
+    parts_total = sum((x.amount for x in part_costs), Decimal("0"))
+    labor_total = sum(((x.hours or Decimal("0")) * (x.hourly_rate or Decimal("0"))) for x in labor_costs)
+    labor_hours = sum((x.hours or Decimal("0")) for x in labor_costs)
+
+    cost_total = parts_total + labor_total
 
     gross  = rev_total - cost_total
     margin = (gross / rev_total * Decimal("100")) if rev_total else Decimal("0")
@@ -193,9 +197,14 @@ def pnl(start: str, end: str,
     ).all()
 
     rev_total = sum((x.amount for x in rev), Decimal("0"))
-    parts_total = sum((x.amount for x in cost), Decimal("0"))
-    labor_total = sum(((x.hours or Decimal("0")) * (x.hourly_rate or Decimal("0"))) for x in cost)
-    labor_hours = sum((x.hours or Decimal("0")) for x in cost)
+
+    labor_costs = [x for x in cost if (x.category or "").lower() == "labor"]
+    part_costs = [x for x in cost if (x.category or "").lower() != "labor"]
+
+    parts_total = sum((x.amount for x in part_costs), Decimal("0"))
+    labor_total = sum(((x.hours or Decimal("0")) * (x.hourly_rate or Decimal("0"))) for x in labor_costs)
+    labor_hours = sum((x.hours or Decimal("0")) for x in labor_costs)
+
     cost_total = parts_total + labor_total
 
     gross = rev_total - cost_total

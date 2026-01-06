@@ -170,14 +170,6 @@ export default function LoginPage({ onLoggedIn }) {
         <div style={{ textAlign: "center", color: "rgba(229,231,235,0.85)" }}>
           {mode === "login" ? (
             <>
-              No account?{" "}
-              <button
-                type="button"
-                onClick={() => setMode("signup")}
-                style={linkStyle}
-              >
-                Sign up
-              </button>
             </>
           ) : (
             <>

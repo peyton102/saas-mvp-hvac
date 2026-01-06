@@ -75,9 +75,10 @@ def parts_summary(
     agg: Dict[Tuple[str, str], Dict[str, Decimal]] = defaultdict(
         lambda: {
             "revenue": Decimal("0"),
+            "parts_cost": Decimal("0"),
+            "labor_cost": Decimal("0"),
             "cost": Decimal("0"),
             "hours": Decimal("0"),
-            "labor_cost": Decimal("0"),
         }
     )
 
@@ -102,6 +103,7 @@ def parts_summary(
         # totals
         agg[k]["hours"] += h
         agg[k]["labor_cost"] += labor_amt
+        agg[k]["parts_cost"] += parts_amt
         agg[k]["cost"] += (parts_amt + labor_amt)
 
     # Build response rows
@@ -122,6 +124,8 @@ def parts_summary(
                 # new optional columns (your UI toggles will read these):
                 "hours_total": f"{vals['hours']:.2f}",
                 "labor_cost_total": f"{vals['labor_cost']:.2f}",
+                "parts_cost_total": f"{vals['parts_cost']:.2f}",
+
             }
         )
 

@@ -46,7 +46,7 @@ from app.routers import finance_parts
 from app.routers import health, finance, finance_debug, sms_debug, voice, calendly, leads  # noqa: F401
 from app import tenantold
 from app.routers import auth
-
+from app.routers.invites import router as invite_router
 
 def gen_op_id(route: APIRoute):
     method = next(iter(route.methods)).lower() if route.methods else "get"
@@ -152,14 +152,17 @@ OPEN_PATHS = {
     "/backup/sqlite",
 }
 
+IS_DEV = (str(os.getenv("ENV") or getattr(config, "ENV", "dev")).lower() == "dev")
+
 OPEN_PREFIXES = (
-    "/public/",         # any public-facing routes you might have
-    "/book",            # public booking form
-    "/lead",            # public lead form
-    "/twilio/voice",    # Twilio webhook
+    "/public/",
+    "/book",
+    "/lead",
+    "/twilio/voice",
     "/webhooks/calendly",
     "/backup/",
-)
+) + (("/debug/",) if IS_DEV else tuple())
+
 
 
 @app.middleware("http")
@@ -231,8 +234,9 @@ def root():
 
 @app.get("/health")
 def health():
-    env = getattr(config, "ENV", getattr(getattr(config, "settings", object()), "ENV", "dev"))
+    env = str(getattr(config, "ENV", "") or getattr(getattr(config, "settings", object()), "ENV", "") or os.getenv("ENV") or "dev")
     return {"ok": True, "env": env}
+
 
 
 # ---------- Simple per-tenant rate limiting ----------
@@ -286,7 +290,7 @@ app.include_router(qbo_router.router)
 app.include_router(qbo_export_router.router)
 app.include_router(finance_export_router.router)
 app.include_router(auth.router)
-
+app.include_router(invite_router)
 
 # ---------- Startup ----------
 @app.on_event("startup")

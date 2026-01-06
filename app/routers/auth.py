@@ -10,6 +10,8 @@ from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 from sqlalchemy import text
 from jose import JWTError, jwt
+import os
+from app.routers.invites import ensure_invite_table
 
 from app.models import Tenant, ApiKey
 from app.db import get_session
@@ -86,14 +88,6 @@ def row_to_dict(row: Any) -> Dict[str, Any]:
 # ----------------- Pydantic models -----------------
 
 
-class SignupRequest(BaseModel):
-    business_name: str
-    email: EmailStr
-    phone: Optional[str] = None
-    password: str
-    review_link: Optional[str] = None  # stored on tenant as review_google_url
-
-
 class SignupResponse(BaseModel):
     tenant_slug: str
     api_key: str
@@ -124,6 +118,13 @@ class MeResponse(BaseModel):
     office_sms_to: Optional[str] = None
     office_email_to: Optional[str] = None
 
+class SignupRequest(BaseModel):
+    invite_code: str
+    business_name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    password: str
+    review_link: Optional[str] = None
 
 # ----------------- Auth dependency: get_current_user -----------------
 
@@ -152,9 +153,37 @@ def get_current_user(
 
 # ----------------- Signup -----------------
 
-
 @router.post("/signup", response_model=SignupResponse)
 def signup(payload: SignupRequest, session: Session = Depends(get_session)):
+
+    # --- invite required ---
+    ensure_invite_table(session)
+
+    code = (payload.invite_code or "").strip()
+    row = session.exec(text("""
+        SELECT code, expires_at, used_at
+        FROM invite_code
+        WHERE code = :code
+        LIMIT 1
+    """).bindparams(code=code)).first()
+
+    if not row:
+        raise HTTPException(status_code=403, detail="Invalid invite code")
+
+    data = row_to_dict(row)
+    if data.get("used_at"):
+        raise HTTPException(status_code=403, detail="Invite already used")
+
+    exp = data.get("expires_at")
+    if exp:
+        exp_dt = datetime.fromisoformat(str(exp).replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > exp_dt:
+            raise HTTPException(status_code=403, detail="Invite expired")
+
+    # --- continue normal signup below ---
+
+
+
     """
     Signup:
     - Uses Tenant as the account (no separate users table).
@@ -220,6 +249,20 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         is_active=True,
     )
     session.add(api_key_row)
+    result = session.exec(text("""
+        UPDATE invite_code
+        SET used_at = :used_at
+        WHERE code = :code AND used_at IS NULL
+    """).bindparams(
+        used_at=datetime.now(timezone.utc).isoformat(),
+        code=code
+    ))
+
+    try:
+        if result.rowcount == 0:
+            raise HTTPException(status_code=403, detail="Invite already used")
+    except Exception:
+        pass
 
     session.commit()
 
