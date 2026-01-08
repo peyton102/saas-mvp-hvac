@@ -25,11 +25,10 @@ const linkStyle = {
   fontSize: 14,
 };
 
-export default function LoginPage({ onLoggedIn }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+export default function LoginPage({ onLoggedIn, onInviteSignup }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [businessName, setBusinessName] = useState("");
+
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -40,13 +39,9 @@ export default function LoginPage({ onLoggedIn }) {
     setLoading(true);
 
     try {
-      const url =
-        mode === "login" ? `${API_BASE}/auth/login` : `${API_BASE}/auth/signup`;
+            const url = `${API_BASE}/auth/login`;
+      const body = { email, password };
 
-      const body =
-        mode === "login"
-          ? { email, password }
-          : { email, password, business_name: businessName || "New Business" };
 
       const res = await fetch(url, {
         method: "POST",
@@ -99,21 +94,6 @@ export default function LoginPage({ onLoggedIn }) {
           </div>
         </div>
 
-        {mode === "signup" && (
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#e5e7eb" }}>
-              Business name
-            </div>
-            <input
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              placeholder="Acme HVAC"
-              autoComplete="organization"
-              style={inputStyle}
-            />
-          </div>
-        )}
-
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ fontSize: 16, fontWeight: 900, color: "#e5e7eb" }}>
             Email
@@ -136,7 +116,7 @@ export default function LoginPage({ onLoggedIn }) {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             type="password"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
+                       autoComplete="current-password"
             style={inputStyle}
           />
         </div>
@@ -158,7 +138,7 @@ export default function LoginPage({ onLoggedIn }) {
             marginTop: 6,
           }}
         >
-          {loading ? "Please wait…" : mode === "login" ? "Log in" : "Sign up"}
+                    {loading ? "Please wait…" : "Log in"}
         </button>
 
         {msg ? (
@@ -167,23 +147,17 @@ export default function LoginPage({ onLoggedIn }) {
           </div>
         ) : null}
 
-        <div style={{ textAlign: "center", color: "rgba(229,231,235,0.85)" }}>
-          {mode === "login" ? (
-            <>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <button
-                type="button"
-                onClick={() => setMode("login")}
-                style={linkStyle}
-              >
-                Log in
-              </button>
-            </>
-          )}
+                <div style={{ textAlign: "center", color: "rgba(229,231,235,0.85)" }}>
+          Need an invite?{" "}
+          <button
+            type="button"
+        onClick={() => onInviteSignup?.()}
+            style={linkStyle}
+          >
+            Create account
+          </button>
         </div>
+
       </form>
     </div>
   );

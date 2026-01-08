@@ -5,6 +5,7 @@ import BookingBlank from "./components/BookingsCard.jsx";
 import LoginPage from "./LoginPage";
 import TenantSettingsCard from "./components/TenantSettingsCard.jsx";
 import { getToken, setToken, clearToken } from "./auth";
+import InviteSignupPage from "./InviteSignupPage.jsx";
 
 // ====== CONFIG ======
 const API_BASE =
@@ -706,6 +707,8 @@ function TopTab({ label, active, onClick }) {
 function App() {
   const [me, setMe] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showInviteSignup, setShowInviteSignup] = useState(false);
+
 
   async function fetchMe(token) {
     try {
@@ -761,8 +764,23 @@ function handleLoggedIn(loginData) {
 
   const token = getToken();
   if (!token || !me) {
-    return <LoginPage onLoggedIn={handleLoggedIn} />;
+  if (showInviteSignup) {
+    return (
+      <InviteSignupPage
+        onSignedUp={handleLoggedIn}   // reuse same token-saving flow
+        onBack={() => setShowInviteSignup(false)}
+      />
+    );
   }
+
+  return (
+    <LoginPage
+      onLoggedIn={handleLoggedIn}
+      onInviteSignup={() => setShowInviteSignup(true)}
+    />
+  );
+}
+
 
   // Logged-in: show the real portal
     // Logged-in: show the real portal
