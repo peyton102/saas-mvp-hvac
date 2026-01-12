@@ -9,7 +9,8 @@ from app.deps import get_tenant_id
 from app.models_finance import Revenue, Cost
 
 router = APIRouter(prefix="/finance", tags=["finance"])
-FIN_VER = "pnl-eod-3"  # version tag
+FIN_VER = "pnl-eod-4-laborfix"  # version tag
+
 
 @router.get("/_ver")
 def _ver():
@@ -89,7 +90,7 @@ def add_cost(payload: dict,
     c = Cost(
         tenant_id=tenant_id,
         amount=amt,
-        category=(payload.get("category") or "general"),
+        category=category,
         vendor=payload.get("vendor"),
         notes=payload.get("notes"),
         part_code=payload.get("part_code"),
@@ -143,12 +144,19 @@ def summary(
     # Compute totals (parts amount + labor = hours*rate)
     rev_total = sum((x.amount for x in rev), Decimal("0"))
 
-    labor_costs = [x for x in cost if (x.category or "").lower() == "labor"]
-    part_costs = [x for x in cost if (x.category or "").lower() != "labor"]
+    # Treat labor as any row that has hours+hourly_rate (category is not reliable)
+    labor_total = Decimal("0")
+    labor_hours = Decimal("0")
+    parts_total = Decimal("0")
 
-    parts_total = sum((x.amount for x in part_costs), Decimal("0"))
-    labor_total = sum(((x.hours or Decimal("0")) * (x.hourly_rate or Decimal("0"))) for x in labor_costs)
-    labor_hours = sum((x.hours or Decimal("0")) for x in labor_costs)
+    for x in cost:
+        h = _dec(x.hours)
+        r = _dec(x.hourly_rate)
+        if h > 0 and r > 0:
+            labor_hours += h
+            labor_total += (h * r)
+        else:
+            parts_total += _dec(x.amount)
 
     cost_total = parts_total + labor_total
 
