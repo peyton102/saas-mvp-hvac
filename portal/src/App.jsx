@@ -136,17 +136,18 @@ const headers = useMemo(() => {
     "Content-Type": "application/json",
   };
 
-  // ✅ Always send API key fallback for tenant auth
-  const apiKey = localStorage.getItem("API_KEY") || "devkey";
-  h["X-API-Key"] = apiKey;
+  const apiKey = localStorage.getItem("API_KEY");
+  if (apiKey) {
+    h["X-API-Key"] = apiKey;
+  }
 
-  // ✅ If user is logged in, ALSO send bearer
   if (token) {
     h["Authorization"] = `Bearer ${token}`;
   }
 
   return h;
 }, [token]);
+
 
 
 
