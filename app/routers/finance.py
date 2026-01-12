@@ -81,6 +81,10 @@ def add_cost(payload: dict,
     rate = _dec(payload.get("hourly_rate"))
     raw_amount = payload.get("amount")
     amt = _dec(raw_amount) if raw_amount not in (None, "",) else (hrs * rate if (hrs and rate) else Decimal("0"))
+    if hrs > 0 and rate > 0 and not payload.get("category"):
+        category = "labor"
+    else:
+        category = payload.get("category") or "general"
 
     c = Cost(
         tenant_id=tenant_id,
@@ -198,12 +202,20 @@ def pnl(start: str, end: str,
 
     rev_total = sum((x.amount for x in rev), Decimal("0"))
 
-    labor_costs = [x for x in cost if (x.category or "").lower() == "labor"]
-    part_costs = [x for x in cost if (x.category or "").lower() != "labor"]
+    # Treat labor as any row that has hours+hourly_rate (category is not reliable)
+    labor_total = Decimal("0")
+    labor_hours = Decimal("0")
+    parts_total = Decimal("0")
 
-    parts_total = sum((x.amount for x in part_costs), Decimal("0"))
-    labor_total = sum(((x.hours or Decimal("0")) * (x.hourly_rate or Decimal("0"))) for x in labor_costs)
-    labor_hours = sum((x.hours or Decimal("0")) for x in labor_costs)
+    for x in cost:
+        h = _dec(x.hours)
+        r = _dec(x.hourly_rate)
+        if h > 0 and r > 0:
+            labor_hours += h
+            labor_total += (h * r)
+            # optional: if you ALSO store amount for labor, ignore it to avoid double counting
+        else:
+            parts_total += _dec(x.amount)
 
     cost_total = parts_total + labor_total
 
