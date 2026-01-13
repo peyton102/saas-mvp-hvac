@@ -47,6 +47,7 @@ from app.routers import health, finance, finance_debug, sms_debug, voice, calend
 from app import tenantold
 from app.routers import auth
 from app.routers.invites import router as invite_router
+from app.routers import cron
 
 def gen_op_id(route: APIRoute):
     method = next(iter(route.methods)).lower() if route.methods else "get"
@@ -291,38 +292,10 @@ app.include_router(qbo_export_router.router)
 app.include_router(finance_export_router.router)
 app.include_router(auth.router)
 app.include_router(invite_router)
-
+app.include_router(cron.router)
 # ---------- Startup ----------
 @app.on_event("startup")
 def on_startup():
     setup_logging()
     create_db_and_tables()
     logging.info("✅ Startup complete")
-
-
-@app.on_event("startup")
-async def _reminder_cron():
-    async def _loop():
-        await asyncio.sleep(30)
-
-        api_base = (API_BASE or "").strip()
-        if not api_base:
-            print("[reminder-cron] DISABLED: API_BASE is not set (must be your Render URL).")
-            return
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            while True:
-                try:
-                    resp = await client.post(
-                        f"{API_BASE.rstrip('/')}/bookings/reminders/run",
-                        json={},
-                        headers={"X-API-Key": "devkey"},
-                    )
-                    print("[reminder-cron] /bookings/reminders/run", resp.status_code, resp.text[:200])
-                except Exception as e:
-                    print("[reminder-cron] error:", e)
-
-                await asyncio.sleep(300)
-
-    asyncio.create_task(_loop())
-

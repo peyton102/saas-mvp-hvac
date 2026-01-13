@@ -1,0 +1,1036 @@
+2025-12-15 19:46:47,825 | INFO | app | ✅ Logging initialized
+2025-12-15 19:46:47,871 | INFO | root | ✅ Startup complete
+2025-12-15 19:46:47,872 | INFO | uvicorn.error | Application startup complete.
+2025-12-15 21:14:20,113 | INFO | uvicorn.error | Shutting down
+2025-12-15 21:14:20,290 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-15 21:14:20,355 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-15 21:14:20,360 | INFO | uvicorn.error | Finished server process [52604]
+2025-12-15 21:14:25,268 | INFO | app | ✅ Logging initialized
+2025-12-15 21:14:25,282 | INFO | root | ✅ Startup complete
+2025-12-15 21:14:25,283 | INFO | uvicorn.error | Application startup complete.
+2025-12-15 21:25:01,735 | INFO | uvicorn.error | Shutting down
+2025-12-15 21:25:01,860 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-15 21:25:01,870 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-15 21:25:01,872 | INFO | uvicorn.error | Finished server process [51820]
+2025-12-15 21:25:06,655 | INFO | app | ✅ Logging initialized
+2025-12-15 21:25:06,660 | INFO | root | ✅ Startup complete
+2025-12-15 21:25:06,661 | INFO | uvicorn.error | Application startup complete.
+2025-12-15 21:27:21,847 | INFO | uvicorn.error | Shutting down
+2025-12-15 21:27:21,956 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-15 21:27:21,959 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-15 21:27:21,959 | INFO | uvicorn.error | Finished server process [47044]
+2025-12-15 21:27:26,286 | INFO | app | ✅ Logging initialized
+2025-12-15 21:27:26,290 | INFO | root | ✅ Startup complete
+2025-12-15 21:27:26,291 | INFO | uvicorn.error | Application startup complete.
+2025-12-15 22:32:30,686 | INFO | uvicorn.access | 127.0.0.1:52179 - "GET /tenant/leads HTTP/1.1" 401
+2025-12-15 22:32:31,087 | INFO | uvicorn.access | 127.0.0.1:52179 - "DELETE /tenant/leads/ HTTP/1.1" 401
+2025-12-15 22:37:26,376 | INFO | uvicorn.access | 127.0.0.1:62493 - "GET /leads?limit=5 HTTP/1.1" 200
+2025-12-15 22:37:36,419 | INFO | uvicorn.access | 127.0.0.1:62524 - "GET /leads?limit=5 HTTP/1.1" 200
+2025-12-15 22:37:36,523 | INFO | uvicorn.access | 127.0.0.1:62524 - "DELETE /leads/ HTTP/1.1" 307
+2025-12-15 22:37:36,527 | INFO | uvicorn.access | 127.0.0.1:62524 - "DELETE /leads HTTP/1.1" 405
+2025-12-15 22:40:16,839 | INFO | uvicorn.access | 127.0.0.1:49161 - "GET /openapi.json HTTP/1.1" 200
+2025-12-15 22:41:11,591 | INFO | uvicorn.access | 127.0.0.1:62739 - "GET /leads?limit=5 HTTP/1.1" 200
+2025-12-15 22:43:26,772 | INFO | uvicorn.access | 127.0.0.1:65276 - "GET /openapi.json HTTP/1.1" 200
+2025-12-16 16:04:50,755 | INFO | app | ✅ Logging initialized
+2025-12-16 16:04:51,221 | INFO | root | ✅ Startup complete
+2025-12-16 16:04:51,222 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 16:05:25,096 | INFO | uvicorn.access | 127.0.0.1:62177 - "GET /backup/debug-env HTTP/1.1" 200
+2025-12-16 16:05:41,454 | INFO | uvicorn.access | 127.0.0.1:52026 - "GET /leads?limit=5 HTTP/1.1" 200
+2025-12-16 16:05:54,085 | INFO | uvicorn.access | 127.0.0.1:59917 - "GET /_int/whoami-raw HTTP/1.1" 200
+2025-12-16 16:05:54,138 | INFO | uvicorn.access | 127.0.0.1:59917 - "GET /debug/whoami-verbose HTTP/1.1" 200
+2025-12-16 16:15:02,025 | INFO | uvicorn.error | Shutting down
+2025-12-16 16:15:02,131 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 16:15:02,132 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 16:15:02,135 | INFO | uvicorn.error | Finished server process [7284]
+2025-12-16 16:15:10,851 | INFO | app | ✅ Logging initialized
+2025-12-16 16:15:10,860 | INFO | root | ✅ Startup complete
+2025-12-16 16:15:10,861 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 16:17:02,085 | INFO | uvicorn.error | Shutting down
+2025-12-16 16:17:02,195 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 16:17:02,195 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 16:17:02,196 | INFO | uvicorn.error | Finished server process [6756]
+2025-12-16 16:17:05,878 | INFO | app | ✅ Logging initialized
+2025-12-16 16:17:05,902 | INFO | root | ✅ Startup complete
+2025-12-16 16:17:05,904 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 16:17:53,893 | INFO | uvicorn.access | 127.0.0.1:50689 - "GET /leads HTTP/1.1" 200
+2025-12-16 16:17:59,175 | INFO | uvicorn.access | 127.0.0.1:50693 - "GET /leads HTTP/1.1" 200
+2025-12-16 16:21:25,845 | INFO | uvicorn.access | 127.0.0.1:54915 - "GET /leads?limit=50 HTTP/1.1" 200
+2025-12-16 16:38:39,102 | INFO | uvicorn.access | 127.0.0.1:52298 - "GET /upcoming HTTP/1.1" 401
+2025-12-16 17:04:09,774 | INFO | uvicorn.access | 127.0.0.1:64738 - "GET /openapi.json HTTP/1.1" 200
+2025-12-16 17:11:02,649 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:11:02,763 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:11:02,772 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:11:02,775 | INFO | uvicorn.error | Finished server process [7500]
+2025-12-16 17:11:07,133 | INFO | app | ✅ Logging initialized
+2025-12-16 17:11:07,147 | INFO | root | ✅ Startup complete
+2025-12-16 17:11:07,148 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:11:49,883 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:11:49,992 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:11:49,994 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:11:49,994 | INFO | uvicorn.error | Finished server process [2660]
+2025-12-16 17:11:52,828 | INFO | app | ✅ Logging initialized
+2025-12-16 17:11:52,832 | INFO | root | ✅ Startup complete
+2025-12-16 17:11:52,833 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:14:35,887 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:14:35,996 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:14:35,997 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:14:35,998 | INFO | uvicorn.error | Finished server process [18048]
+2025-12-16 17:14:38,911 | INFO | app | ✅ Logging initialized
+2025-12-16 17:14:38,914 | INFO | root | ✅ Startup complete
+2025-12-16 17:14:38,915 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:17:55,189 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:17:55,301 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:17:55,302 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:17:55,302 | INFO | uvicorn.error | Finished server process [17336]
+2025-12-16 17:17:57,813 | INFO | app | ✅ Logging initialized
+2025-12-16 17:17:57,817 | INFO | root | ✅ Startup complete
+2025-12-16 17:17:57,818 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:18:26,003 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:18:26,113 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:18:26,113 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:18:26,114 | INFO | uvicorn.error | Finished server process [15456]
+2025-12-16 17:18:28,675 | INFO | app | ✅ Logging initialized
+2025-12-16 17:18:28,678 | INFO | root | ✅ Startup complete
+2025-12-16 17:18:28,679 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:18:45,356 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:18:45,467 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:18:45,468 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:18:45,468 | INFO | uvicorn.error | Finished server process [12356]
+2025-12-16 17:18:47,937 | INFO | app | ✅ Logging initialized
+2025-12-16 17:18:47,941 | INFO | root | ✅ Startup complete
+2025-12-16 17:18:47,941 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:19:21,172 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:19:21,282 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:19:21,283 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:19:21,284 | INFO | uvicorn.error | Finished server process [6756]
+2025-12-16 17:19:23,675 | INFO | app | ✅ Logging initialized
+2025-12-16 17:19:23,679 | INFO | root | ✅ Startup complete
+2025-12-16 17:19:23,680 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:22:37,902 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:22:38,012 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:22:38,012 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:22:38,013 | INFO | uvicorn.error | Finished server process [9536]
+2025-12-16 17:22:40,473 | INFO | app | ✅ Logging initialized
+2025-12-16 17:22:40,477 | INFO | root | ✅ Startup complete
+2025-12-16 17:22:40,477 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:23:49,475 | INFO | uvicorn.error | Shutting down
+2025-12-16 17:23:49,586 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 17:23:49,586 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 17:23:49,587 | INFO | uvicorn.error | Finished server process [18380]
+2025-12-16 17:23:52,276 | INFO | app | ✅ Logging initialized
+2025-12-16 17:23:52,281 | INFO | root | ✅ Startup complete
+2025-12-16 17:23:52,282 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 17:41:59,865 | INFO | uvicorn.access | 127.0.0.1:57274 - "GET /leads HTTP/1.1" 200
+2025-12-16 18:04:44,733 | INFO | uvicorn.error | Shutting down
+2025-12-16 18:04:44,871 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 18:04:44,912 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 18:04:44,918 | INFO | uvicorn.error | Finished server process [10888]
+2025-12-16 18:04:49,252 | INFO | app | ✅ Logging initialized
+2025-12-16 18:04:49,273 | INFO | root | ✅ Startup complete
+2025-12-16 18:04:49,274 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 18:07:59,864 | INFO | uvicorn.error | Shutting down
+2025-12-16 18:07:59,975 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 18:07:59,996 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 18:08:00,002 | INFO | uvicorn.error | Finished server process [10344]
+2025-12-16 18:08:02,627 | INFO | app | ✅ Logging initialized
+2025-12-16 18:08:02,631 | INFO | root | ✅ Startup complete
+2025-12-16 18:08:02,631 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 18:08:21,496 | INFO | uvicorn.error | Shutting down
+2025-12-16 18:08:21,604 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 18:08:21,605 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 18:08:21,605 | INFO | uvicorn.error | Finished server process [3860]
+2025-12-16 18:08:24,275 | INFO | app | ✅ Logging initialized
+2025-12-16 18:08:24,279 | INFO | root | ✅ Startup complete
+2025-12-16 18:08:24,279 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 18:09:48,785 | INFO | uvicorn.error | Shutting down
+2025-12-16 18:09:48,897 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 18:09:48,898 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 18:09:48,898 | INFO | uvicorn.error | Finished server process [7448]
+2025-12-16 18:09:51,342 | INFO | app | ✅ Logging initialized
+2025-12-16 18:09:51,347 | INFO | root | ✅ Startup complete
+2025-12-16 18:09:51,347 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 18:10:02,956 | INFO | uvicorn.access | 127.0.0.1:58191 - "GET /leads?limit=5 HTTP/1.1" 200
+2025-12-16 18:13:12,966 | INFO | uvicorn.error | Shutting down
+2025-12-16 18:13:13,075 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 18:13:13,076 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 18:13:13,076 | INFO | uvicorn.error | Finished server process [14320]
+2025-12-16 18:13:15,689 | INFO | app | ✅ Logging initialized
+2025-12-16 18:13:15,694 | INFO | root | ✅ Startup complete
+2025-12-16 18:13:15,695 | INFO | uvicorn.error | Application startup complete.
+2025-12-16 18:23:13,563 | INFO | uvicorn.error | Shutting down
+2025-12-16 18:23:13,673 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-16 18:23:13,674 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-16 18:23:13,674 | INFO | uvicorn.error | Finished server process [4604]
+2025-12-16 18:23:16,263 | INFO | app | ✅ Logging initialized
+2025-12-16 18:23:16,267 | INFO | root | ✅ Startup complete
+2025-12-16 18:23:16,267 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 19:34:15,101 | INFO | uvicorn.access | 127.0.0.1:49847 - "POST /lead?tenant_key=default HTTP/1.1" 422
+2025-12-17 19:34:15,198 | INFO | uvicorn.access | 127.0.0.1:49847 - "POST /lead?tenant_key=default HTTP/1.1" 422
+2025-12-17 19:34:15,205 | INFO | uvicorn.access | 127.0.0.1:49847 - "POST /lead?tenant_key=default HTTP/1.1" 422
+2025-12-17 19:36:14,099 | INFO | uvicorn.access | 127.0.0.1:50182 - "POST /lead?tenant_key=default HTTP/1.1" 200
+2025-12-17 19:36:14,249 | ERROR | root | 🔥 UNHANDLED SERVER ERROR
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_utils.py", line 79, in collapse_excgroups
+  |     yield
+  |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 183, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 772, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |                                    ~~~~~~~~~~~~~~~~~~^^
+    |   File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\main.py", line 186, in tenant_middleware
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    |     raise app_exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    |     await route.handle(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 78, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 75, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 302, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ...<3 lines>...
+    |     )
+    |     ^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\routers\leads.py", line 93, in create_lead
+    |     if (now - recent.created_at) < timedelta(minutes=minutes):
+    |         ~~~~^~~~~~~~~~~~~~~~~~~
+    | TypeError: can't subtract offset-naive and offset-aware datetimes
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\main.py", line 186, in tenant_middleware
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    raise app_exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 75, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 302, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\routers\leads.py", line 93, in create_lead
+    if (now - recent.created_at) < timedelta(minutes=minutes):
+        ~~~~^~~~~~~~~~~~~~~~~~~
+TypeError: can't subtract offset-naive and offset-aware datetimes
+2025-12-17 19:36:14,290 | INFO | uvicorn.access | 127.0.0.1:50182 - "POST /lead?tenant_key=default HTTP/1.1" 500
+2025-12-17 19:36:14,290 | ERROR | uvicorn.error | Exception in ASGI application
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_utils.py", line 79, in collapse_excgroups
+  |     yield
+  |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 183, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 772, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    |     result = await app(  # type: ignore[func-returns-value]
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         self.scope, self.receive, self.send
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     )
+    |     ^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    |     return await self.app(scope, receive, send)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    |     raise exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |                                    ~~~~~~~~~~~~~~~~~~^^
+    |   File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\main.py", line 186, in tenant_middleware
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    |     raise app_exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    |     await route.handle(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 78, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 75, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 302, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ...<3 lines>...
+    |     )
+    |     ^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\routers\leads.py", line 93, in create_lead
+    |     if (now - recent.created_at) < timedelta(minutes=minutes):
+    |         ~~~~^~~~~~~~~~~~~~~~~~~
+    | TypeError: can't subtract offset-naive and offset-aware datetimes
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\main.py", line 186, in tenant_middleware
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    raise app_exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 75, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 302, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\app\routers\leads.py", line 93, in create_lead
+    if (now - recent.created_at) < timedelta(minutes=minutes):
+        ~~~~^~~~~~~~~~~~~~~~~~~
+TypeError: can't subtract offset-naive and offset-aware datetimes
+2025-12-17 19:41:31,241 | INFO | uvicorn.error | Shutting down
+2025-12-17 19:41:31,357 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 19:41:31,368 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 19:41:31,375 | INFO | uvicorn.error | Finished server process [15920]
+2025-12-17 19:41:35,793 | INFO | app | ✅ Logging initialized
+2025-12-17 19:41:35,799 | INFO | root | ✅ Startup complete
+2025-12-17 19:41:35,799 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 19:43:47,451 | INFO | uvicorn.access | 127.0.0.1:59548 - "POST /lead?tenant_key=default HTTP/1.1" 200
+2025-12-17 19:43:47,517 | INFO | uvicorn.access | 127.0.0.1:59548 - "POST /lead?tenant_key=default HTTP/1.1" 200
+2025-12-17 19:43:47,527 | INFO | uvicorn.access | 127.0.0.1:59548 - "POST /lead?tenant_key=default HTTP/1.1" 200
+2025-12-17 19:47:30,080 | INFO | uvicorn.access | 127.0.0.1:51020 - "GET /debug/leads?source=db&limit=10 HTTP/1.1" 200
+2025-12-17 20:00:29,371 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:00:29,479 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:00:29,480 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:00:29,481 | INFO | uvicorn.error | Finished server process [13656]
+2025-12-17 20:00:33,945 | INFO | app | ✅ Logging initialized
+2025-12-17 20:00:33,949 | INFO | root | ✅ Startup complete
+2025-12-17 20:00:33,950 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 20:37:15,271 | INFO | app.services.email | Booking email → recipients=['maddenp0706@gmail.com', 'tz@test.com'] subject=[default] Booked: repair for TZ Test Public @ Dec 18, 12:00 PM
+2025-12-17 20:37:15,808 | ERROR | app.services.email | SendGrid HTTP 401: {"errors":[{"message":"Maximum credits exceeded","field":null,"help":null}]}
+2025-12-17 20:37:16,384 | ERROR | app.services.email | SMTP send failed: Connection unexpectedly closed
+2025-12-17 20:37:16,427 | INFO | uvicorn.access | 127.0.0.1:59114 - "POST /public/bookings?tenant=default HTTP/1.1" 200
+2025-12-17 20:37:20,824 | INFO | uvicorn.access | 127.0.0.1:59114 - "GET /upcoming HTTP/1.1" 200
+2025-12-17 20:37:27,765 | INFO | app.services.email | Booking email → recipients=['maddenp0706@gmail.com', 'tz2@test.com'] subject=[default] Booked: appointment for TZ Test Portal @ Dec 18, 12:00 PM
+2025-12-17 20:37:27,982 | ERROR | app.services.email | SendGrid HTTP 401: {"errors":[{"message":"Maximum credits exceeded","field":null,"help":null}]}
+2025-12-17 20:37:28,392 | ERROR | app.services.email | SMTP send failed: Connection unexpectedly closed
+2025-12-17 20:37:28,395 | INFO | uvicorn.access | 127.0.0.1:54433 - "POST /book HTTP/1.1" 200
+2025-12-17 20:37:28,416 | INFO | uvicorn.access | 127.0.0.1:54433 - "GET /upcoming HTTP/1.1" 200
+2025-12-17 20:50:03,547 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:50:03,660 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:50:03,667 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:50:03,672 | INFO | uvicorn.error | Finished server process [23788]
+2025-12-17 20:50:09,404 | INFO | app | ✅ Logging initialized
+2025-12-17 20:50:09,409 | INFO | root | ✅ Startup complete
+2025-12-17 20:50:09,409 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 20:51:04,749 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:51:04,860 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:51:04,860 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:51:04,860 | INFO | uvicorn.error | Finished server process [21220]
+2025-12-17 20:51:07,130 | INFO | app | ✅ Logging initialized
+2025-12-17 20:51:07,134 | INFO | root | ✅ Startup complete
+2025-12-17 20:51:07,134 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 20:53:38,793 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:53:38,902 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:53:38,903 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:53:38,904 | INFO | uvicorn.error | Finished server process [8176]
+2025-12-17 20:53:41,489 | INFO | app | ✅ Logging initialized
+2025-12-17 20:53:41,493 | INFO | root | ✅ Startup complete
+2025-12-17 20:53:41,493 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 20:57:47,672 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:57:47,783 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:57:47,784 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:57:47,784 | INFO | uvicorn.error | Finished server process [5776]
+2025-12-17 20:57:50,304 | INFO | app | ✅ Logging initialized
+2025-12-17 20:57:50,308 | INFO | root | ✅ Startup complete
+2025-12-17 20:57:50,308 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 20:58:24,541 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:58:24,651 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:58:24,652 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:58:24,653 | INFO | uvicorn.error | Finished server process [21744]
+2025-12-17 20:58:27,180 | INFO | app | ✅ Logging initialized
+2025-12-17 20:58:27,185 | INFO | root | ✅ Startup complete
+2025-12-17 20:58:27,186 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 20:58:43,248 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:58:43,360 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:58:43,360 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:58:43,360 | INFO | uvicorn.error | Finished server process [22728]
+2025-12-17 20:58:45,748 | INFO | app | ✅ Logging initialized
+2025-12-17 20:58:45,751 | INFO | root | ✅ Startup complete
+2025-12-17 20:58:45,752 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 20:59:40,927 | INFO | uvicorn.error | Shutting down
+2025-12-17 20:59:41,037 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 20:59:41,038 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 20:59:41,039 | INFO | uvicorn.error | Finished server process [19288]
+2025-12-17 20:59:43,580 | INFO | app | ✅ Logging initialized
+2025-12-17 20:59:43,584 | INFO | root | ✅ Startup complete
+2025-12-17 20:59:43,584 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 21:51:02,846 | INFO | app.services.email | Booking email → recipients=['maddenp0706@gmail.com', 'tz2@test.com'] subject=[default] Booked: appointment for TZ Test Portal @ Dec 18, 12:00 PM
+2025-12-17 21:51:03,176 | ERROR | app.services.email | SendGrid HTTP 401: {"errors":[{"message":"Maximum credits exceeded","field":null,"help":null}]}
+2025-12-17 21:51:03,687 | ERROR | app.services.email | SMTP send failed: Connection unexpectedly closed
+2025-12-17 21:51:03,694 | INFO | uvicorn.access | 127.0.0.1:61732 - "POST /book HTTP/1.1" 200
+2025-12-17 21:51:03,791 | INFO | uvicorn.access | 127.0.0.1:61732 - "GET /upcoming HTTP/1.1" 200
+2025-12-17 21:57:13,438 | INFO | uvicorn.error | Shutting down
+2025-12-17 21:57:13,562 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-17 21:57:13,586 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-17 21:57:13,591 | INFO | uvicorn.error | Finished server process [7852]
+2025-12-17 21:57:20,723 | INFO | app | ✅ Logging initialized
+2025-12-17 21:57:20,747 | INFO | root | ✅ Startup complete
+2025-12-17 21:57:20,748 | INFO | uvicorn.error | Application startup complete.
+2025-12-17 21:57:31,060 | INFO | uvicorn.access | 127.0.0.1:61705 - "GET /upcoming HTTP/1.1" 200
+2025-12-17 22:04:17,418 | INFO | uvicorn.access | 127.0.0.1:51554 - "GET /upcoming HTTP/1.1" 200
+2025-12-17 22:04:25,197 | INFO | uvicorn.access | 127.0.0.1:51583 - "DELETE /tenant/bookings/30 HTTP/1.1" 200
+2025-12-17 22:11:01,219 | INFO | uvicorn.access | 127.0.0.1:54346 - "GET /upcoming HTTP/1.1" 200
+2025-12-18 16:15:27,202 | INFO | app.services.email | Booking email → recipients=['maddenp0706@gmail.com', 'review@test.com'] subject=[default] Booked: appointment for Review Test @ Dec 18, 11:25 AM
+2025-12-18 16:15:28,048 | ERROR | app.services.email | SendGrid HTTP 401: {"errors":[{"message":"Maximum credits exceeded","field":null,"help":null}]}
+2025-12-18 16:15:28,614 | ERROR | app.services.email | SMTP send failed: Connection unexpectedly closed
+2025-12-18 16:15:28,627 | INFO | uvicorn.access | 127.0.0.1:53442 - "POST /book HTTP/1.1" 200
+2025-12-18 16:15:35,004 | INFO | uvicorn.access | 127.0.0.1:53467 - "GET /upcoming HTTP/1.1" 200
+2025-12-18 16:15:43,169 | INFO | uvicorn.access | 127.0.0.1:53483 - "POST /bookings//complete HTTP/1.1" 404
+2025-12-18 16:40:39,456 | INFO | uvicorn.access | 127.0.0.1:65252 - "GET /health HTTP/1.1" 200
+2025-12-18 16:40:46,218 | INFO | uvicorn.access | 127.0.0.1:65259 - "GET /openapi.json HTTP/1.1" 200
+2025-12-18 16:44:42,142 | INFO | app.services.email | Booking email → recipients=['maddenp0706@gmail.com', 'review@test.com'] subject=[default] Booked: appointment for Review Test @ Dec 18, 11:54 AM
+2025-12-18 16:44:42,509 | ERROR | app.services.email | SendGrid HTTP 401: {"errors":[{"message":"Maximum credits exceeded","field":null,"help":null}]}
+2025-12-18 16:44:43,151 | ERROR | app.services.email | SMTP send failed: Connection unexpectedly closed
+2025-12-18 16:44:43,152 | INFO | uvicorn.access | 127.0.0.1:54596 - "POST /book HTTP/1.1" 200
+2025-12-18 16:44:54,869 | INFO | uvicorn.access | 127.0.0.1:54611 - "GET /tenant/bookings/ HTTP/1.1" 404
+2025-12-18 16:46:28,537 | INFO | uvicorn.access | 127.0.0.1:59476 - "GET /debug/bookings HTTP/1.1" 200
+2025-12-18 16:46:43,395 | INFO | uvicorn.access | 127.0.0.1:55515 - "GET /public/bookings HTTP/1.1" 422
+2025-12-18 16:54:17,057 | INFO | uvicorn.access | 127.0.0.1:51902 - "POST /bookings/33/complete HTTP/1.1" 200
+2025-12-18 16:54:22,372 | INFO | uvicorn.access | 127.0.0.1:51907 - "GET /debug/reviews HTTP/1.1" 200
+2025-12-18 16:54:26,880 | INFO | uvicorn.access | 127.0.0.1:51907 - "GET /debug/reminders-preview HTTP/1.1" 200
+2025-12-18 16:54:31,301 | INFO | uvicorn.access | 127.0.0.1:51907 - "POST /bookings/reminders/run HTTP/1.1" 200
+2025-12-18 17:23:09,659 | INFO | uvicorn.error | Shutting down
+2025-12-18 17:23:09,783 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-18 17:23:09,798 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-18 17:23:09,801 | INFO | uvicorn.error | Finished server process [616]
+2025-12-18 17:23:15,561 | INFO | app | ✅ Logging initialized
+2025-12-18 17:23:15,574 | INFO | root | ✅ Startup complete
+2025-12-18 17:23:15,575 | INFO | uvicorn.error | Application startup complete.
+2025-12-18 17:25:02,322 | INFO | uvicorn.error | Shutting down
+2025-12-18 17:25:02,430 | INFO | uvicorn.error | Waiting for application shutdown.
+2025-12-18 17:25:02,432 | INFO | uvicorn.error | Application shutdown complete.
+2025-12-18 17:25:02,434 | INFO | uvicorn.error | Finished server process [24348]
+2025-12-18 17:25:05,042 | INFO | app | ✅ Logging initialized
+2025-12-18 17:25:05,047 | INFO | root | ✅ Startup complete
+2025-12-18 17:25:05,047 | INFO | uvicorn.error | Application startup complete.
+2025-12-18 17:27:47,943 | INFO | uvicorn.access | 127.0.0.1:49675 - "GET /tenant/settings/reviews/url HTTP/1.1" 405
+2025-12-18 17:30:12,798 | INFO | uvicorn.access | 127.0.0.1:54745 - "GET /openapi.json HTTP/1.1" 200
+2025-12-18 17:30:25,378 | INFO | uvicorn.access | 127.0.0.1:63593 - "POST /tenant/settings/reviews/url HTTP/1.1" 422
+2025-12-18 17:38:17,338 | INFO | uvicorn.access | 127.0.0.1:57485 - "POST /tenant/settings/reviews/url HTTP/1.1" 404
+2025-12-29 17:11:13,990 | INFO | app | ✅ Logging initialized
+2025-12-29 17:11:14,008 | INFO | root | ✅ Startup complete
+2025-12-29 17:11:14,009 | INFO | uvicorn.error | Application startup complete.
+2026-01-02 17:57:11,920 | INFO | uvicorn.error | Shutting down
+2026-01-02 17:57:12,089 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-02 17:57:12,131 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-02 17:57:12,135 | INFO | uvicorn.error | Finished server process [64336]
+2026-01-02 17:57:17,368 | INFO | app | ✅ Logging initialized
+2026-01-02 17:57:17,383 | INFO | root | ✅ Startup complete
+2026-01-02 17:57:17,383 | INFO | uvicorn.error | Application startup complete.
+2026-01-02 18:07:13,763 | INFO | uvicorn.error | Shutting down
+2026-01-02 18:07:13,872 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-02 18:07:13,876 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-02 18:07:13,876 | INFO | uvicorn.error | Finished server process [71080]
+2026-01-02 18:07:17,414 | INFO | app | ✅ Logging initialized
+2026-01-02 18:07:17,418 | INFO | root | ✅ Startup complete
+2026-01-02 18:07:17,418 | INFO | uvicorn.error | Application startup complete.
+2026-01-02 18:15:07,693 | INFO | uvicorn.access | 127.0.0.1:62058 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-02 18:15:18,911 | INFO | uvicorn.access | 127.0.0.1:62067 - "GET /health HTTP/1.1" 200
+2026-01-02 18:18:13,026 | INFO | uvicorn.access | 127.0.0.1:58814 - "GET /health HTTP/1.1" 200
+2026-01-02 18:18:13,244 | INFO | uvicorn.access | 127.0.0.1:58814 - "GET /health HTTP/1.1" 200
+2026-01-02 18:18:13,363 | INFO | uvicorn.access | 127.0.0.1:58814 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-02 18:18:13,458 | INFO | uvicorn.access | 127.0.0.1:58814 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-02 18:18:44,737 | INFO | app | ✅ Logging initialized
+2026-01-02 18:18:44,741 | INFO | root | ✅ Startup complete
+2026-01-02 18:18:44,741 | INFO | uvicorn.error | Application startup complete.
+2026-01-02 18:18:48,486 | INFO | uvicorn.error | Shutting down
+2026-01-02 18:18:48,598 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-02 18:18:48,600 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-02 18:18:48,601 | INFO | uvicorn.error | Finished server process [78200]
+2026-01-02 18:19:05,172 | INFO | uvicorn.access | 127.0.0.1:53210 - "GET /health HTTP/1.1" 200
+2026-01-02 18:35:45,214 | INFO | uvicorn.error | Shutting down
+2026-01-02 18:35:45,345 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-02 18:35:45,390 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-02 18:35:45,396 | INFO | uvicorn.error | Finished server process [64772]
+2026-01-02 18:35:49,612 | INFO | app | ✅ Logging initialized
+2026-01-02 18:35:49,616 | INFO | root | ✅ Startup complete
+2026-01-02 18:35:49,617 | INFO | uvicorn.error | Application startup complete.
+2026-01-02 18:38:14,030 | INFO | uvicorn.access | 127.0.0.1:54779 - "POST /finance/revenue HTTP/1.1" 200
+2026-01-02 18:38:14,096 | INFO | uvicorn.access | 127.0.0.1:54779 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-02 18:38:25,183 | INFO | uvicorn.access | 127.0.0.1:54788 - "POST /finance/revenue HTTP/1.1" 200
+2026-01-02 18:38:25,234 | INFO | uvicorn.access | 127.0.0.1:54788 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 18:30:01,735 | INFO | uvicorn.access | 127.0.0.1:58795 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 18:37:13,062 | INFO | uvicorn.access | 127.0.0.1:49926 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 18:42:13,601 | INFO | uvicorn.access | 127.0.0.1:55019 - "GET /finance/_ver HTTP/1.1" 401
+2026-01-05 18:42:13,758 | INFO | uvicorn.access | 127.0.0.1:55019 - "GET /debug/finance/recent?limit=10 HTTP/1.1" 200
+2026-01-05 18:42:34,983 | INFO | uvicorn.access | 127.0.0.1:61783 - "DELETE /debug/finance/revenue/4 HTTP/1.1" 200
+2026-01-05 18:42:35,032 | INFO | uvicorn.access | 127.0.0.1:61783 - "DELETE /debug/finance/revenue/3 HTTP/1.1" 200
+2026-01-05 18:42:35,079 | INFO | uvicorn.access | 127.0.0.1:61783 - "GET /debug/finance/recent?limit=10 HTTP/1.1" 200
+2026-01-05 18:43:11,600 | INFO | uvicorn.access | 127.0.0.1:62351 - "GET /debug/finance/recent?limit=10 HTTP/1.1" 200
+2026-01-05 18:43:35,564 | INFO | uvicorn.access | 127.0.0.1:56965 - "GET /debug/finance/recent?limit=10 HTTP/1.1" 200
+2026-01-05 18:43:41,462 | INFO | uvicorn.access | 127.0.0.1:56970 - "GET /debug/finance/recent?limit=10 HTTP/1.1" 200
+2026-01-05 19:06:36,885 | INFO | uvicorn.error | Shutting down
+2026-01-05 19:06:37,055 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 19:06:37,129 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 19:06:37,137 | INFO | uvicorn.error | Finished server process [62648]
+2026-01-05 19:06:43,363 | INFO | app | ✅ Logging initialized
+2026-01-05 19:06:43,421 | INFO | root | ✅ Startup complete
+2026-01-05 19:06:43,421 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 19:10:01,479 | INFO | uvicorn.error | Shutting down
+2026-01-05 19:10:01,597 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 19:10:01,600 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 19:10:01,602 | INFO | uvicorn.error | Finished server process [88588]
+2026-01-05 19:10:07,950 | INFO | app | ✅ Logging initialized
+2026-01-05 19:10:07,955 | INFO | root | ✅ Startup complete
+2026-01-05 19:10:07,955 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 19:11:30,473 | INFO | uvicorn.access | 127.0.0.1:54958 - "GET /health HTTP/1.1" 200
+2026-01-05 19:20:02,363 | INFO | uvicorn.error | Shutting down
+2026-01-05 19:20:02,491 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 19:20:02,501 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 19:20:02,506 | INFO | uvicorn.error | Finished server process [84496]
+2026-01-05 19:20:06,888 | INFO | app | ✅ Logging initialized
+2026-01-05 19:20:06,892 | INFO | root | ✅ Startup complete
+2026-01-05 19:20:06,892 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 19:21:00,616 | INFO | uvicorn.access | 127.0.0.1:53783 - "GET /health HTTP/1.1" 200
+2026-01-05 19:30:26,594 | INFO | uvicorn.access | 127.0.0.1:56174 - "GET /_int/whoami-raw HTTP/1.1" 200
+2026-01-05 19:38:47,255 | INFO | uvicorn.error | Shutting down
+2026-01-05 19:38:47,382 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 19:38:47,396 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 19:38:47,402 | INFO | uvicorn.error | Finished server process [84112]
+2026-01-05 19:38:54,353 | INFO | app | ✅ Logging initialized
+2026-01-05 19:38:54,382 | INFO | root | ✅ Startup complete
+2026-01-05 19:38:54,383 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 19:40:19,678 | INFO | uvicorn.access | 127.0.0.1:58728 - "GET /debug/finance/recent HTTP/1.1" 200
+2026-01-05 19:40:33,151 | INFO | uvicorn.access | 127.0.0.1:58737 - "GET /debug/finance/recent HTTP/1.1" 200
+2026-01-05 19:42:59,016 | INFO | uvicorn.access | 127.0.0.1:58139 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 19:56:34,282 | INFO | uvicorn.error | Shutting down
+2026-01-05 19:56:34,404 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 19:56:34,414 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 19:56:34,415 | INFO | uvicorn.error | Finished server process [92212]
+2026-01-05 19:56:37,545 | INFO | app | ✅ Logging initialized
+2026-01-05 19:56:37,551 | INFO | root | ✅ Startup complete
+2026-01-05 19:56:37,551 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 20:09:15,520 | INFO | uvicorn.error | Shutting down
+2026-01-05 20:09:15,635 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 20:09:15,646 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 20:09:15,649 | INFO | uvicorn.error | Finished server process [75624]
+2026-01-05 20:09:19,426 | INFO | app | ✅ Logging initialized
+2026-01-05 20:09:19,429 | INFO | root | ✅ Startup complete
+2026-01-05 20:09:19,430 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 20:09:42,102 | INFO | uvicorn.error | Shutting down
+2026-01-05 20:09:42,204 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 20:09:42,204 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 20:09:42,204 | INFO | uvicorn.error | Finished server process [79448]
+2026-01-05 20:09:44,716 | INFO | app | ✅ Logging initialized
+2026-01-05 20:09:44,722 | INFO | root | ✅ Startup complete
+2026-01-05 20:09:44,723 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 20:27:46,200 | INFO | app | ✅ Logging initialized
+2026-01-05 20:27:46,367 | INFO | root | ✅ Startup complete
+2026-01-05 20:27:46,367 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 20:28:23,645 | INFO | uvicorn.access | 127.0.0.1:64079 - "GET /health HTTP/1.1" 200
+2026-01-05 20:35:22,846 | INFO | uvicorn.error | Shutting down
+2026-01-05 20:35:22,965 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 20:35:22,977 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 20:35:22,983 | INFO | uvicorn.error | Finished server process [70732]
+2026-01-05 20:51:02,090 | INFO | app | ✅ Logging initialized
+2026-01-05 20:51:02,262 | INFO | root | ✅ Startup complete
+2026-01-05 20:51:02,263 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 20:51:17,199 | INFO | app | ✅ Logging initialized
+2026-01-05 20:51:17,207 | INFO | root | ✅ Startup complete
+2026-01-05 20:51:17,208 | INFO | uvicorn.error | Application startup complete.
+2026-01-05 20:51:24,104 | INFO | uvicorn.error | Shutting down
+2026-01-05 20:51:24,215 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-05 20:51:24,216 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-05 20:51:24,216 | INFO | uvicorn.error | Finished server process [60204]
+2026-01-05 20:51:34,829 | INFO | uvicorn.access | 127.0.0.1:52255 - "POST /finance/revenue HTTP/1.1" 200
+2026-01-05 20:51:34,915 | INFO | uvicorn.access | 127.0.0.1:52255 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 20:58:43,869 | INFO | uvicorn.access | 127.0.0.1:51154 - "POST /finance/cost HTTP/1.1" 200
+2026-01-05 20:58:43,896 | INFO | uvicorn.access | 127.0.0.1:51154 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 21:30:55,820 | INFO | uvicorn.access | 127.0.0.1:58172 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 21:31:58,104 | INFO | uvicorn.access | 127.0.0.1:58831 - "GET /debug/finance/recent?limit=5 HTTP/1.1" 200
+2026-01-05 21:48:24,896 | INFO | uvicorn.access | 127.0.0.1:60164 - "GET /debug/finance/recent?limit=20&_=Tick24 HTTP/1.1" 200
+2026-01-05 21:57:15,837 | INFO | uvicorn.access | 127.0.0.1:59479 - "GET /debug/finance/recent?limit=20&_=Tick15 HTTP/1.1" 200
+2026-01-06 20:07:26,853 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:07:27,054 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:07:27,137 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:07:27,358 | INFO | uvicorn.error | Finished server process [99496]
+2026-01-06 20:07:35,135 | INFO | app | ✅ Logging initialized
+2026-01-06 20:07:35,151 | INFO | root | ✅ Startup complete
+2026-01-06 20:07:35,152 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:08:20,218 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:08:20,328 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:08:20,329 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:08:20,330 | INFO | uvicorn.error | Finished server process [83784]
+2026-01-06 20:08:23,145 | INFO | app | ✅ Logging initialized
+2026-01-06 20:08:23,149 | INFO | root | ✅ Startup complete
+2026-01-06 20:08:23,149 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:13:03,985 | INFO | uvicorn.access | 127.0.0.1:59258 - "POST /auth/signup HTTP/1.1" 200
+2026-01-06 20:13:27,360 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:13:27,470 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:13:27,471 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:13:27,476 | INFO | uvicorn.error | Finished server process [88740]
+2026-01-06 20:13:42,907 | INFO | app | ✅ Logging initialized
+2026-01-06 20:13:42,913 | INFO | root | ✅ Startup complete
+2026-01-06 20:13:42,913 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:13:45,819 | INFO | uvicorn.access | 127.0.0.1:51113 - "POST /auth/signup HTTP/1.1" 400
+2026-01-06 20:14:33,345 | INFO | uvicorn.access | 127.0.0.1:60842 - "POST /auth/signup HTTP/1.1" 200
+2026-01-06 20:16:17,664 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:16:17,774 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:16:17,774 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:16:17,775 | INFO | uvicorn.error | Finished server process [83784]
+2026-01-06 20:16:20,677 | INFO | app | ✅ Logging initialized
+2026-01-06 20:16:20,681 | INFO | root | ✅ Startup complete
+2026-01-06 20:16:20,682 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:16:41,974 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:16:42,084 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:16:42,085 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:16:42,085 | INFO | uvicorn.error | Finished server process [30372]
+2026-01-06 20:16:44,866 | INFO | app | ✅ Logging initialized
+2026-01-06 20:16:44,880 | INFO | root | ✅ Startup complete
+2026-01-06 20:16:44,881 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:16:54,066 | INFO | uvicorn.access | 127.0.0.1:60730 - "POST /auth/signup HTTP/1.1" 403
+2026-01-06 20:22:29,584 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:22:29,690 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:22:29,691 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:22:29,691 | INFO | uvicorn.error | Finished server process [81080]
+2026-01-06 20:22:34,520 | INFO | app | ✅ Logging initialized
+2026-01-06 20:22:34,528 | INFO | root | ✅ Startup complete
+2026-01-06 20:22:34,529 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:22:45,680 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:22:45,790 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:22:45,791 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:22:45,791 | INFO | uvicorn.error | Finished server process [92804]
+2026-01-06 20:22:48,456 | INFO | app | ✅ Logging initialized
+2026-01-06 20:22:48,460 | INFO | root | ✅ Startup complete
+2026-01-06 20:22:48,460 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:23:03,040 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:23:03,149 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:23:03,152 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:23:03,153 | INFO | uvicorn.error | Finished server process [81532]
+2026-01-06 20:23:06,438 | INFO | app | ✅ Logging initialized
+2026-01-06 20:23:06,444 | INFO | root | ✅ Startup complete
+2026-01-06 20:23:06,445 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:23:18,656 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:23:18,766 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:23:18,767 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:23:18,767 | INFO | uvicorn.error | Finished server process [82916]
+2026-01-06 20:23:21,840 | INFO | app | ✅ Logging initialized
+2026-01-06 20:23:21,849 | INFO | root | ✅ Startup complete
+2026-01-06 20:23:21,849 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:23:24,592 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:23:24,702 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:23:24,703 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:23:24,703 | INFO | uvicorn.error | Finished server process [88072]
+2026-01-06 20:23:27,808 | INFO | app | ✅ Logging initialized
+2026-01-06 20:23:27,812 | INFO | root | ✅ Startup complete
+2026-01-06 20:23:27,812 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:23:31,331 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:23:31,440 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:23:31,441 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:23:31,442 | INFO | uvicorn.error | Finished server process [82744]
+2026-01-06 20:23:33,917 | INFO | app | ✅ Logging initialized
+2026-01-06 20:23:33,920 | INFO | root | ✅ Startup complete
+2026-01-06 20:23:33,921 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:25:02,132 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:25:02,241 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:25:02,246 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:25:02,251 | INFO | uvicorn.error | Finished server process [55704]
+2026-01-06 20:25:07,598 | INFO | app | ✅ Logging initialized
+2026-01-06 20:25:07,620 | INFO | root | ✅ Startup complete
+2026-01-06 20:25:07,621 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:25:21,491 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:25:21,602 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:25:21,602 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:25:21,603 | INFO | uvicorn.error | Finished server process [81300]
+2026-01-06 20:25:26,503 | INFO | app | ✅ Logging initialized
+2026-01-06 20:25:26,508 | INFO | root | ✅ Startup complete
+2026-01-06 20:25:26,509 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:26:04,316 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:26:04,425 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:26:04,847 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:26:04,847 | INFO | uvicorn.error | Finished server process [74856]
+2026-01-06 20:26:07,256 | INFO | app | ✅ Logging initialized
+2026-01-06 20:26:07,260 | INFO | root | ✅ Startup complete
+2026-01-06 20:26:07,261 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:26:14,468 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:26:14,577 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:26:14,577 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:26:14,577 | INFO | uvicorn.error | Finished server process [95908]
+2026-01-06 20:26:17,188 | INFO | app | ✅ Logging initialized
+2026-01-06 20:26:17,192 | INFO | root | ✅ Startup complete
+2026-01-06 20:26:17,193 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:26:27,863 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:26:27,972 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:26:27,973 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:26:27,973 | INFO | uvicorn.error | Finished server process [81744]
+2026-01-06 20:26:30,360 | INFO | app | ✅ Logging initialized
+2026-01-06 20:26:30,364 | INFO | root | ✅ Startup complete
+2026-01-06 20:26:30,364 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:27:48,894 | INFO | app | ✅ Logging initialized
+2026-01-06 20:27:48,899 | INFO | root | ✅ Startup complete
+2026-01-06 20:27:48,899 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:27:48,916 | ERROR | uvicorn.error | Traceback (most recent call last):
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 123, in run
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 701, in lifespan
+    await receive()
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\lifespan\on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\queues.py", line 186, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+2026-01-06 20:28:55,927 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:28:56,037 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:28:56,039 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:28:56,040 | INFO | uvicorn.error | Finished server process [80608]
+2026-01-06 20:28:59,830 | INFO | app | ✅ Logging initialized
+2026-01-06 20:28:59,837 | INFO | root | ✅ Startup complete
+2026-01-06 20:28:59,839 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:29:04,598 | INFO | uvicorn.access | 127.0.0.1:51541 - "POST /auth/invite/create?days_valid=7&note=client1 HTTP/1.1" 401
+2026-01-06 20:29:35,113 | INFO | uvicorn.access | 127.0.0.1:58519 - "POST /auth/invite/create?days_valid=7&note=client1 HTTP/1.1" 401
+2026-01-06 20:30:03,389 | INFO | uvicorn.access | 127.0.0.1:50428 - "POST /auth/invite/create?days_valid=7&note=client1 HTTP/1.1" 500
+2026-01-06 20:31:21,644 | INFO | uvicorn.access | 127.0.0.1:58810 - "POST /auth/invite/create?days_valid=7&note=client1 HTTP/1.1" 500
+2026-01-06 20:31:26,964 | INFO | uvicorn.access | 127.0.0.1:58815 - "POST /auth/invite/create?days_valid=7&note=client1 HTTP/1.1" 500
+2026-01-06 20:32:07,381 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:32:07,492 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:32:07,493 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:32:07,493 | INFO | uvicorn.error | Finished server process [92592]
+2026-01-06 20:32:13,623 | INFO | app | ✅ Logging initialized
+2026-01-06 20:32:13,626 | INFO | root | ✅ Startup complete
+2026-01-06 20:32:13,627 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:32:25,529 | INFO | uvicorn.access | 127.0.0.1:57482 - "POST /auth/invite/create?days_valid=7&note=client1 HTTP/1.1" 403
+2026-01-06 20:33:53,030 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:33:53,139 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:33:53,140 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:33:53,140 | INFO | uvicorn.error | Finished server process [98240]
+2026-01-06 20:33:55,966 | INFO | app | ✅ Logging initialized
+2026-01-06 20:33:55,970 | INFO | root | ✅ Startup complete
+2026-01-06 20:33:55,970 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:34:14,746 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:34:14,857 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:34:14,858 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:34:14,859 | INFO | uvicorn.error | Finished server process [94640]
+2026-01-06 20:34:19,422 | INFO | app | ✅ Logging initialized
+2026-01-06 20:34:19,426 | INFO | root | ✅ Startup complete
+2026-01-06 20:34:19,426 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:34:19,456 | ERROR | uvicorn.error | Traceback (most recent call last):
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+    ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 2034, in _run_once
+    handle._run()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\server.py", line 70, in serve
+    with self.capture_signals():
+         ~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\contextlib.py", line 148, in __exit__
+    next(self.gen)
+    ~~~~^^^^^^^^^^
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\server.py", line 331, in capture_signals
+    signal.raise_signal(captured_signal)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 157, in _on_sigint
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\starlette\routing.py", line 701, in lifespan
+    await receive()
+  File "C:\Users\Owner\PycharmProjects\SaaSMVP\.venv\Lib\site-packages\uvicorn\lifespan\on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Owner\AppData\Local\Programs\Python\Python313\Lib\asyncio\queues.py", line 186, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+2026-01-06 20:34:25,616 | INFO | app | ✅ Logging initialized
+2026-01-06 20:34:25,619 | INFO | root | ✅ Startup complete
+2026-01-06 20:34:25,620 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:34:29,849 | INFO | uvicorn.access | 127.0.0.1:57783 - "POST /auth/invite/create?days_valid=7&note=client1 HTTP/1.1" 200
+2026-01-06 20:35:47,945 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:35:48,055 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:35:48,056 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:35:48,056 | INFO | uvicorn.error | Finished server process [78744]
+2026-01-06 20:35:50,945 | INFO | app | ✅ Logging initialized
+2026-01-06 20:35:50,948 | INFO | root | ✅ Startup complete
+2026-01-06 20:35:50,949 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:35:59,149 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:35:59,258 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:35:59,258 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:35:59,259 | INFO | uvicorn.error | Finished server process [95760]
+2026-01-06 20:36:01,482 | INFO | app | ✅ Logging initialized
+2026-01-06 20:36:01,485 | INFO | root | ✅ Startup complete
+2026-01-06 20:36:01,486 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:36:25,512 | INFO | uvicorn.error | Shutting down
+2026-01-06 20:36:25,623 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-06 20:36:25,623 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-06 20:36:25,624 | INFO | uvicorn.error | Finished server process [96844]
+2026-01-06 20:40:05,344 | INFO | app | ✅ Logging initialized
+2026-01-06 20:40:05,372 | INFO | root | ✅ Startup complete
+2026-01-06 20:40:05,373 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:46:52,757 | INFO | uvicorn.access | 127.0.0.1:54814 - "POST /auth/signup HTTP/1.1" 403
+2026-01-06 20:48:12,463 | INFO | app | ✅ Logging initialized
+2026-01-06 20:48:12,468 | INFO | root | ✅ Startup complete
+2026-01-06 20:48:12,469 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:48:51,800 | INFO | uvicorn.access | 127.0.0.1:64683 - "POST /auth/invite/create?days_valid=7&note=clientB HTTP/1.1" 200
+2026-01-06 20:49:04,810 | INFO | uvicorn.access | 127.0.0.1:59066 - "POST /auth/signup HTTP/1.1" 403
+2026-01-06 20:54:15,230 | INFO | app | ✅ Logging initialized
+2026-01-06 20:54:15,233 | INFO | root | ✅ Startup complete
+2026-01-06 20:54:15,234 | INFO | uvicorn.error | Application startup complete.
+2026-01-06 20:55:05,276 | INFO | uvicorn.access | 127.0.0.1:52365 - "GET /health HTTP/1.1" 200
+2026-01-06 20:55:38,032 | INFO | uvicorn.access | 127.0.0.1:58865 - "POST /auth/invite/create?days_valid=7&note=clientB HTTP/1.1" 200
+2026-01-06 20:55:45,328 | INFO | uvicorn.access | 127.0.0.1:58893 - "POST /auth/signup HTTP/1.1" 200
+2026-01-06 20:55:56,658 | INFO | uvicorn.access | 127.0.0.1:58329 - "POST /auth/signup HTTP/1.1" 403
+2026-01-09 18:34:29,983 | INFO | uvicorn.error | Shutting down
+2026-01-09 18:34:30,190 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-09 18:34:30,334 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-09 18:34:30,343 | INFO | uvicorn.error | Finished server process [68312]
+2026-01-09 18:34:39,450 | INFO | app | ✅ Logging initialized
+2026-01-09 18:34:39,474 | INFO | root | ✅ Startup complete
+2026-01-09 18:34:39,475 | INFO | uvicorn.error | Application startup complete.
+2026-01-09 18:55:15,355 | INFO | uvicorn.error | Shutting down
+2026-01-09 18:55:15,572 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-09 18:55:15,718 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-09 18:55:15,725 | INFO | uvicorn.error | Finished server process [106360]
+2026-01-09 18:55:20,034 | INFO | app | ✅ Logging initialized
+2026-01-09 18:55:20,039 | INFO | root | ✅ Startup complete
+2026-01-09 18:55:20,040 | INFO | uvicorn.error | Application startup complete.
+2026-01-09 18:55:49,571 | INFO | uvicorn.error | Shutting down
+2026-01-09 18:55:49,680 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-09 18:55:49,681 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-09 18:55:49,681 | INFO | uvicorn.error | Finished server process [118668]
+2026-01-09 18:55:59,853 | INFO | app | ✅ Logging initialized
+2026-01-09 18:55:59,857 | INFO | root | ✅ Startup complete
+2026-01-09 18:55:59,857 | INFO | uvicorn.error | Application startup complete.
+2026-01-12 21:35:21,387 | INFO | uvicorn.error | Shutting down
+2026-01-12 21:35:21,657 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-12 21:35:21,777 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-12 21:35:21,830 | INFO | uvicorn.error | Finished server process [117668]
+2026-01-12 21:35:30,816 | INFO | app | ✅ Logging initialized
+2026-01-12 21:35:30,832 | INFO | root | ✅ Startup complete
+2026-01-12 21:35:30,832 | INFO | uvicorn.error | Application startup complete.
+2026-01-12 21:36:55,837 | INFO | uvicorn.error | Shutting down
+2026-01-12 21:36:55,944 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-12 21:36:55,946 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-12 21:36:55,946 | INFO | uvicorn.error | Finished server process [130292]
+2026-01-12 21:36:58,716 | INFO | app | ✅ Logging initialized
+2026-01-12 21:36:58,719 | INFO | root | ✅ Startup complete
+2026-01-12 21:36:58,720 | INFO | uvicorn.error | Application startup complete.
+2026-01-12 21:38:20,359 | INFO | uvicorn.error | Shutting down
+2026-01-12 21:38:20,466 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-12 21:38:20,468 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-12 21:38:20,468 | INFO | uvicorn.error | Finished server process [117988]
+2026-01-12 21:38:23,247 | INFO | app | ✅ Logging initialized
+2026-01-12 21:38:23,252 | INFO | root | ✅ Startup complete
+2026-01-12 21:38:23,253 | INFO | uvicorn.error | Application startup complete.
