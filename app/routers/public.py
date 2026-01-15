@@ -251,25 +251,26 @@ def public_create_booking(
         BUSINESS_TZ = ZoneInfo("America/New_York")
 
         # Normalize to UTC for BookingModel
+        # Normalize to UTC-naive to match /book and avoid SQLite tz-loss bugs
         if starts.tzinfo is None:
-            # starts came from public HTML → treat as business local time
             starts_utc = starts.replace(tzinfo=BUSINESS_TZ).astimezone(timezone.utc)
         else:
-            # already tz-aware → just normalize
             starts_utc = starts.astimezone(timezone.utc)
 
-        end_utc = starts_utc + timedelta(hours=1)
+        start_utc_naive = starts_utc.replace(tzinfo=None)
+        end_utc_naive = (starts_utc + timedelta(hours=1)).replace(tzinfo=None)
 
         booking_row = BookingModel(
             tenant_id=tenant_val,
             name=payload.name or "",
             phone=(payload.phone or "") or "",
             email=(payload.email or None),
-            start=starts_utc,
-            end=end_utc,
+            start=start_utc_naive,
+            end=end_utc_naive,
             notes=(payload.notes or None),
-            source="public",  # 👈 mark that this came from the public page
+            source="public",
         )
+
         session.add(booking_row)
         session.commit()
     except Exception as e:

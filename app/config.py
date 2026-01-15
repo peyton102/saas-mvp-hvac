@@ -9,7 +9,6 @@ ENV_FILE = ROOT / ".env"
 # Load the project .env and FORCE override anything already set
 load_dotenv(dotenv_path=ENV_FILE, override=True)
 
-
 def _as_bool(name: str, default: bool = False) -> bool:
     val = os.getenv(name)
     if val is None:
@@ -66,6 +65,7 @@ class Settings:
     # Debug / auth
     # Prefer DEBUG_BEARER; fallback to legacy DEBUG_BEARER_TOKEN
     DEBUG_BEARER: str = (os.getenv("DEBUG_BEARER") or os.getenv("DEBUG_BEARER_TOKEN") or "").strip()
+    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "").strip()
 
     # Multi-tenant (token -> tenant_id)
     import json
@@ -97,6 +97,7 @@ class Settings:
     FROM_EMAIL: str = os.getenv("FROM_EMAIL", "no-reply@example.com")
     EMAIL_OFFICE: str = os.getenv("EMAIL_OFFICE", os.getenv("FROM_EMAIL", "no-reply@example.com"))
 
+
     # Calendly
     CALENDLY_WEBHOOK_SECRET: str = os.getenv("CALENDLY_WEBHOOK_SECRET", "").strip()
 
@@ -112,6 +113,7 @@ ANTI_SPAM_MINUTES = settings.ANTI_SPAM_MINUTES
 DB_FIRST = settings.DB_FIRST
 TWILIO_VALIDATE_SIGNATURES = settings.TWILIO_VALIDATE_SIGNATURES
 TWILIO_AUTH_TOKEN = settings.TWILIO_AUTH_TOKEN
+ADMIN_KEY = settings.ADMIN_KEY
 
 # Email aliases
 EMAIL_DRY_RUN  = settings.EMAIL_DRY_RUN
@@ -121,6 +123,15 @@ SMTP_USERNAME  = settings.SMTP_USERNAME
 SMTP_PASSWORD  = settings.SMTP_PASSWORD
 FROM_EMAIL     = settings.FROM_EMAIL
 EMAIL_OFFICE   = settings.EMAIL_OFFICE
+# Twilio aliases (so app.services.sms can read them reliably)
+TWILIO_ACCOUNT_SID = settings.TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN = settings.TWILIO_AUTH_TOKEN
+TWILIO_MESSAGING_SERVICE_SID = settings.TWILIO_MESSAGING_SERVICE_SID
+TWILIO_FROM = settings.TWILIO_FROM
+SMS_DRY_RUN = settings.SMS_DRY_RUN
+
+# Admin key for /cron/*
+ADMIN_KEY = os.getenv("ADMIN_KEY", "").strip()
 
 # app/config.py (add near existing settings)
 import os

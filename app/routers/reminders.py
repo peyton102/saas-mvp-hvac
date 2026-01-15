@@ -1,7 +1,6 @@
 # app/routers/reminders.py
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple
-
 from zoneinfo import ZoneInfo
 from sqlmodel import Session, select
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
@@ -78,16 +77,24 @@ def _parse_reminder_list() -> List[Tuple[str, timedelta]]:
             except Exception:
                 continue
     return out or [("24h", timedelta(hours=24)), ("2h", timedelta(hours=2))]
+def _utc_naive(dt: datetime) -> datetime:
+    if not dt:
+        return dt
+    if dt.tzinfo is None:
+        return dt.replace(microsecond=0)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
 
 
 def _already_sent(session: Session, tenant_id: str, phone: str, template: str, booking_start: datetime) -> bool:
+    bs = _utc_naive(booking_start)
     q = select(ReminderModel).where(
         (ReminderModel.tenant_id == tenant_id) &
         (ReminderModel.phone == phone) &
         (ReminderModel.template == template) &
-        (ReminderModel.booking_start == booking_start.replace(microsecond=0))
+        (ReminderModel.booking_start == bs)
     ).limit(1)
     return session.exec(q).first() is not None
+
 
 
 def _make_msg(name: str, start_dt_utc: datetime) -> str:
@@ -147,8 +154,7 @@ def _iter_due(session: Session, tenant_id: str, window_minutes: int) -> List[Dic
             start_dt_utc = r.start.astimezone(timezone.utc)
         else:
             # stored as naive local time → attach config.TZ, then convert to UTC
-            local = r.start.replace(tzinfo=local_tz)
-            start_dt_utc = local.astimezone(timezone.utc)
+            start_dt_utc = r.start.replace(tzinfo=timezone.utc)
 
         name = r.name or ""
         phone_raw = (r.phone or "").strip()
@@ -286,8 +292,8 @@ def _send_for_tenant(session: Session, tenant_id: str, look_back_minutes: int) -
             tenant_id=tenant_id,
             phone=phone,
             name=name,
-            booking_start=start_dt.replace(microsecond=0),
-            booking_end=(end_dt.replace(microsecond=0) if end_dt else None),
+            booking_start=_utc_naive(start_dt),
+            booking_end=_utc_naive(end_dt) if end_dt else None,
             template=template,
             message=body + ("" if not email_ok else " [email sent]"),
             source=it.get("source", "cron"),

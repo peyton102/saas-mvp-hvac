@@ -162,7 +162,8 @@ OPEN_PREFIXES = (
     "/twilio/voice",
     "/webhooks/calendly",
     "/backup/",
-) + (("/debug/",) if IS_DEV else tuple())
+    "/cron/",
+      ) + (("/debug/",) if IS_DEV else tuple())
 
 
 
@@ -184,6 +185,12 @@ async def tenant_middleware(request: Request, call_next):
         return await call_next(request)
 
     path = request.url.path
+    if path.startswith("/cron/"):
+        return await call_next(request)
+
+    # HARD bypass for internal cron routes (cron has its own admin-key auth)
+    if path.startswith("/cron/"):
+        return await call_next(request)
 
     # Whitelist auth + health + public endpoints
     if path in OPEN_PATHS or any(path.startswith(prefix) for prefix in OPEN_PREFIXES):
@@ -269,7 +276,11 @@ app.include_router(leads_router, dependencies=[Depends(get_tenant_id)])
 app.include_router(reviews_router, dependencies=[Depends(get_tenant_id)])
 app.include_router(bookings_router, dependencies=[Depends(get_tenant_id)])
 app.include_router(calendly_router, dependencies=[Depends(get_tenant_id)])
-app.include_router(reminders_router, dependencies=[Depends(get_tenant_id)])
+
+
+
+
+
 
 app.include_router(voice_router)
 app.include_router(finance_debug.router)
@@ -293,9 +304,11 @@ app.include_router(finance_export_router.router)
 app.include_router(auth.router)
 app.include_router(invite_router)
 app.include_router(cron.router)
+app.include_router(reminders_router)
 # ---------- Startup ----------
 @app.on_event("startup")
 def on_startup():
     setup_logging()
     create_db_and_tables()
+    logging.warning
     logging.info("✅ Startup complete")
