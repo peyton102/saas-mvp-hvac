@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
 
 # Load the project .env and FORCE override anything already set
-load_dotenv(dotenv_path=ENV_FILE, override=True)
+load_dotenv(dotenv_path=ENV_FILE, override=(os.getenv("ENV","dev") == "dev"))
 
 def _as_bool(name: str, default: bool = False) -> bool:
     val = os.getenv(name)
@@ -65,7 +65,7 @@ class Settings:
     # Debug / auth
     # Prefer DEBUG_BEARER; fallback to legacy DEBUG_BEARER_TOKEN
     DEBUG_BEARER: str = (os.getenv("DEBUG_BEARER") or os.getenv("DEBUG_BEARER_TOKEN") or "").strip()
-    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "").strip()
+    ADMIN_KEY: str = (os.getenv("ADMIN_KEY") or "").strip()
 
     # Multi-tenant (token -> tenant_id)
     import json
@@ -103,8 +103,7 @@ class Settings:
 
 # instantiate settings FIRST
 settings = Settings()
-# Admin
-ADMIN_KEY: str = (os.getenv("ADMIN_KEY") or "").strip()
+
 
 # expose selected fields as module-level aliases (for older imports)
 LEADS_CSV = settings.LEADS_CSV
@@ -131,63 +130,3 @@ TWILIO_AUTH_TOKEN = settings.TWILIO_AUTH_TOKEN
 TWILIO_MESSAGING_SERVICE_SID = settings.TWILIO_MESSAGING_SERVICE_SID
 TWILIO_FROM = settings.TWILIO_FROM
 SMS_DRY_RUN = settings.SMS_DRY_RUN
-
-# Admin key for /cron/*
-ADMIN_KEY = os.getenv("ADMIN_KEY", "").strip()
-
-# app/config.py (add near existing settings)
-import os
-from dataclasses import dataclass
-
-@dataclass
-class _Settings:
-    TZ: str
-    FROM_NAME: str
-    FROM_EMAIL: str | None  # global fallback (optional)
-    EMAIL_OFFICE: str | None  # global fallback (optional)
-    TENANT_OFFICE_MAP_RAW: str | None  # "default:ops@example.com;acme:ops@acme.com"
-
-    # ... include your existing fields too
-
-    def tenant_office_map(self) -> dict[str, str]:
-        """
-        Parse TENANT_OFFICE_MAP like:
-        default:ops@example.com;acme:ops@acme.com
-        """
-        raw = (self.TENANT_OFFICE_MAP_RAW or "").strip()
-        if not raw:
-            return {}
-        out: dict[str, str] = {}
-        for pair in raw.split(";"):
-            pair = pair.strip()
-            if not pair:
-                continue
-            if ":" not in pair:
-                raise ValueError(f"Bad TENANT_OFFICE_MAP entry (missing colon): {pair}")
-            t, email = pair.split(":", 1)
-            t, email = t.strip(), email.strip()
-            if not t or not email:
-                raise ValueError(f"Bad TENANT_OFFICE_MAP entry (empty): {pair}")
-            out[t] = email
-        return out
-
-    def office_email_for(self, tenant: str) -> str:
-        m = self.tenant_office_map()
-        if tenant in m:
-            return m[tenant]
-        if self.EMAIL_OFFICE:
-            return self.EMAIL_OFFICE  # explicit global fallback if you configured it
-        # No fallback => hard fail to avoid silent loss
-        raise ValueError(f"No office email configured for tenant '{tenant}'. "
-                         f"Set TENANT_OFFICE_MAP or EMAIL_OFFICE.")
-
-# build settings from env (example; adapt to your loader)
-# NOTE: CHANGED NAME so it doesn't overwrok so is this fill the booking link thing problem and timezone if so send me the full updated config ite the main `settings` above.
-OFFICE_SETTINGS = _Settings(   # <-- was `settings = _Settings(`; renamed
-    TZ=os.getenv("TZ", "America/New_York"),
-    FROM_NAME=os.getenv("FROM_NAME", "Torevez"),
-    FROM_EMAIL=os.getenv("FROM_EMAIL", "noreply@example.com"),
-    EMAIL_OFFICE=os.getenv("EMAIL_OFFICE") or None,
-    TENANT_OFFICE_MAP_RAW=os.getenv("TENANT_OFFICE_MAP") or None,
-)
-# app/config.py
