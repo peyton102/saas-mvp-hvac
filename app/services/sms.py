@@ -177,6 +177,17 @@ def _normalize_phone(phone: Optional[str]) -> Optional[str]:
 
     return None  # let caller treat as invalid
 
+def _with_compliance(body: str) -> str:
+    b = (body or "").strip()
+    low = b.lower()
+
+    # Append only if missing
+    if "stop" not in low:
+        b += "\nReply STOP to opt out."
+    # Optional: add HELP too (recommended)
+    if "help" not in low:
+        b += "\nReply HELP for help."
+    return b
 
 def send_sms(to: str, body: str) -> bool:
     """
@@ -206,7 +217,7 @@ def send_sms(to: str, body: str) -> bool:
 
         if not svc and not from_num:
             raise RuntimeError("Set TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM")
-
+        body = _with_compliance(body)
         kwargs = {"to": phone, "body": body}
         if svc:
             kwargs["messaging_service_sid"] = svc
@@ -332,45 +343,6 @@ def booking_reminder_sms(tenant_id: str, payload: dict, kind: str) -> bool:
         body = f"Reminder from {from_name} about your appointment."
 
     return send_sms(phone, body)
-
-
-def _booking_link_for_slug(tenant_slug: str) -> str | None:
-    """
-    Build a tenant-specific booking link from config.BOOKING_LINK.
-
-    If BOOKING_LINK is like:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?
-
-    Then return:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
-    """
-    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
-    if not base:
-        return None
-
-    # drop any existing ?query
-    base = base.split("?", 1)[0]
-    return f"{base}?tenant={tenant_slug}"
-
-
-def _booking_link_for_slug(tenant_slug: str) -> str | None:
-    """
-    Build a tenant-specific booking link from config.BOOKING_LINK.
-
-    If BOOKING_LINK is like:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?
-
-    Then return:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
-    """
-    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
-    if not base:
-        return None
-
-    # drop any existing ?query
-    base = base.split("?", 1)[0]
-    return f"{base}?tenant={tenant_slug}"
-
 
 def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
     """
