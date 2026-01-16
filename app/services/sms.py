@@ -344,6 +344,45 @@ def booking_reminder_sms(tenant_id: str, payload: dict, kind: str) -> bool:
 
     return send_sms(phone, body)
 
+
+def _booking_link_for_slug(tenant_slug: str) -> str | None:
+    """
+    Build a tenant-specific booking link from config.BOOKING_LINK.
+
+    If BOOKING_LINK is like:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?
+
+    Then return:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
+    """
+    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
+    if not base:
+        return None
+
+    # drop any existing ?query
+    base = base.split("?", 1)[0]
+    return f"{base}?tenant={tenant_slug}"
+
+
+def _booking_link_for_slug(tenant_slug: str) -> str | None:
+    """
+    Build a tenant-specific booking link from config.BOOKING_LINK.
+
+    If BOOKING_LINK is like:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?
+
+    Then return:
+      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
+    """
+    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
+    if not base:
+        return None
+
+    # drop any existing ?query
+    base = base.split("?", 1)[0]
+    return f"{base}?tenant={tenant_slug}"
+
+
 def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
     """
     Auto-reply to a new lead.
