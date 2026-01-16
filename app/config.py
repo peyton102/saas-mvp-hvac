@@ -7,7 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
 
 # Load the project .env and FORCE override anything already set
-load_dotenv(dotenv_path=ENV_FILE, override=(os.getenv("ENV","dev") == "dev"))
+if ENV_FILE.exists():
+    load_dotenv(dotenv_path=ENV_FILE)
+
 
 def _as_bool(name: str, default: bool = False) -> bool:
     val = os.getenv(name)
