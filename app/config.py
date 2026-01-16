@@ -103,6 +103,8 @@ class Settings:
 
 # instantiate settings FIRST
 settings = Settings()
+# Admin
+ADMIN_KEY: str = (os.getenv("ADMIN_KEY") or "").strip()
 
 # expose selected fields as module-level aliases (for older imports)
 LEADS_CSV = settings.LEADS_CSV
