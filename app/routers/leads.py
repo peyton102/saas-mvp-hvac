@@ -104,9 +104,6 @@ async def create_lead(
                 print(f"[THROTTLE] Skipping SMS to {e164} (within {minutes}m) tenant={tenant_id}")
                 sms_ok = False
 
-            print(f"[THROTTLE] Skipping SMS to {e164} (within {minutes}m) tenant={tenant_id}")
-            sms_ok = False
-
     # Build payload once for both SMS helpers
     sms_payload = {
         "name": payload.name,
