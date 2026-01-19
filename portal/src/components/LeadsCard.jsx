@@ -470,14 +470,15 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
               <th></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody style={{ textAlign: "center" }}>
             {visibleRows.map((r) => (
               // NEW: clicking a row opens details drawer
               <tr key={r.id} style={{ cursor:"pointer" }} onClick={()=>setSelected(r)}>
                 <td>{formatDate(r.created_at)}</td>
                 <td>{r.name || ""}</td>
                 <td>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+
                     <a href={`tel:${r.phone || ""}`} style={{ textDecoration:"none" }}>
                       {r.phone || ""}
                     </a>
@@ -489,7 +490,8 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                   </div>
                 </td>
                 <td>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+
                     {r.email ? <a href={`mailto:${r.email}`} onClick={(e)=>e.stopPropagation()}>{r.email}</a> : ""}
                     {!!r.email && (
                       <button onClick={(e)=>{ e.stopPropagation(); copy(r.email); }} title="Copy email" style={{ padding:"2px 6px" }}>
@@ -510,7 +512,8 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                   {r.message || ""}
                 </td>
                 <td onClick={(e)=>e.stopPropagation()}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+
                     <StatusBadge value={r.status} />
                     <select
                       value={r.status || "new"}
