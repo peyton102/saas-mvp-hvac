@@ -413,7 +413,7 @@ def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
     body = (
         f"Thanks {first} — we got your message for {business_name}. "
         f"{msg_line}\n"
-        f"We’ll text/call you shortly. Reply with a good time today.\n"
+        f"We’ll call you shortly.\n"
         f"If this is urgent, reply URGENT."
     )
 
