@@ -395,39 +395,34 @@ def _booking_link_for_slug(tenant_slug: str) -> str | None:
 
 
 def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
-    """
-    Auto-reply to a new lead.
-    payload expects: name, phone, (optional) source
-    """
     phone = (payload.get("phone") or "").strip()
     if not phone:
         return False
 
     brand = get_brand_for_tenant(tenant_id)
     business_name = brand.get("business_name") or tenant_id
+    booking_link = brand.get("booking_link") or _booking_link_for_slug(tenant_id)
 
-    name = payload.get("name") or "there"
+    name = (payload.get("name") or "").strip()
+    first = name.split(" ")[0] if name else "there"
 
-    # 🚫 DO NOT trust payload["booking_link"] anymore – it may be a /public/* backend URL.
-    # ✅ Always derive from config / brand.
-    booking_link = (
-        brand.get("booking_link")
-        or _booking_link_for_slug(tenant_id)
+    msg = (payload.get("message") or "").strip()
+    msg_preview = (msg[:90] + "…") if len(msg) > 90 else msg
+    msg_line = f'Issue: "{msg_preview}"' if msg_preview else "Issue received."
+
+    body = (
+        f"Thanks {first} — we got your message for {business_name}. "
+        f"{msg_line}\n"
+        f"We’ll text/call you shortly. Reply with a good time today.\n"
+        f"If this is urgent, reply URGENT."
     )
 
+    # Optional booking link (only if you want it)
     if booking_link:
-        body = (
-            f"Thanks for reaching out to {business_name}, {name}. "
-            f"Here’s the next step:\n"
-            f"{booking_link}"
-        )
-    else:
-        body = (
-            f"Thanks for reaching out to {business_name}, {name}. "
-            f"We’ll contact you shortly."
-        )
+        body += f"\nOptional: book a time here: {booking_link}"
 
     return send_sms(phone, body)
+
 
 
 # Global office SMS fallback from env
