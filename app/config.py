@@ -68,8 +68,6 @@ class Settings:
     # Prefer DEBUG_BEARER; fallback to legacy DEBUG_BEARER_TOKEN
     DEBUG_BEARER: str = (os.getenv("DEBUG_BEARER") or os.getenv("DEBUG_BEARER_TOKEN") or "").strip()
     ADMIN_KEY: str = (os.getenv("ADMIN_KEY") or "").strip()
-    TWILIO_API_KEY: str = os.getenv("TWILIO_API_KEY", "").strip()
-    TWILIO_API_SECRET: str = os.getenv("TWILIO_API_SECRET", "").strip()
 
     # Multi-tenant (token -> tenant_id)
     import json
@@ -134,5 +132,3 @@ TWILIO_AUTH_TOKEN = settings.TWILIO_AUTH_TOKEN
 TWILIO_MESSAGING_SERVICE_SID = settings.TWILIO_MESSAGING_SERVICE_SID
 TWILIO_FROM = settings.TWILIO_FROM
 SMS_DRY_RUN = settings.SMS_DRY_RUN
-TWILIO_API_KEY = settings.TWILIO_API_KEY
-TWILIO_API_SECRET = settings.TWILIO_API_SECRET

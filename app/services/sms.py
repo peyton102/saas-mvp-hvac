@@ -139,27 +139,18 @@ def is_dry_run() -> bool:
 
 def _client() -> Client:
     """
-    Build a Twilio client using either:
-      A) Account SID + Auth Token  (default)
-      B) API Key + API Secret + Account SID
+    Build a Twilio client using API Key auth:
+
+      Client(api_key_sid, api_key_secret, account_sid)
     """
-    account = (os.getenv("TWILIO_ACCOUNT_SID") or getattr(config, "TWILIO_ACCOUNT_SID", "")).strip()
-    auth_token = (os.getenv("TWILIO_AUTH_TOKEN") or getattr(config, "TWILIO_AUTH_TOKEN", "")).strip()
+    api_key = os.getenv("TWILIO_API_KEY", getattr(config, "TWILIO_API_KEY", ""))
+    secret = os.getenv("TWILIO_AUTH_TOKEN", getattr(config, "TWILIO_AUTH_TOKEN", ""))
+    account = os.getenv("TWILIO_ACCOUNT_SID", getattr(config, "TWILIO_ACCOUNT_SID", ""))
 
-    api_key = (os.getenv("TWILIO_API_KEY") or getattr(config, "TWILIO_API_KEY", "")).strip()
-    api_secret = (os.getenv("TWILIO_API_SECRET") or getattr(config, "TWILIO_API_SECRET", "")).strip()
+    if not (api_key and secret and account):
+        raise RuntimeError("Missing TWILIO_API_KEY / TWILIO_AUTH_TOKEN / TWILIO_ACCOUNT_SID")
 
-    # If either API key value exists, require API-key mode fully.
-    if api_key or api_secret:
-        if not (account and api_key and api_secret):
-            raise RuntimeError("Missing TWILIO_ACCOUNT_SID / TWILIO_API_KEY / TWILIO_API_SECRET")
-        return Client(api_key, api_secret, account_sid=account)
-
-    # Otherwise use Auth Token mode.
-    if not (account and auth_token):
-        raise RuntimeError("Missing TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN")
-    return Client(account, auth_token)
-
+    return Client(api_key, secret, account)
 
 
 def _normalize_phone(phone: Optional[str]) -> Optional[str]:
