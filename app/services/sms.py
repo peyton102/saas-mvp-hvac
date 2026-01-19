@@ -55,6 +55,7 @@ def get_brand_for_tenant(tenant_slug: str) -> dict:
         ).first()
 
         if not tenant:
+
             # no tenant row – fall back to slug for name only
             return {
                 "business_name": tenant_slug,
@@ -63,6 +64,7 @@ def get_brand_for_tenant(tenant_slug: str) -> dict:
                 "booking_link": None,
                 "office_sms_to": None,
                 "office_email_to": None,
+
             }
 
         # 2) find settings row by tenant.slug (string FK)
@@ -196,9 +198,18 @@ def send_sms(to: str, body: str) -> bool:
     Returns True if (attempted) send (or dry-run), False on error.
     """
     try:
+        print(
+            f"[SMS_DEBUG] to={to!r} "
+            f"normalized={_normalize_phone(to)!r} "
+            f"dry_run={is_dry_run()} "
+            f"has_svc={bool(os.getenv('TWILIO_MESSAGING_SERVICE_SID') or getattr(config, 'TWILIO_MESSAGING_SERVICE_SID', ''))} "
+            f"has_from={bool(os.getenv('TWILIO_FROM') or getattr(config, 'TWILIO_FROM', ''))}",
+            flush=True
+        )
+
         phone = _normalize_phone(to)
         if not phone:
-            print(f"[SMS ERROR] invalid phone={to!r}")
+            print(f"[SMS ERROR] invalid phone={to!r}", flush=True)
             return False
 
         if is_dry_run():
