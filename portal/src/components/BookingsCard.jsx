@@ -561,7 +561,8 @@ const endIso = localWallToZonedIso(toWall(endDate));
             </tr>
           </thead>
 
-          <tbody>
+          <tbody style={{ textAlign: "center" }}>
+
             {sorted.map((b) => (
               <tr key={b.id}>
                 <td>{formatDateAny(b.starts_at)}</td>
