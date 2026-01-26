@@ -597,7 +597,8 @@ const headers = useMemo(() => {
                       <tbody>
                         {recent.costs.map((c) => (
                           <tr key={c.id}>
-                            <td>{c.id}</td><td>${fmtMoney(c.amount)}</td><td>{c.category}</td>
+                            <td>{c.id}</td><td>${fmtMoney((Number(c.hours||0) > 0 && Number(c.hourly_rate||0) > 0) ? (Number(c.hours) * Number(c.hourly_rate)) : c.amount)}</td>
+<td>{c.category}</td>
                             <td>{String(c.part_code ?? c.partCode ?? "").trim() || "—"}</td>
 <td>{String(c.job_type ?? c.jobType ?? "").trim() || "—"}</td>
 

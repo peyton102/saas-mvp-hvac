@@ -1096,3 +1096,23 @@ asyncio.exceptions.CancelledError
 2026-01-19 17:21:50,307 | INFO | app | ✅ Logging initialized
 2026-01-19 17:21:50,310 | INFO | root | ✅ Startup complete
 2026-01-19 17:21:50,311 | INFO | uvicorn.error | Application startup complete.
+2026-01-26 19:32:43,725 | INFO | app | ✅ Logging initialized
+2026-01-26 19:32:43,754 | INFO | root | ✅ Startup complete
+2026-01-26 19:32:43,754 | INFO | uvicorn.error | Application startup complete.
+2026-01-26 19:32:56,757 | INFO | uvicorn.access | 127.0.0.1:52023 - "POST /finance/cost HTTP/1.1" 401
+2026-01-26 19:35:33,378 | INFO | uvicorn.access | 127.0.0.1:65214 - "POST /finance/cost HTTP/1.1" 200
+2026-01-26 19:35:33,452 | INFO | uvicorn.access | 127.0.0.1:65214 - "GET /finance/summary?range=month HTTP/1.1" 200
+2026-01-26 19:42:58,597 | INFO | uvicorn.access | 127.0.0.1:59361 - "GET /finance/_ver HTTP/1.1" 200
+2026-01-26 19:43:04,370 | INFO | uvicorn.access | 127.0.0.1:59377 - "GET /finance/summary?range=today HTTP/1.1" 200
+2026-01-26 19:43:08,876 | INFO | uvicorn.access | 127.0.0.1:59377 - "POST /finance/revenue HTTP/1.1" 200
+2026-01-26 19:43:08,898 | INFO | uvicorn.access | 127.0.0.1:59377 - "GET /finance/summary?range=today HTTP/1.1" 200
+2026-01-26 19:43:15,816 | INFO | uvicorn.access | 127.0.0.1:59397 - "POST /finance/cost HTTP/1.1" 200
+2026-01-26 19:43:15,838 | INFO | uvicorn.access | 127.0.0.1:59397 - "GET /finance/summary?range=today HTTP/1.1" 200
+2026-01-26 19:43:22,322 | INFO | uvicorn.access | 127.0.0.1:59402 - "POST /finance/cost HTTP/1.1" 200
+2026-01-26 19:43:22,345 | INFO | uvicorn.access | 127.0.0.1:59402 - "GET /finance/summary?range=today HTTP/1.1" 200
+2026-01-26 19:43:37,273 | INFO | uvicorn.access | 127.0.0.1:59435 - "POST /finance/cost HTTP/1.1" 200
+2026-01-26 19:43:37,301 | INFO | uvicorn.access | 127.0.0.1:59435 - "GET /finance/summary?range=today HTTP/1.1" 200
+2026-01-26 19:43:56,918 | INFO | uvicorn.access | 127.0.0.1:63371 - "GET /finance/_ver HTTP/1.1" 401
+2026-01-26 19:44:04,091 | INFO | uvicorn.access | 127.0.0.1:58896 - "GET /finance/summary?range=today HTTP/1.1" 401
+2026-01-26 19:47:55,550 | INFO | uvicorn.access | 127.0.0.1:62727 - "GET /whoami HTTP/1.1" 401
+2026-01-26 19:51:31,231 | INFO | uvicorn.access | 127.0.0.1:52282 - "GET /debug/whoami-verbose HTTP/1.1" 401
