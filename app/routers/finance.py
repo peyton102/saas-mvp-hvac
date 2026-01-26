@@ -80,12 +80,16 @@ def add_cost(payload: dict,
     # compute amount from hours * hourly_rate if blank
     hrs = _dec(payload.get("hours"))
     rate = _dec(payload.get("hourly_rate"))
+
+    # ✅ amount is PARTS/MATERIALS only (what user typed)
     raw_amount = payload.get("amount")
-    amt = _dec(raw_amount) if raw_amount not in (None, "",) else (hrs * rate if (hrs and rate) else Decimal("0"))
-    if hrs > 0 and rate > 0 and not payload.get("category"):
-        category = "labor"
-    else:
-        category = payload.get("category") or "general"
+    parts_amt = _dec(raw_amount) if raw_amount not in (None, "") else Decimal("0")
+
+    # ✅ labor is derived from hours*rate (never stored in amount)
+    has_labor = (hrs > 0 and rate > 0)
+
+    category = payload.get("category") or ("labor" if has_labor else "general")
+    amt = parts_amt
 
     c = Cost(
         tenant_id=tenant_id,
@@ -152,11 +156,19 @@ def summary(
     for x in cost:
         h = _dec(x.hours)
         r = _dec(x.hourly_rate)
+        a = _dec(x.amount)
+
+        # ✅ Back-compat: old rows may have amount == hours*rate (would double count)
+        if h > 0 and r > 0 and a == (h * r):
+            a = Decimal("0")
+
+        # ✅ parts always count
+        parts_total += a
+
+        # ✅ labor counts when present
         if h > 0 and r > 0:
             labor_hours += h
             labor_total += (h * r)
-        else:
-            parts_total += _dec(x.amount)
 
     cost_total = parts_total + labor_total
 

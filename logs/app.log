@@ -1034,3 +1034,65 @@ asyncio.exceptions.CancelledError
 2026-01-12 21:38:23,247 | INFO | app | ✅ Logging initialized
 2026-01-12 21:38:23,252 | INFO | root | ✅ Startup complete
 2026-01-12 21:38:23,253 | INFO | uvicorn.error | Application startup complete.
+2026-01-17 16:10:31,144 | INFO | app | ✅ Logging initialized
+2026-01-17 16:10:31,164 | INFO | root | ✅ Startup complete
+2026-01-17 16:10:31,164 | INFO | uvicorn.error | Application startup complete.
+2026-01-17 16:10:36,346 | INFO | uvicorn.access | 127.0.0.1:63478 - "GET /debug/sms-config HTTP/1.1" 200
+2026-01-17 16:10:45,077 | INFO | uvicorn.access | 127.0.0.1:64430 - "POST /lead HTTP/1.1" 200
+2026-01-17 16:13:07,191 | INFO | uvicorn.access | 127.0.0.1:53669 - "POST /lead HTTP/1.1" 200
+2026-01-19 16:26:16,584 | INFO | uvicorn.error | Shutting down
+2026-01-19 16:26:16,769 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 16:26:16,835 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 16:26:16,841 | INFO | uvicorn.error | Finished server process [38528]
+2026-01-19 16:26:21,110 | INFO | app | ✅ Logging initialized
+2026-01-19 16:26:21,130 | INFO | root | ✅ Startup complete
+2026-01-19 16:26:21,130 | INFO | uvicorn.error | Application startup complete.
+2026-01-19 16:26:34,106 | INFO | uvicorn.error | Shutting down
+2026-01-19 16:26:34,215 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 16:26:34,216 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 16:26:34,216 | INFO | uvicorn.error | Finished server process [42560]
+2026-01-19 16:26:36,786 | INFO | app | ✅ Logging initialized
+2026-01-19 16:26:36,789 | INFO | root | ✅ Startup complete
+2026-01-19 16:26:36,790 | INFO | uvicorn.error | Application startup complete.
+2026-01-19 16:27:11,207 | INFO | uvicorn.error | Shutting down
+2026-01-19 16:27:11,317 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 16:27:11,318 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 16:27:11,318 | INFO | uvicorn.error | Finished server process [29444]
+2026-01-19 16:27:13,630 | INFO | app | ✅ Logging initialized
+2026-01-19 16:27:13,634 | INFO | root | ✅ Startup complete
+2026-01-19 16:27:13,634 | INFO | uvicorn.error | Application startup complete.
+2026-01-19 16:51:53,097 | INFO | uvicorn.error | Shutting down
+2026-01-19 16:51:53,259 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 16:51:53,280 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 16:51:53,284 | INFO | uvicorn.error | Finished server process [11136]
+2026-01-19 16:51:56,696 | INFO | app | ✅ Logging initialized
+2026-01-19 16:51:56,701 | INFO | root | ✅ Startup complete
+2026-01-19 16:51:56,701 | INFO | uvicorn.error | Application startup complete.
+2026-01-19 17:09:35,690 | INFO | uvicorn.error | Shutting down
+2026-01-19 17:09:35,798 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 17:09:35,802 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 17:09:35,803 | INFO | uvicorn.error | Finished server process [9772]
+2026-01-19 17:09:39,255 | INFO | app | ✅ Logging initialized
+2026-01-19 17:09:39,264 | INFO | root | ✅ Startup complete
+2026-01-19 17:09:39,265 | INFO | uvicorn.error | Application startup complete.
+2026-01-19 17:09:46,325 | INFO | uvicorn.error | Shutting down
+2026-01-19 17:09:46,436 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 17:09:46,437 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 17:09:46,437 | INFO | uvicorn.error | Finished server process [42700]
+2026-01-19 17:09:48,921 | INFO | app | ✅ Logging initialized
+2026-01-19 17:09:48,925 | INFO | root | ✅ Startup complete
+2026-01-19 17:09:48,925 | INFO | uvicorn.error | Application startup complete.
+2026-01-19 17:14:33,831 | INFO | uvicorn.error | Shutting down
+2026-01-19 17:14:33,940 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 17:14:33,941 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 17:14:33,941 | INFO | uvicorn.error | Finished server process [42632]
+2026-01-19 17:14:37,549 | INFO | app | ✅ Logging initialized
+2026-01-19 17:14:37,556 | INFO | root | ✅ Startup complete
+2026-01-19 17:14:37,557 | INFO | uvicorn.error | Application startup complete.
+2026-01-19 17:21:08,511 | INFO | uvicorn.error | Shutting down
+2026-01-19 17:21:08,619 | INFO | uvicorn.error | Waiting for application shutdown.
+2026-01-19 17:21:08,620 | INFO | uvicorn.error | Application shutdown complete.
+2026-01-19 17:21:08,621 | INFO | uvicorn.error | Finished server process [43556]
+2026-01-19 17:21:50,307 | INFO | app | ✅ Logging initialized
+2026-01-19 17:21:50,310 | INFO | root | ✅ Startup complete
+2026-01-19 17:21:50,311 | INFO | uvicorn.error | Application startup complete.

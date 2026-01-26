@@ -98,7 +98,7 @@ class Settings:
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     FROM_EMAIL: str = os.getenv("FROM_EMAIL", "no-reply@example.com")
     EMAIL_OFFICE: str = os.getenv("EMAIL_OFFICE", os.getenv("FROM_EMAIL", "no-reply@example.com"))
-
+    SMS_DEBUG: bool = _as_bool("SMS_DEBUG", False)
 
     # Calendly
     CALENDLY_WEBHOOK_SECRET: str = os.getenv("CALENDLY_WEBHOOK_SECRET", "").strip()
@@ -117,6 +117,7 @@ DB_FIRST = settings.DB_FIRST
 TWILIO_VALIDATE_SIGNATURES = settings.TWILIO_VALIDATE_SIGNATURES
 TWILIO_AUTH_TOKEN = settings.TWILIO_AUTH_TOKEN
 ADMIN_KEY = settings.ADMIN_KEY
+SMS_DEBUG = settings.SMS_DEBUG
 
 # Email aliases
 EMAIL_DRY_RUN  = settings.EMAIL_DRY_RUN
