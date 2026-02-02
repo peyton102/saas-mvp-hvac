@@ -141,40 +141,20 @@ class ApiKey(SQLModel, table=True):
     __tablename__ = "api_key"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    # NEVER store raw tokens once we switch—this will hold a hash later
     hashed_key: str = Field(index=True, unique=True)
     label: str = Field(default="")  # e.g., “Front desk iPad”, “Zapier hook”
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     last_used_at: Optional[datetime] = Field(default=None, index=True)
     is_active: bool = Field(default=True, index=True)
 
-    # tenant link
     tenant_id: int = Field(foreign_key="tenant.id", index=True)
-    tenant: Optional[Tenant] = Relationship(back_populates="api_keys")
+    tenant: Optional["Tenant"] = Relationship(back_populates="api_keys")
 
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-
-
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
-        default_factory=lambda: datetime.now(timezone.utc),
-        index=True,
-    )
-
-    tenant_id: Optional[str] = Field(default=None, index=True)
-    user_email: Optional[str] = Field(default=None, index=True)
-
-    category: str = Field(index=True)   # "finance" | "booking" | "lead" | "auth"
-    action: str = Field(index=True)     # "attempt" | "ok" | "fail" etc.
-
-    payload_json: str = Field(sa_column=Column(Text), default="{}")
-
-    ok: bool = Field(default=True, index=True)
-    error: Optional[str] = Field(default=None, sa_column=Column(Text))
 class AuditEvent(SQLModel, table=True):
     __tablename__ = "audit_event"
 
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, index=True)
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+
 
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
