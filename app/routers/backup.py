@@ -8,13 +8,14 @@ import zipfile
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from app.db import get_session
 from app.deps import get_tenant_id
-from app.models import Lead as LeadModel
+from app.models import Lead as LeadModel, AuditEvent
+
 from app.models_finance import Revenue, Cost
 
 router = APIRouter(prefix="/backup", tags=["backup"])
@@ -239,3 +240,41 @@ def debug_env():
         "DEBUG_PRESENT": bool(os.getenv("DEBUG_BEARER")),
         "DEBUG_TOKEN_PRESENT": bool(os.getenv("DEBUG_BEARER_TOKEN")),
     }
+# ============================================================
+# SEATBELT / AUDIT EVENTS (ADMIN ONLY)
+# ============================================================
+
+@router.get("/audit/events")
+def backup_audit_events(
+    limit: int = Query(50, ge=1, le=500),
+    tenant_id: str | None = Query(None),
+    category: str | None = Query(None),
+    action: str | None = Query(None),
+    _: None = Depends(_require_admin_bearer),
+    session: Session = Depends(get_session),
+):
+    stmt = select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(limit)
+
+    if tenant_id:
+        stmt = stmt.where(AuditEvent.tenant_id == tenant_id)
+    if category:
+        stmt = stmt.where(AuditEvent.category == category)
+    if action:
+        stmt = stmt.where(AuditEvent.action == action)
+
+    rows = session.exec(stmt).all()
+
+    return [
+        {
+            "id": r.id,
+            "created_at": (r.created_at.isoformat() if r.created_at else None),
+            "tenant_id": r.tenant_id,
+            "user_email": r.user_email,
+            "category": r.category,
+            "action": r.action,
+            "ok": r.ok,
+            "error": r.error,
+            "payload_json": r.payload_json,
+        }
+        for r in rows
+    ]
