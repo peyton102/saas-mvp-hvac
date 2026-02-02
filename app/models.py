@@ -151,14 +151,9 @@ class ApiKey(SQLModel, table=True):
     # tenant link
     tenant_id: int = Field(foreign_key="tenant.id", index=True)
     tenant: Optional[Tenant] = Relationship(back_populates="api_keys")
-class AuditEvent(SQLModel, table=True):
-    """
-    Append-only event log (seatbelt).
-    Use for finance writes, booking writes, lead writes, auth events, etc.
-    """
-    __tablename__ = "audit_event"
 
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, index=True)
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+
 
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
@@ -184,7 +179,6 @@ class AuditEvent(SQLModel, table=True):
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
         default_factory=lambda: datetime.now(timezone.utc),
-        index=True,
     )
 
     tenant_id: Optional[str] = Field(default=None, index=True)     # tenant slug string
