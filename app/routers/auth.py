@@ -347,6 +347,7 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
 
     data = row_to_dict(row)
 
+    # password check
     if not verify_password(payload.password, data.get("password_hash")):
         backup_event(
             session,
@@ -360,6 +361,10 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
         )
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    # ✅ define once, use everywhere
+    tenant_slug = data["tenant_slug"]
+    api_key = data.get("api_key") or ""
+
     backup_event(
         session,
         category="auth",
@@ -370,7 +375,7 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
         payload={"tenant_slug": tenant_slug},
     )
 
-    # 3) build JWT
+    # build JWT
     token_data = {"sub": email_lower, "tenant": tenant_slug}
     access_token = create_access_token(token_data)
 
