@@ -266,6 +266,15 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         pass
 
     session.commit()
+    backup_event(
+        session,
+        category="auth",
+        action="signup_success",
+        tenant_id=slug,
+        user_email=email_lower,
+        ok=True,
+        payload={"tenant_slug": slug},
+    )
 
     # 8) build JWT
     token_data = {"sub": email_lower, "tenant": slug}
@@ -294,9 +303,12 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
         session,
         category="auth",
         action="login_attempt",
+        tenant_id=None,
         user_email=email_lower,
+        ok=True,
         payload={"email": email_lower},
     )
+
     # make sure password_hash column exists (no-op if already there)
     try:
         session.exec(text("ALTER TABLE tenant ADD COLUMN password_hash TEXT"))
@@ -321,15 +333,42 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
 
     row = session.exec(stmt).first()
     if not row:
+        backup_event(
+            session,
+            category="auth",
+            action="login_fail_user_missing",
+            tenant_id=None,
+            user_email=email_lower,
+            ok=False,
+            payload={"email": email_lower},
+            error="tenant row not found for email",
+        )
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     data = row_to_dict(row)
 
     if not verify_password(payload.password, data.get("password_hash")):
+        backup_event(
+            session,
+            category="auth",
+            action="login_fail_bad_password",
+            tenant_id=data.get("tenant_slug"),
+            user_email=email_lower,
+            ok=False,
+            payload={"tenant_slug": data.get("tenant_slug")},
+            error="password mismatch",
+        )
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    tenant_slug = data["tenant_slug"]
-    api_key = data.get("api_key") or ""
+    backup_event(
+        session,
+        category="auth",
+        action="login_success",
+        tenant_id=tenant_slug,
+        user_email=email_lower,
+        ok=True,
+        payload={"tenant_slug": tenant_slug},
+    )
 
     # 3) build JWT
     token_data = {"sub": email_lower, "tenant": tenant_slug}
