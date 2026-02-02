@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Optional
 from decimal import Decimal
 from datetime import datetime, timezone
+from sqlalchemy import DateTime, text, Text
 
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import DateTime, text
@@ -67,3 +68,35 @@ class FinanceCost(SQLModel, table=True):
 # Optional aliases (in case other modules import these names)
 Revenue = FinanceRevenue
 Cost = FinanceCost
+from uuid import uuid4
+from sqlalchemy import Text
+
+class FinanceWriteLog(SQLModel, table=True):
+    """
+    Append-only pre-write log for finance writes (fail-safe).
+    Purpose: preserve payload even if the main write fails.
+    """
+    __tablename__ = "finance_write_log"
+
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, index=True)
+
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
+        default_factory=utcnow,
+    )
+
+    # multitenancy (match existing style: tenant_id is str)
+    tenant_id: str = Field(index=True)
+
+    # optional correlation (only fill if you have it at runtime)
+    user_id: Optional[str] = Field(default=None, index=True)
+
+    # "revenue" or "cost"
+    write_type: str = Field(index=True)
+
+    # raw payload snapshot (JSON string)
+    payload_json: str = Field(sa_column=Column(Text), default="{}")
+
+    # correlation flags (not behavior)
+    success: bool = Field(default=False, index=True)
+    error: Optional[str] = Field(default=None, sa_column=Column(Text))

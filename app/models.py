@@ -4,6 +4,10 @@ from typing import Optional, List
 
 from sqlalchemy import UniqueConstraint, String
 from sqlmodel import SQLModel, Field, Relationship
+from uuid import uuid4
+from sqlalchemy import DateTime, Text, text
+from sqlmodel import Column
+
 
 # ---------- Core tables ----------
 
@@ -147,3 +151,48 @@ class ApiKey(SQLModel, table=True):
     # tenant link
     tenant_id: int = Field(foreign_key="tenant.id", index=True)
     tenant: Optional[Tenant] = Relationship(back_populates="api_keys")
+class AuditEvent(SQLModel, table=True):
+    """
+    Append-only event log (seatbelt).
+    Use for finance writes, booking writes, lead writes, auth events, etc.
+    """
+    __tablename__ = "audit_event"
+
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, index=True)
+
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+    tenant_id: Optional[str] = Field(default=None, index=True)
+    user_email: Optional[str] = Field(default=None, index=True)
+
+    category: str = Field(index=True)   # "finance" | "booking" | "lead" | "auth"
+    action: str = Field(index=True)     # "attempt" | "ok" | "fail" etc.
+
+    payload_json: str = Field(sa_column=Column(Text), default="{}")
+
+    ok: bool = Field(default=True, index=True)
+    error: Optional[str] = Field(default=None, sa_column=Column(Text))
+class AuditEvent(SQLModel, table=True):
+    __tablename__ = "audit_event"
+
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, index=True)
+
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP")),
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+    tenant_id: Optional[str] = Field(default=None, index=True)     # tenant slug string
+    user_email: Optional[str] = Field(default=None, index=True)    # tenant email
+
+    category: str = Field(index=True)  # "finance" | "booking" | "lead" | "auth"
+    action: str = Field(index=True)    # "attempt" | "success" | "failure"
+
+    payload_json: str = Field(sa_column=Column(Text), default="{}")
+    ok: bool = Field(default=True, index=True)
+    error: Optional[str] = Field(default=None, sa_column=Column(Text))

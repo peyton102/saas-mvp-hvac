@@ -3,10 +3,12 @@ from datetime import datetime, timezone, timedelta
 from decimal import Decimal, InvalidOperation
 from sqlmodel import Session, select
 from collections import defaultdict
+from app.services.seatbelt import backup_event
 
 from app.db import get_session
 from app.deps import get_tenant_id
-from app.models_finance import Revenue, Cost
+from app.models_finance import Revenue, Cost, FinanceWriteLog
+
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 FIN_VER = "pnl-eod-4-laborfix"  # version tag
@@ -58,6 +60,8 @@ def _to_dt_utc(s: str, *, is_end: bool = False) -> datetime:
 def add_revenue(payload: dict,
                 tenant_id: str = Depends(get_tenant_id),
                 session: Session = Depends(get_session)):
+    backup_event(session, category="finance", action="revenue_attempt", tenant_id=tenant_id, payload=payload)
+
     r = Revenue(
         tenant_id=tenant_id,
         amount=_dec(payload.get("amount")),
@@ -77,6 +81,8 @@ def add_revenue(payload: dict,
 def add_cost(payload: dict,
              tenant_id: str = Depends(get_tenant_id),
              session: Session = Depends(get_session)):
+    backup_event(session, category="finance", action="cost_attempt", tenant_id=tenant_id, payload=payload)
+
     # compute amount from hours * hourly_rate if blank
     hrs = _dec(payload.get("hours"))
     rate = _dec(payload.get("hourly_rate"))

@@ -1,7 +1,6 @@
 # app/routers/admin.py
 from datetime import datetime, timedelta, timezone
-from typing import Dict
-
+from app.models import Tenant
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select
 from sqlalchemy import delete, func, or_
@@ -10,7 +9,7 @@ from app.db import get_session
 from app.models import Lead, Booking, Review, ReminderSent
 from ..deps import get_tenant_id  # ✅ use shared tenant resolver
 from app.deps import get_tenant_id
-router = APIRouter(prefix="", tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"])
 from sqlalchemy import text
 from sqlalchemy import func  # at top if not already imported
 from typing import List, Dict
@@ -212,3 +211,19 @@ def repair_tenant_ids(
         "would_touch_counts": touched,
         "preview_first25": previews,
     }
+@router.get("/audit/users")
+def admin_audit_users(session: Session = Depends(get_session)):
+    rows = session.exec(
+        select(Tenant.email, Tenant.slug, Tenant.created_at)
+        .order_by(Tenant.created_at.desc())
+    ).all()
+
+    return [
+        {
+            "email": r[0],
+            "tenant_slug": r[1],
+            "created_at": r[2],
+            "deleted_at": None,
+        }
+        for r in rows
+    ]

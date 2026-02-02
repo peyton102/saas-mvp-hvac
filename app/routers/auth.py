@@ -1,6 +1,7 @@
 # app/routers/auth.py
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
+from app.services.seatbelt import backup_event
 
 import hashlib
 import secrets
@@ -289,7 +290,13 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
     - Returns JWT + first active ApiKey for that tenant.
     """
     email_lower = payload.email.lower().strip()
-
+    backup_event(
+        session,
+        category="auth",
+        action="login_attempt",
+        user_email=email_lower,
+        payload={"email": email_lower},
+    )
     # make sure password_hash column exists (no-op if already there)
     try:
         session.exec(text("ALTER TABLE tenant ADD COLUMN password_hash TEXT"))
