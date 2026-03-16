@@ -94,6 +94,8 @@ def get_brand_for_tenant(tenant_slug: str) -> dict:
         # Booking link: respect an explicit Tenant.booking_link override
         # but if it's empty or just equal to the global default, compute from slug.
         booking_link = (tenant.booking_link or "").strip()
+        if booking_link.startswith("BOOKING_LINK="):
+            booking_link = booking_link[len("BOOKING_LINK="):]
         global_default = getattr(config, "BOOKING_LINK", "").strip()
 
         if (not booking_link) or (global_default and booking_link == global_default):
@@ -302,6 +304,7 @@ def booking_confirmation_sms(tenant_id: str, payload: Dict[str, Any]) -> bool:
     if booking_link:
         body += f" To reschedule: {booking_link}"
 
+    body = _with_compliance(body)
     return send_sms(phone, body)
 
 

@@ -6,6 +6,10 @@ from app.services.seatbelt import backup_event
 import hashlib
 import secrets
 
+from passlib.context import CryptContext
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
@@ -31,13 +35,18 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    return _pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password:
         return False
-    return hash_password(plain_password) == hashed_password
+    return _pwd_context.verify(plain_password, hashed_password)
+
+
+def hash_api_key(key: str) -> str:
+    """SHA-256 hash for API keys. High-entropy random keys don't need bcrypt."""
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
 def slugify(name: str) -> str:
@@ -242,11 +251,11 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         .bindparams(pwd=password_hash, tid=tenant.id)
     )
 
-    # 7) create ApiKey row (store the raw key in hashed_key for now)
-    api_key_plain = secrets.token_hex(16)
+    # 7) create ApiKey row — store hash only, return plaintext once to caller
+    api_key_plain = secrets.token_hex(32)
     api_key_row = ApiKey(
         tenant_id=tenant.id,
-        hashed_key=api_key_plain,
+        hashed_key=hash_api_key(api_key_plain),
         is_active=True,
     )
     session.add(api_key_row)
@@ -315,17 +324,15 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
     except Exception:
         pass
 
-    # 1) fetch tenant + first active api key
+    # 1) fetch tenant (API key is hashed — cannot be retrieved after signup)
     stmt = text(
         """
         SELECT
           t.id AS tenant_id,
           t.email AS email,
           t.password_hash AS password_hash,
-          t.slug AS tenant_slug,
-          ak.hashed_key AS api_key
+          t.slug AS tenant_slug
         FROM tenant t
-        LEFT JOIN api_key ak ON ak.tenant_id = t.id AND ak.is_active = 1
         WHERE t.email = :email
         LIMIT 1
         """
@@ -361,9 +368,9 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
         )
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # ✅ define once, use everywhere
+    # API key is hashed in DB — cannot be retrieved after signup
     tenant_slug = data["tenant_slug"]
-    api_key = data.get("api_key") or ""
+    api_key = ""
 
     backup_event(
         session,

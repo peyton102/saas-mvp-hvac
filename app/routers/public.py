@@ -1,5 +1,5 @@
 # app/routers/public.py
-from fastapi import APIRouter, Request, Response, HTTPException, Query
+from fastapi import APIRouter, Request, Response, HTTPException, Query, Header
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from app import config
@@ -17,6 +17,7 @@ from app.services.sms import (
     get_brand_for_tenant,   # 👈 add this
 )
 from fastapi import Depends
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -489,6 +490,7 @@ def public_availability(
 @router.get("/bookings")
 def public_list_bookings(
     tenant: str = Query(..., description="tenant slug or key"),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     List bookings for a tenant.

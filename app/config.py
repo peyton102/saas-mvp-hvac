@@ -54,7 +54,8 @@ class Settings:
 
     # Branding / links
     FROM_NAME: str = os.getenv("FROM_NAME", "HVAC Bot")
-    BOOKING_LINK = os.getenv("BOOKING_LINK", "http://localhost:5173/book/index.html?")
+    _booking_link_raw = os.getenv("BOOKING_LINK", "http://localhost:5173/book/index.html?")
+    BOOKING_LINK = _booking_link_raw[len("BOOKING_LINK="):] if _booking_link_raw.startswith("BOOKING_LINK=") else _booking_link_raw
 
     # Reminders
     REMINDERS: str = os.getenv("REMINDERS", "24h,2h")
@@ -85,7 +86,7 @@ class Settings:
     TWILIO_MESSAGING_SERVICE_SID: str = os.getenv("TWILIO_MESSAGING_SERVICE_SID", "").strip()
     TWILIO_FROM: str = os.getenv("TWILIO_FROM", "").strip()
     SMS_DRY_RUN: bool = _as_bool("SMS_DRY_RUN", False)
-    TWILIO_VALIDATE_SIGNATURES: bool = _as_bool("TWILIO_VALIDATE_SIGNATURES", False)
+    TWILIO_VALIDATE_SIGNATURES: bool = _as_bool("TWILIO_VALIDATE_SIGNATURES", True)
 
     # Storage
     LEADS_CSV: str = os.getenv("LEADS_CSV", "data/leads.csv")

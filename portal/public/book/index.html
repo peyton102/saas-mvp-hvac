@@ -122,8 +122,9 @@
   const reschedToken = qs.get("reschedule");
   const isReschedule = !!reschedToken;
 
-  // DEV: local FastAPI
-  const API = "https://saas-mvp-hvac.onrender.com";
+  // API base: override via ?api=http://localhost:8000 for local dev,
+  // or set window.__API_BASE__ from a parent page/script.
+  const API = qs.get("api") || window.__API_BASE__ || "https://saas-mvp-hvac.onrender.com";
 
 
 
@@ -256,21 +257,40 @@ function localWallToZonedIso(localWall) {
 
 
     try {
+      // Compute end = start + 1 hour (local wall time)
+      const startDate = new Date(startsLocal);
+      const endDate   = new Date(startDate.getTime() + 60 * 60 * 1000);
+      const endLocalWall = [
+        endDate.getFullYear(),
+        String(endDate.getMonth() + 1).padStart(2, "0"),
+        String(endDate.getDate()).padStart(2, "0"),
+      ].join("-") + "T" + [
+        String(endDate.getHours()).padStart(2, "0"),
+        String(endDate.getMinutes()).padStart(2, "0"),
+        "00",
+      ].join(":");
+      const endIso = localWallToZonedIso(endLocalWall);
+
+      // Fold service + address into notes so nothing is lost
+      const fullNotes = [
+        service ? `Service: ${service}` : "",
+        address ? `Address: ${address}` : "",
+        notes   ? notes : "",
+      ].filter(Boolean).join("\n") || null;
+
       const endpoint = isReschedule
         ? `${API}/public/bookings/reschedule?tenant=${encodeURIComponent(tenant)}`
-        : `${API}/public/bookings?tenant=${encodeURIComponent(tenant)}`;
+        : `${API}/book?tenant=${encodeURIComponent(tenant)}`;
 
       const payload = isReschedule
         ? { token: reschedToken, starts_at_iso: startsIso }
         : {
-            tenant,
-            service,
+            start: startsIso,
+            end:   endIso,
             name,
             phone,
             email,
-            address,
-            notes,
-            starts_at_iso: startsIso,
+            notes: fullNotes,
           };
 
       console.log("[BOOK POST] endpoint =", endpoint, "payload =", payload);

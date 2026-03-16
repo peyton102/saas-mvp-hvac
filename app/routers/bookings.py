@@ -66,29 +66,6 @@ def _parse_dt(val: str) -> datetime:
     return dt
 
 
-def _gcal_is_free(start: datetime, end: datetime) -> bool:
-    """
-    Ask Google if range is free; fall back to permissive if helper not available.
-    """
-    try:
-        fb = gcal.freebusy(start, end)
-        if isinstance(fb, dict):
-            busy = fb.get("busy") or []
-            return len(busy) == 0
-        if isinstance(fb, list):
-            return len(fb) == 0
-    except Exception:
-        pass
-    for attr in ("is_free", "is_range_free", "is_time_free"):
-        fn = getattr(gcal, attr, None)
-        if callable(fn):
-            try:
-                return bool(fn(start, end))
-            except Exception:
-                continue
-    return True
-
-
 def _gcal_create_event(
     start: datetime,
     end: datetime,
@@ -153,8 +130,12 @@ def _gcal_create_event(
 
 # ===== Availability =====
 @router.get("/availability", operation_id="bookings_availability_get")
-def availability(days: int = Query(7, ge=1, le=14)):
-    """Simple availability using BUSINESS_HOURS & SLOT_MINUTES, filtered by Google free/busy."""
+def availability(
+    days: int = Query(7, ge=1, le=14),
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Return open slots based on BUSINESS_HOURS & SLOT_MINUTES, filtered by existing DB bookings."""
     try:
         bh = getattr(config, "BUSINESS_HOURS", "09:00-17:00")
         slot_min = int(getattr(config, "SLOT_MINUTES", 60))
@@ -171,6 +152,18 @@ def availability(days: int = Query(7, ge=1, le=14)):
         end_t = time(17, 0)
 
     now = datetime.now(timezone.utc)
+    window_end = now + timedelta(days=days)
+
+    # Bookings are stored as UTC-naive — strip tz for comparison
+    now_naive = now.replace(tzinfo=None)
+    window_end_naive = window_end.replace(tzinfo=None)
+    existing = session.exec(
+        select(BookingModel)
+        .where(BookingModel.tenant_id == tenant_id)
+        .where(BookingModel.end > now_naive)
+        .where(BookingModel.start < window_end_naive)
+    ).all()
+
     out: List[str] = []
     step = timedelta(minutes=slot_min + buf_min)
 
@@ -181,7 +174,10 @@ def availability(days: int = Query(7, ge=1, le=14)):
         while cursor + timedelta(minutes=slot_min) <= end_of_day:
             slot_start = cursor
             slot_end = cursor + timedelta(minutes=slot_min)
-            if _gcal_is_free(slot_start, slot_end):
+            s = slot_start.replace(tzinfo=None)
+            e = slot_end.replace(tzinfo=None)
+            conflict = any(not (e <= b.start or s >= b.end) for b in existing)
+            if not conflict:
                 out.append(slot_start.isoformat())
             cursor += step
 
@@ -189,8 +185,12 @@ def availability(days: int = Query(7, ge=1, le=14)):
 
 
 @router.get("/public/availability", operation_id="public_bookings_availability_get")
-def public_availability(days: int = Query(7, ge=1, le=14)):
-    return availability(days)
+def public_availability(
+    days: int = Query(7, ge=1, le=14),
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    return availability(days, session, tenant_id)
 
 
 # ===== Upcoming Bookings (per-tenant) =====
@@ -251,12 +251,18 @@ def book(
     if end_local <= start_local:
         raise HTTPException(status_code=422, detail="end must be after start")
 
-    # ✅ store in DB as UTC (naive) to avoid tz dropping bugs in SQLite
+    # Store as UTC-naive to match availability query comparisons
     start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
     end_utc = end_local.astimezone(timezone.utc).replace(tzinfo=None)
 
-    # ✅ use LOCAL (tz-aware) for Google Calendar free/busy + event creation
-    if not _gcal_is_free(start_local, end_local):
+    # Check DB for overlapping bookings (stored as UTC-naive)
+    conflict = session.exec(
+        select(BookingModel)
+        .where(BookingModel.tenant_id == tenant_id)
+        .where(BookingModel.start < end_utc)
+        .where(BookingModel.end > start_utc)
+    ).first()
+    if conflict:
         raise HTTPException(status_code=409, detail="Time slot is not available")
 
     event_id = _gcal_create_event(

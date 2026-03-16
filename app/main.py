@@ -36,7 +36,6 @@ from app.routers.reminders import router as reminders_router
 from app.routers.tasks import router as tasks_router
 from app.routers.reviews import router as reviews_router
 from app.routers.oauth_google import router as google_oauth_router
-from app.routers.availability import router as availability_router
 from app.routers.bookings import router as bookings_router
 from app.routers.admin import router as admin_router
 from app.routers.sms_debug import router as sms_debug_router
@@ -62,9 +61,18 @@ app = FastAPI(
 )
 
 # ---------- CORS ----------
+_CORS_ORIGINS = [
+    "https://saas-mvp-hvac.onrender.com",
+    "https://saas-mvp-hvac-staging.onrender.com",
+]
+_extra = os.getenv("CORS_EXTRA_ORIGINS", "")
+for _o in _extra.replace(",", " ").split():
+    if _o not in _CORS_ORIGINS:
+        _CORS_ORIGINS.append(_o)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -150,7 +158,6 @@ OPEN_PATHS = {
     "/redoc",
     # backup admin endpoints (they do their own bearer auth)
     "/backup/debug-admin-env",
-    "/backup/sqlite",
 }
 
 IS_DEV = (str(os.getenv("ENV") or getattr(config, "ENV", "dev")).lower() == "dev")
@@ -288,7 +295,6 @@ app.include_router(backup.router)
 app.include_router(tenantold.router)
 app.include_router(admin_tenants_router)
 app.include_router(google_oauth_router)
-app.include_router(availability_router)
 app.include_router(tasks_router)
 app.include_router(backup_router.router)
 app.include_router(public_router)
