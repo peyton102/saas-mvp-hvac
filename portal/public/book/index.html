@@ -190,55 +190,58 @@
     });
   }
 
-  // Slots fetched once on load; filtered synchronously on day-change.
-  let cachedSlots = null; // null = loading, [] = loaded
-
-  async function loadSlots() {
-    try {
-      const url = `${API}/availability?days=14&tenant=${encodeURIComponent(tenant)}`;
-      const r = await fetch(url, { headers: COMMON_HEADERS });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      cachedSlots = data.slots || [];
-    } catch (e) {
-      console.error(‘[AVAILABILITY]’, e);
-      cachedSlots = [];
-    }
-    if (dayEl.value) renderTimesForDay(); // refresh dropdown if day already chosen
-  }
-
-  function renderTimesForDay() {
-    const dayValue = dayEl.value;
+  // ✅ SIMPLE AVAILABILITY: always 7–18, don’t try to hide already-booked slots (for now)
+  async function renderTimesForDay() {
+    const dayValue = dayEl.value; // "YYYY-MM-DD"
+    console.log("[renderTimesForDay] day =", dayValue);
     if (!dayValue) {
-      slotEl.innerHTML = ‘<option value="">Select a day first</option>’;
+      slotEl.innerHTML = '<option value="">Select a day first</option>';
       return;
     }
-    if (cachedSlots === null) {
-      slotEl.innerHTML = ‘<option value="">Loading available times…</option>’;
-      return;
+
+    const startHour = 7;
+    const endHour   = 18;
+
+    const options = [];
+    for (let hour = startHour; hour <= endHour; hour++) {
+      const hh = hour.toString().padStart(2, "0");
+      const localWall = `${dayValue}T${hh}:00:00`;  // local wall time
+      const label = formatTimeLabel(localWall);
+      options.push(`<option value="${localWall}">${label}</option>`);
     }
-    const slots = cachedSlots.filter(s => s.substring(0, 10) === dayValue);
-    slotEl.innerHTML = slots.length
-      ? slots.map(s => `<option value="${s}">${formatTimeLabel(s)}</option>`).join(‘’)
-      : ‘<option value="">No available times for this day</option>’;
+
+    slotEl.innerHTML = options.join('');
   }
 
-  loadSlots(); // kick off in background immediately
-
-  dayEl.addEventListener(‘change’, () => { renderTimesForDay(); });
-  serviceEl.addEventListener(‘change’, () => {
+  dayEl.addEventListener('change', () => { renderTimesForDay(); });
+  serviceEl.addEventListener('change', () => {
     if (dayEl.value) renderTimesForDay();
   });
+function localWallToZonedIso(localWall) {
+  // localWall: "YYYY-MM-DDTHH:mm:ss" (NO offset)
+  const d = new Date(localWall);
+
+  // getTimezoneOffset() = minutes behind UTC (NY winter = 300)
+  const offMin = d.getTimezoneOffset();
+  const sign = offMin > 0 ? "-" : "+";
+  const abs = Math.abs(offMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+
+  return `${localWall}${sign}${hh}:${mm}`;
+}
+
+
   // ---- BOOKING submit ----
   btn.addEventListener('click', async () => {
     okEl.style.display = 'none';
     errEl.style.display = 'none';
 
-    const startsIso = slotEl.value;    // offset-aware ISO from the API
-    const name      = nameEl.value.trim();
+    const startsLocal = slotEl.value;    // "YYYY-MM-DDTHH:00:00"
+    const name        = nameEl.value.trim();
 
-    if (!startsIso || (!isReschedule && !name)) {
-      errEl.textContent = !startsIso ? 'Please select a time.' : 'Please enter your name.';
+    if (!startsLocal || (!isReschedule && !name)) {
+      errEl.textContent = !startsLocal ? 'Please select a time.' : 'Please enter your name.';
       errEl.style.display = 'block';
       return;
     }
@@ -249,9 +252,24 @@
     const address = addressEl.value.trim() || null;
     const notes   = notesEl.value.trim()   || null;
 
+    const startsIso = localWallToZonedIso(startsLocal);
+
+
+
     try {
-      // Compute end = start + 1 hour
-      const endIso = new Date(new Date(startsIso).getTime() + 60 * 60 * 1000).toISOString();
+      // Compute end = start + 1 hour (local wall time)
+      const startDate = new Date(startsLocal);
+      const endDate   = new Date(startDate.getTime() + 60 * 60 * 1000);
+      const endLocalWall = [
+        endDate.getFullYear(),
+        String(endDate.getMonth() + 1).padStart(2, "0"),
+        String(endDate.getDate()).padStart(2, "0"),
+      ].join("-") + "T" + [
+        String(endDate.getHours()).padStart(2, "0"),
+        String(endDate.getMinutes()).padStart(2, "0"),
+        "00",
+      ].join(":");
+      const endIso = localWallToZonedIso(endLocalWall);
 
       // Fold service + address into notes so nothing is lost
       const fullNotes = [
@@ -298,8 +316,7 @@
       okEl.style.display = 'block';
 
       if (!isReschedule) {
-        // Remove the booked slot from the cache so it disappears immediately
-        if (cachedSlots) cachedSlots = cachedSlots.filter(s => s !== startsIso);
+        const savedDay = dayEl.value;  // keep same day
 
         nameEl.value = '';
         phoneEl.value = '';
@@ -307,7 +324,13 @@
         addressEl.value = '';
         notesEl.value = '';
 
-        renderTimesForDay(); // re-render without the booked slot
+        if (savedDay) {
+          dayEl.value = savedDay;
+          await renderTimesForDay();
+        } else {
+          dayEl.value = '';
+          slotEl.innerHTML = '<option value="">Select a day first</option>';
+        }
       }
     } catch (e) {
       errEl.textContent = `Booking failed: ${e.message || e}`;
