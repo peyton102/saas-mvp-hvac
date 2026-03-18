@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request, HTTPException
 
 from app.deps import get_tenant_id
 from app import config, storage
+from app.routers.tenant import get_tenant_tz
 from app.services.sms import send_sms
 from app.services.email import send_booking_reminder
 from app.db import get_session
@@ -97,11 +98,11 @@ def _already_sent(session: Session, tenant_id: str, phone: str, template: str, b
 
 
 
-def _make_msg(name: str, start_dt_utc: datetime) -> str:
+def _make_msg(name: str, start_dt_utc: datetime, tenant_tz: ZoneInfo) -> str:
     who = (name or "").strip() or "there"
-    tz_name = getattr(config, "TZ", "America/New_York")
+    tz_name = str(tenant_tz)
     try:
-        local = start_dt_utc.astimezone(ZoneInfo(tz_name))
+        local = start_dt_utc.astimezone(tenant_tz)
     except Exception:
         local = start_dt_utc
     when = local.strftime("%a %b %d at %I:%M %p").lstrip("0")
@@ -138,11 +139,7 @@ def _iter_due(session: Session, tenant_id: str, window_minutes: int) -> List[Dic
     templates = _parse_reminder_list()
     due: List[Dict[str, Any]] = []
 
-    tz_name = getattr(config, "TZ", "America/New_York")
-    try:
-        local_tz = ZoneInfo(tz_name)
-    except Exception:
-        local_tz = timezone.utc
+    tenant_tz = get_tenant_tz(tenant_id, session)
 
     for r in rows:
         if not r.start:
@@ -164,7 +161,7 @@ def _iter_due(session: Session, tenant_id: str, window_minutes: int) -> List[Dic
             trigger = start_dt_utc - delta
             if (window_start - timedelta(seconds=window_pad)) <= trigger <= (window_end + timedelta(seconds=window_pad)):
                 if e164 and not _already_sent(session, tenant_id, e164, tpl_name, start_dt_utc.replace(microsecond=0)):
-                    body = _make_msg(name, start_dt_utc)
+                    body = _make_msg(name, start_dt_utc, tenant_tz)
                     due.append({
                         "tenant_id": tenant_id,
                         "phone": e164,
@@ -275,13 +272,14 @@ def _send_for_tenant(session: Session, tenant_id: str, look_back_minutes: int) -
         # EMAIL reminder (24h / 2h) – parallel to SMS
         email_ok = False
         try:
+            start_dt_local = start_dt.astimezone(get_tenant_tz(tenant_id, session))
             email_payload = {
                 "name": name,
                 "email": it.get("email") or None,
                 "phone": phone,
                 "address": "",
                 "service": "appointment",
-                "starts_at_iso": start_dt.isoformat(),
+                "starts_at_iso": start_dt_local.isoformat(),
                 "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
             }
             email_ok = send_booking_reminder(tenant_id, email_payload, template)

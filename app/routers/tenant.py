@@ -1,5 +1,6 @@
 # app/routers/tenant.py
 from typing import Any, Dict, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -12,6 +13,21 @@ from app.models import Tenant
 from app.services.review_link_resolver import resolve_and_save_google_review_link
 
 router = APIRouter(prefix="/tenant", tags=["tenant"])
+
+_DEFAULT_TZ = "America/New_York"
+
+
+def get_tenant_tz(tenant_id: str, session: Session) -> ZoneInfo:
+    """Return the ZoneInfo for a tenant's configured timezone, defaulting to America/New_York."""
+    try:
+        t = session.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
+        tz_str = (getattr(t, "timezone", None) or "").strip() if t else ""
+        if tz_str:
+            return ZoneInfo(tz_str)
+    except (ZoneInfoNotFoundError, Exception):
+        pass
+    return ZoneInfo(getattr(config, "TZ", _DEFAULT_TZ))
+
 
 # ---------------- config helpers ----------------
 
@@ -172,6 +188,7 @@ class TenantSettingsIn(BaseModel):
     review_google_url: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    timezone: Optional[str] = None  # IANA tz string, e.g. "America/Chicago"
 
 
 class ProfileIn(BaseModel):
@@ -272,6 +289,12 @@ def update_tenant_settings(
         if isinstance(value, str):
             data[key] = value.strip()
 
+    if "timezone" in data:
+        try:
+            ZoneInfo(data["timezone"])
+        except (ZoneInfoNotFoundError, Exception):
+            raise HTTPException(status_code=422, detail=f"Unknown timezone: {data['timezone']!r}")
+
     for key, value in data.items():
         setattr(t, key, value)
 
@@ -302,6 +325,7 @@ def get_tenant_settings(
         "phone": t.phone,
         "website": t.website,
         "address": t.address,
+        "timezone": t.timezone or _DEFAULT_TZ,
     }
 
 

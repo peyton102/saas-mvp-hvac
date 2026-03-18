@@ -77,6 +77,9 @@ class Tenant(SQLModel, table=True):
     office_sms_to: Optional[str] = Field(default="", max_length=50)   # internal SMS alerts
     office_email_to: Optional[str] = Field(default="", max_length=255)  # internal email alerts
 
+    # timezone for this tenant (IANA string, e.g. "America/New_York")
+    timezone: Optional[str] = Field(default="America/New_York", max_length=64)
+
     # --- QBO fields ---
     qbo_realm_id: Optional[str] = None
     qbo_access_token: Optional[str] = None

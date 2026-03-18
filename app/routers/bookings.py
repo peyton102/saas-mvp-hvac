@@ -13,6 +13,7 @@ from app import config, storage
 from app.db import get_session
 from app.deps import get_tenant_id
 from app.models import Booking as BookingModel, ReminderSent
+from app.routers.tenant import get_tenant_tz
 
 from app.services import google_calendar as gcal
 from app.services.sms import (
@@ -151,11 +152,13 @@ def availability(
         start_t = time(9, 0)
         end_t = time(17, 0)
 
-    now = datetime.now(timezone.utc)
-    window_end = now + timedelta(days=days)
+    tenant_tz = get_tenant_tz(tenant_id, session)
+    now_tz = datetime.now(tenant_tz)
+    now_utc = datetime.now(timezone.utc)
+    window_end = now_utc + timedelta(days=days)
 
     # Bookings are stored as UTC-naive — strip tz for comparison
-    now_naive = now.replace(tzinfo=None)
+    now_naive = now_utc.replace(tzinfo=None)
     window_end_naive = window_end.replace(tzinfo=None)
     existing = session.exec(
         select(BookingModel)
@@ -168,14 +171,17 @@ def availability(
     step = timedelta(minutes=slot_min + buf_min)
 
     for d in range(days):
-        day = (now + timedelta(days=d)).date()
-        cursor = datetime.combine(day, start_t, tzinfo=now.tzinfo)
-        end_of_day = datetime.combine(day, end_t, tzinfo=now.tzinfo)
+        day = (now_tz + timedelta(days=d)).date()
+        cursor = datetime.combine(day, start_t, tzinfo=tenant_tz)
+        end_of_day = datetime.combine(day, end_t, tzinfo=tenant_tz)
         while cursor + timedelta(minutes=slot_min) <= end_of_day:
             slot_start = cursor
             slot_end = cursor + timedelta(minutes=slot_min)
-            s = slot_start.replace(tzinfo=None)
-            e = slot_end.replace(tzinfo=None)
+            if slot_start < now_tz:
+                cursor += step
+                continue
+            s = slot_start.astimezone(timezone.utc).replace(tzinfo=None)
+            e = slot_end.astimezone(timezone.utc).replace(tzinfo=None)
             conflict = any(not (e <= b.start or s >= b.end) for b in existing)
             if not conflict:
                 out.append(slot_start.isoformat())
@@ -209,14 +215,14 @@ def list_upcoming_bookings(
         .order_by(BookingModel.start.asc())
     ).all()
 
-    def _to_utc_z(dt):
+    tenant_tz = get_tenant_tz(tenant_id, session)
+
+    def _to_tenant_tz(dt):
         if not dt:
             return None
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        else:
-            dt = dt.astimezone(timezone.utc)
-        return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+        return dt.astimezone(tenant_tz).isoformat(timespec="seconds")
 
     out = []
     for r in rows:
@@ -228,10 +234,10 @@ def list_upcoming_bookings(
             "phone": r.phone,
             "notes": r.notes,
             "source": r.source,
-            "start": _to_utc_z(r.start),
-            "end": _to_utc_z(r.end),
-            "created_at": _to_utc_z(getattr(r, "created_at", None)),
-            "completed_at": _to_utc_z(getattr(r, "completed_at", None)),
+            "start": _to_tenant_tz(r.start),
+            "end": _to_tenant_tz(r.end),
+            "created_at": _to_tenant_tz(getattr(r, "created_at", None)),
+            "completed_at": _to_tenant_tz(getattr(r, "completed_at", None)),
         })
 
     return out
@@ -363,12 +369,12 @@ def list_upcoming_bookings_debug(
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    now = datetime.now(timezone.utc)
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
 
     bookings = session.exec(
         select(BookingModel)
         .where(BookingModel.tenant_id == tenant_id)
-        .where(BookingModel.start >= now)
+        .where(BookingModel.start >= now_naive)
         .order_by(BookingModel.start)
         .limit(50)
     ).all()
@@ -444,13 +450,17 @@ def run_review_reminders(
             continue
 
         tenant_id = r.tenant_id or "default"
-        starts_at = r.booking_start or now
+        tenant_tz = get_tenant_tz(tenant_id, session)
+        starts_at_raw = r.booking_start or now
+        if starts_at_raw.tzinfo is None:
+            starts_at_raw = starts_at_raw.replace(tzinfo=timezone.utc)
+        starts_at_local = starts_at_raw.astimezone(tenant_tz)
 
         payload = {
             "name": r.name or "there",
             "phone": r.phone,
             "service": "appointment",
-            "starts_at_iso": starts_at.isoformat(),
+            "starts_at_iso": starts_at_local.isoformat(),
         }
 
         ok = booking_reminder_sms(tenant_id, payload, "review")
