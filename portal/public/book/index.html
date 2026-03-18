@@ -190,42 +190,43 @@
     });
   }
 
-  async function renderTimesForDay() {
-    const dayValue = dayEl.value; // "YYYY-MM-DD"
-    if (!dayValue) {
-      slotEl.innerHTML = ‘<option value="">Select a day first</option>’;
-      return;
-    }
+  // Slots fetched once on load; filtered synchronously on day-change.
+  let cachedSlots = null; // null = loading, [] = loaded
 
-    slotEl.innerHTML = ‘<option value="">Loading…</option>’;
-    slotEl.disabled = true;
-
+  async function loadSlots() {
     try {
       const url = `${API}/availability?days=14&tenant=${encodeURIComponent(tenant)}`;
       const r = await fetch(url, { headers: COMMON_HEADERS });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
-
-      // Slots are tenant-local ISO strings — filter to the selected day by date prefix
-      const slots = (data.slots || []).filter(s => s.substring(0, 10) === dayValue);
-
-      if (slots.length === 0) {
-        slotEl.innerHTML = ‘<option value="">No available times for this day</option>’;
-      } else {
-        slotEl.innerHTML = slots.map(s =>
-          `<option value="${s}">${formatTimeLabel(s)}</option>`
-        ).join(‘’);
-      }
+      cachedSlots = data.slots || [];
     } catch (e) {
       console.error(‘[AVAILABILITY]’, e);
-      slotEl.innerHTML = ‘<option value="">Could not load times — try again</option>’;
-    } finally {
-      slotEl.disabled = false;
+      cachedSlots = [];
     }
+    if (dayEl.value) renderTimesForDay(); // refresh dropdown if day already chosen
   }
 
-  dayEl.addEventListener('change', () => { renderTimesForDay(); });
-  serviceEl.addEventListener('change', () => {
+  function renderTimesForDay() {
+    const dayValue = dayEl.value;
+    if (!dayValue) {
+      slotEl.innerHTML = ‘<option value="">Select a day first</option>’;
+      return;
+    }
+    if (cachedSlots === null) {
+      slotEl.innerHTML = ‘<option value="">Loading available times…</option>’;
+      return;
+    }
+    const slots = cachedSlots.filter(s => s.substring(0, 10) === dayValue);
+    slotEl.innerHTML = slots.length
+      ? slots.map(s => `<option value="${s}">${formatTimeLabel(s)}</option>`).join(‘’)
+      : ‘<option value="">No available times for this day</option>’;
+  }
+
+  loadSlots(); // kick off in background immediately
+
+  dayEl.addEventListener(‘change’, () => { renderTimesForDay(); });
+  serviceEl.addEventListener(‘change’, () => {
     if (dayEl.value) renderTimesForDay();
   });
   // ---- BOOKING submit ----
@@ -297,7 +298,8 @@
       okEl.style.display = 'block';
 
       if (!isReschedule) {
-        const savedDay = dayEl.value;  // keep same day
+        // Remove the booked slot from the cache so it disappears immediately
+        if (cachedSlots) cachedSlots = cachedSlots.filter(s => s !== startsIso);
 
         nameEl.value = '';
         phoneEl.value = '';
@@ -305,13 +307,7 @@
         addressEl.value = '';
         notesEl.value = '';
 
-        if (savedDay) {
-          dayEl.value = savedDay;
-          await renderTimesForDay();
-        } else {
-          dayEl.value = '';
-          slotEl.innerHTML = '<option value="">Select a day first</option>';
-        }
+        renderTimesForDay(); // re-render without the booked slot
       }
     } catch (e) {
       errEl.textContent = `Booking failed: ${e.message || e}`;
