@@ -190,58 +190,54 @@
     });
   }
 
-  // ✅ SIMPLE AVAILABILITY: always 7–18, don’t try to hide already-booked slots (for now)
   async function renderTimesForDay() {
     const dayValue = dayEl.value; // "YYYY-MM-DD"
-    console.log("[renderTimesForDay] day =", dayValue);
     if (!dayValue) {
-      slotEl.innerHTML = '<option value="">Select a day first</option>';
+      slotEl.innerHTML = ‘<option value="">Select a day first</option>’;
       return;
     }
 
-    const startHour = 7;
-    const endHour   = 18;
+    slotEl.innerHTML = ‘<option value="">Loading…</option>’;
+    slotEl.disabled = true;
 
-    const options = [];
-    for (let hour = startHour; hour <= endHour; hour++) {
-      const hh = hour.toString().padStart(2, "0");
-      const localWall = `${dayValue}T${hh}:00:00`;  // local wall time
-      const label = formatTimeLabel(localWall);
-      options.push(`<option value="${localWall}">${label}</option>`);
+    try {
+      const url = `${API}/availability?days=14&tenant=${encodeURIComponent(tenant)}`;
+      const r = await fetch(url, { headers: COMMON_HEADERS });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+
+      // Slots are tenant-local ISO strings — filter to the selected day by date prefix
+      const slots = (data.slots || []).filter(s => s.substring(0, 10) === dayValue);
+
+      if (slots.length === 0) {
+        slotEl.innerHTML = ‘<option value="">No available times for this day</option>’;
+      } else {
+        slotEl.innerHTML = slots.map(s =>
+          `<option value="${s}">${formatTimeLabel(s)}</option>`
+        ).join(‘’);
+      }
+    } catch (e) {
+      console.error(‘[AVAILABILITY]’, e);
+      slotEl.innerHTML = ‘<option value="">Could not load times — try again</option>’;
+    } finally {
+      slotEl.disabled = false;
     }
-
-    slotEl.innerHTML = options.join('');
   }
 
   dayEl.addEventListener('change', () => { renderTimesForDay(); });
   serviceEl.addEventListener('change', () => {
     if (dayEl.value) renderTimesForDay();
   });
-function localWallToZonedIso(localWall) {
-  // localWall: "YYYY-MM-DDTHH:mm:ss" (NO offset)
-  const d = new Date(localWall);
-
-  // getTimezoneOffset() = minutes behind UTC (NY winter = 300)
-  const offMin = d.getTimezoneOffset();
-  const sign = offMin > 0 ? "-" : "+";
-  const abs = Math.abs(offMin);
-  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
-  const mm = String(abs % 60).padStart(2, "0");
-
-  return `${localWall}${sign}${hh}:${mm}`;
-}
-
-
   // ---- BOOKING submit ----
   btn.addEventListener('click', async () => {
     okEl.style.display = 'none';
     errEl.style.display = 'none';
 
-    const startsLocal = slotEl.value;    // "YYYY-MM-DDTHH:00:00"
-    const name        = nameEl.value.trim();
+    const startsIso = slotEl.value;    // offset-aware ISO from the API
+    const name      = nameEl.value.trim();
 
-    if (!startsLocal || (!isReschedule && !name)) {
-      errEl.textContent = !startsLocal ? 'Please select a time.' : 'Please enter your name.';
+    if (!startsIso || (!isReschedule && !name)) {
+      errEl.textContent = !startsIso ? 'Please select a time.' : 'Please enter your name.';
       errEl.style.display = 'block';
       return;
     }
@@ -252,24 +248,9 @@ function localWallToZonedIso(localWall) {
     const address = addressEl.value.trim() || null;
     const notes   = notesEl.value.trim()   || null;
 
-    const startsIso = localWallToZonedIso(startsLocal);
-
-
-
     try {
-      // Compute end = start + 1 hour (local wall time)
-      const startDate = new Date(startsLocal);
-      const endDate   = new Date(startDate.getTime() + 60 * 60 * 1000);
-      const endLocalWall = [
-        endDate.getFullYear(),
-        String(endDate.getMonth() + 1).padStart(2, "0"),
-        String(endDate.getDate()).padStart(2, "0"),
-      ].join("-") + "T" + [
-        String(endDate.getHours()).padStart(2, "0"),
-        String(endDate.getMinutes()).padStart(2, "0"),
-        "00",
-      ].join(":");
-      const endIso = localWallToZonedIso(endLocalWall);
+      // Compute end = start + 1 hour
+      const endIso = new Date(new Date(startsIso).getTime() + 60 * 60 * 1000).toISOString();
 
       // Fold service + address into notes so nothing is lost
       const fullNotes = [
