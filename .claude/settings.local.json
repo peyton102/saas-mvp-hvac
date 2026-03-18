@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"C:/Users/madde/PycharmProjects/saas-mvp-hvac\" && alembic upgrade head 2>&1)"
+    ]
+  }
+}

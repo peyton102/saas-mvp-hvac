@@ -165,8 +165,6 @@ def get_current_user(
 
 @router.post("/signup", response_model=SignupResponse)
 def signup(payload: SignupRequest, session: Session = Depends(get_session)):
-
-    # --- invite required ---
     ensure_invite_table(session)
 
     code = (payload.invite_code or "").strip()
@@ -190,91 +188,77 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         if datetime.now(timezone.utc) > exp_dt:
             raise HTTPException(status_code=403, detail="Invite expired")
 
-    # --- continue normal signup below ---
-
-
-
-    """
-    Signup:
-    - Uses Tenant as the account (no separate users table).
-    - Enforces unique slug (business_name) and email on Tenant.
-    - Stores password_hash on tenant row (password_hash column).
-    - Creates ApiKey row linked to Tenant.id.
-    - Returns JWT + api_key + tenant_slug.
-    """
-
-    # 1) slug from business name
-    slug = slugify(payload.business_name)
-
-    # 2) check if slug already taken (Tenant.slug)
-    existing_slug = session.exec(
-        select(Tenant).where(Tenant.slug == slug)
-    ).first()
-    if existing_slug:
-        raise HTTPException(status_code=400, detail="Business name is already taken")
-
-    # 3) check if email already used (Tenant.email)
-    email_lower = payload.email.lower().strip()
-    existing_email = session.exec(
-        select(Tenant).where(Tenant.email == email_lower)
-    ).first()
-    if existing_email:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    # 4) ensure tenant table has password_hash column (safe to run repeatedly)
+    # Ensure password_hash column exists. Use a SAVEPOINT so a "column already
+    # exists" error doesn't abort the outer transaction (PostgreSQL DDL is
+    # transactional — a bare except:pass leaves the connection in a broken state).
     try:
+        session.exec(text("SAVEPOINT sp_add_col"))
         session.exec(text("ALTER TABLE tenant ADD COLUMN password_hash TEXT"))
+        session.exec(text("RELEASE SAVEPOINT sp_add_col"))
     except Exception:
-        # column already exists, ignore
-        pass
+        session.exec(text("ROLLBACK TO SAVEPOINT sp_add_col"))
 
-    now = datetime.now(timezone.utc)
-    booking_link_default = getattr(config, "BOOKING_LINK", "") or ""
-
-    # 5) create Tenant row via SQLModel
-    tenant = Tenant(
-        slug=slug,
-        business_name=payload.business_name.strip(),
-        email=email_lower,
-        phone=(payload.phone or "").strip(),
-        booking_link=booking_link_default,
-        review_google_url=(payload.review_link or "").strip(),
-        is_active=True,
-    )
-    session.add(tenant)
-    session.flush()  # assign tenant.id
-
-    # 6) set password_hash on tenant via raw SQL (even if model doesn't have the field)
-    password_hash = hash_password(payload.password)
-    session.exec(
-        text("UPDATE tenant SET password_hash = :pwd WHERE id = :tid")
-        .bindparams(pwd=password_hash, tid=tenant.id)
-    )
-
-    # 7) create ApiKey row — store hash only, return plaintext once to caller
+    slug = slugify(payload.business_name)
+    email_lower = payload.email.lower().strip()
     api_key_plain = secrets.token_hex(32)
-    api_key_row = ApiKey(
-        tenant_id=tenant.id,
-        hashed_key=hash_api_key(api_key_plain),
-        is_active=True,
-    )
-    session.add(api_key_row)
-    result = session.exec(text("""
-        UPDATE invite_code
-        SET used_at = :used_at
-        WHERE code = :code AND used_at IS NULL
-    """).bindparams(
-        used_at=datetime.now(timezone.utc).isoformat(),
-        code=code
-    ))
 
     try:
+        existing_slug = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+        if existing_slug:
+            raise HTTPException(status_code=400, detail="Business name is already taken")
+
+        existing_email = session.exec(select(Tenant).where(Tenant.email == email_lower)).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        booking_link_default = getattr(config, "BOOKING_LINK", "") or ""
+        tenant = Tenant(
+            slug=slug,
+            business_name=payload.business_name.strip(),
+            email=email_lower,
+            phone=(payload.phone or "").strip(),
+            booking_link=booking_link_default,
+            review_google_url=(payload.review_link or "").strip(),
+            is_active=True,
+        )
+        session.add(tenant)
+        session.flush()  # assign tenant.id
+
+        password_hash = hash_password(payload.password)
+        session.exec(
+            text("UPDATE tenant SET password_hash = :pwd WHERE id = :tid")
+            .bindparams(pwd=password_hash, tid=tenant.id)
+        )
+
+        api_key_row = ApiKey(
+            tenant_id=tenant.id,
+            hashed_key=hash_api_key(api_key_plain),
+            is_active=True,
+        )
+        session.add(api_key_row)
+
+        # Mark invite used atomically — rowcount 0 means a concurrent request
+        # already claimed it (race condition guard).
+        result = session.exec(text("""
+            UPDATE invite_code
+            SET used_at = :used_at
+            WHERE code = :code AND used_at IS NULL
+        """).bindparams(
+            used_at=datetime.now(timezone.utc).isoformat(),
+            code=code,
+        ))
         if result.rowcount == 0:
             raise HTTPException(status_code=403, detail="Invite already used")
-    except Exception:
-        pass
 
-    session.commit()
+        session.commit()
+
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Signup failed — please try again") from exc
+
     backup_event(
         session,
         category="auth",
@@ -285,7 +269,6 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         payload={"tenant_slug": slug},
     )
 
-    # 8) build JWT
     token_data = {"sub": email_lower, "tenant": slug}
     access_token = create_access_token(token_data)
 
