@@ -25,9 +25,25 @@ const linkStyle = {
   fontSize: 14,
 };
 
+function EyeIcon({ open }) {
+  return open ? (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  ) : (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  );
+}
+
 export default function LoginPage({ onLoggedIn, onInviteSignup, onForgotPassword }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
 
   const [loading, setLoading] = useState(false);
@@ -108,20 +124,37 @@ export default function LoginPage({ onLoggedIn, onInviteSignup, onForgotPassword
         </div>
 
         <div style={{ display: "grid", gap: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#e5e7eb" }}>Password</div>
-            <button type="button" onClick={() => onForgotPassword?.()} style={linkStyle}>
-              Forgot password?
+          <div style={{ fontSize: 16, fontWeight: 900, color: "#e5e7eb" }}>Password</div>
+          <div style={{ position: "relative" }}>
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              style={{ ...inputStyle, paddingRight: 56 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              style={{
+                position: "absolute",
+                right: 14,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#6b7280",
+                padding: 4,
+                display: "flex",
+                alignItems: "center",
+              }}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              <EyeIcon open={showPassword} />
             </button>
           </div>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            type="password"
-            autoComplete="current-password"
-            style={inputStyle}
-          />
         </div>
 
         <button
@@ -150,7 +183,13 @@ export default function LoginPage({ onLoggedIn, onInviteSignup, onForgotPassword
           </div>
         ) : null}
 
-                <div style={{ textAlign: "center", color: "rgba(229,231,235,0.85)" }}>
+        <div style={{ textAlign: "center" }}>
+          <button type="button" onClick={() => onForgotPassword?.()} style={linkStyle}>
+            Forgot password?
+          </button>
+        </div>
+
+        <div style={{ textAlign: "center", color: "rgba(229,231,235,0.85)" }}>
           Need an invite?{" "}
           <button
             type="button"
