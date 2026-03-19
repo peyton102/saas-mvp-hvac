@@ -6,6 +6,8 @@ import LoginPage from "./LoginPage";
 import TenantSettingsCard from "./components/TenantSettingsCard.jsx";
 import { getToken, setToken, clearToken } from "./auth";
 import InviteSignupPage from "./InviteSignupPage.jsx";
+import ForgotPasswordPage from "./ForgotPasswordPage.jsx";
+import ResetPasswordPage from "./ResetPasswordPage.jsx";
 
 // ====== CONFIG ======
 const API_BASE =
@@ -710,6 +712,10 @@ function App() {
   const [me, setMe] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showInviteSignup, setShowInviteSignup] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  // Check URL for ?reset_token= on initial load
+  const resetToken = new URLSearchParams(window.location.search).get("reset_token");
 
 
   async function fetchMe(token) {
@@ -766,22 +772,44 @@ function handleLoggedIn(loginData) {
 
   const token = getToken();
   if (!token || !me) {
-  if (showInviteSignup) {
+    // Password reset link — show reset form regardless of auth state
+    if (resetToken) {
+      return (
+        <ResetPasswordPage
+          token={resetToken}
+          onDone={() => {
+            window.history.replaceState({}, "", "/");
+            window.location.reload();
+          }}
+        />
+      );
+    }
+
+    if (showInviteSignup) {
+      return (
+        <InviteSignupPage
+          onSignedUp={handleLoggedIn}
+          onBack={() => setShowInviteSignup(false)}
+        />
+      );
+    }
+
+    if (showForgotPassword) {
+      return (
+        <ForgotPasswordPage
+          onBack={() => setShowForgotPassword(false)}
+        />
+      );
+    }
+
     return (
-      <InviteSignupPage
-        onSignedUp={handleLoggedIn}   // reuse same token-saving flow
-        onBack={() => setShowInviteSignup(false)}
+      <LoginPage
+        onLoggedIn={handleLoggedIn}
+        onInviteSignup={() => setShowInviteSignup(true)}
+        onForgotPassword={() => setShowForgotPassword(true)}
       />
     );
   }
-
-  return (
-    <LoginPage
-      onLoggedIn={handleLoggedIn}
-      onInviteSignup={() => setShowInviteSignup(true)}
-    />
-  );
-}
 
 
   // Logged-in: show the real portal
