@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(cd \"C:/Users/madde/PycharmProjects/saas-mvp-hvac\" && alembic upgrade head 2>&1)",
-      "Bash(cd \"C:/Users/madde/PycharmProjects/saas-mvp-hvac\" && find portal/src -name \"*.tsx\" -o -name \"*.jsx\" -o -name \"*.ts\" -o -name \"*.js\" | xargs grep -l -i \"signup\\\\|sign.up\\\\|password\\\\|register\" 2>/dev/null)"
+      "Bash(cd \"C:/Users/madde/PycharmProjects/saas-mvp-hvac\" && find portal/src -name \"*.tsx\" -o -name \"*.jsx\" -o -name \"*.ts\" -o -name \"*.js\" | xargs grep -l -i \"signup\\\\|sign.up\\\\|password\\\\|register\" 2>/dev/null)",
+      "Bash(git checkout:*)"
     ]
   }
 }
