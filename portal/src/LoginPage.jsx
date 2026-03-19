@@ -25,7 +25,7 @@ const linkStyle = {
   fontSize: 14,
 };
 
-export default function LoginPage({ onLoggedIn, onInviteSignup }) {
+export default function LoginPage({ onLoggedIn, onInviteSignup, onForgotPassword }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -108,15 +108,18 @@ export default function LoginPage({ onLoggedIn, onInviteSignup }) {
         </div>
 
         <div style={{ display: "grid", gap: 8 }}>
-          <div style={{ fontSize: 16, fontWeight: 900, color: "#e5e7eb" }}>
-            Password
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: "#e5e7eb" }}>Password</div>
+            <button type="button" onClick={() => onForgotPassword?.()} style={linkStyle}>
+              Forgot password?
+            </button>
           </div>
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             type="password"
-                       autoComplete="current-password"
+            autoComplete="current-password"
             style={inputStyle}
           />
         </div>

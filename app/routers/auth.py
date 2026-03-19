@@ -18,9 +18,10 @@ from jose import JWTError, jwt
 import os
 from app.routers.invites import ensure_invite_table
 
-from app.models import Tenant, ApiKey
+from app.models import Tenant, ApiKey, PasswordResetToken
 from app.db import get_session
 from app import config
+from app.services.email import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -135,6 +136,15 @@ class SignupRequest(BaseModel):
     phone: Optional[str] = None
     password: str
     review_link: Optional[str] = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
 
 # ----------------- Auth dependency: get_current_user -----------------
 
@@ -413,3 +423,102 @@ def me(
         office_sms_to=tenant.office_sms_to,
         office_email_to=tenant.office_email_to,
     )
+
+
+# ----------------- Forgot Password -----------------
+
+
+@router.post("/forgot-password", status_code=200)
+def forgot_password(payload: ForgotPasswordRequest, session: Session = Depends(get_session)):
+    """
+    Always returns 200 to avoid leaking whether an email is registered.
+    Sends a reset link if the email exists.
+    """
+    email_lower = payload.email.lower().strip()
+
+    tenant = session.exec(select(Tenant).where(Tenant.email == email_lower)).first()
+    if not tenant:
+        # Return success anyway — don't reveal whether email exists
+        return {"ok": True}
+
+    # Invalidate any existing unused tokens for this email
+    existing_tokens = session.exec(
+        select(PasswordResetToken)
+        .where(PasswordResetToken.email == email_lower)
+        .where(PasswordResetToken.used_at.is_(None))
+    ).all()
+    for t in existing_tokens:
+        t.used_at = datetime.now(timezone.utc)
+    session.flush()
+
+    # Generate token
+    plaintext = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(plaintext.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    session.add(PasswordResetToken(
+        token_hash=token_hash,
+        email=email_lower,
+        expires_at=expires_at,
+    ))
+    session.commit()
+
+    portal_url = getattr(config, "PORTAL_URL", "https://saas-mvp-hvac-1.onrender.com").rstrip("/")
+    reset_url = f"{portal_url}?reset_token={plaintext}"
+
+    try:
+        send_password_reset_email(email_lower, reset_url)
+    except Exception as e:
+        print(f"[FORGOT PASSWORD EMAIL ERROR] {e}")
+
+    return {"ok": True}
+
+
+# ----------------- Reset Password -----------------
+
+
+@router.post("/reset-password", status_code=200)
+def reset_password(payload: ResetPasswordRequest, session: Session = Depends(get_session)):
+    if not payload.token or not payload.password:
+        raise HTTPException(status_code=422, detail="Token and password are required.")
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
+
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    record = session.exec(
+        select(PasswordResetToken)
+        .where(PasswordResetToken.token_hash == token_hash)
+        .where(PasswordResetToken.used_at.is_(None))
+    ).first()
+
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or already-used reset link.")
+
+    # Compare as UTC-naive if record.expires_at is naive
+    expires = record.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if now > expires:
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+
+    # Update password on the tenant row
+    try:
+        session.exec(text("ALTER TABLE tenant ADD COLUMN password_hash TEXT"))
+    except Exception:
+        pass
+
+    new_hash = hash_password(payload.password)
+    result = session.exec(
+        text("UPDATE tenant SET password_hash = :pwd WHERE email = :email")
+        .bindparams(pwd=new_hash, email=record.email)
+    )
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=400, detail="Account not found.")
+
+    record.used_at = now
+    session.commit()
+
+    return {"ok": True}

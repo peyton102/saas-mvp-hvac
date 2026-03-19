@@ -38,17 +38,71 @@ const backBtn = {
   cursor: "pointer",
 };
 
+function EyeIcon({ open }) {
+  return open ? (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  ) : (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  );
+}
+
+function PasswordInput({ placeholder, value, onChange, autoComplete, show, onToggle }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        placeholder={placeholder}
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+        autoComplete={autoComplete}
+        style={{ ...inputStyle, paddingRight: 56 }}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          position: "absolute",
+          right: 14,
+          top: "50%",
+          transform: "translateY(-50%)",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#6b7280",
+          padding: 4,
+          display: "flex",
+          alignItems: "center",
+        }}
+        aria-label={show ? "Hide password" : "Show password"}
+      >
+        <EyeIcon open={show} />
+      </button>
+    </div>
+  );
+}
+
 export default function InviteSignupPage({ onSignedUp, onBack }) {
   const [inviteCode, setInviteCode] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [phone, setPhone] = useState("");
   const [reviewLink, setReviewLink] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+
+  const toggleShow = () => setShowPassword((v) => !v);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -58,6 +112,7 @@ export default function InviteSignupPage({ onSignedUp, onBack }) {
     if (!businessName.trim()) return setErr("Business name is required.");
     if (!email.trim()) return setErr("Email is required.");
     if (!password.trim()) return setErr("Password is required.");
+    if (password !== confirmPassword) return setErr("Passwords do not match.");
 
     setLoading(true);
     try {
@@ -81,7 +136,6 @@ export default function InviteSignupPage({ onSignedUp, onBack }) {
         return;
       }
 
-      // Hand control back to App.jsx so it stores token/api_key correctly and loads /auth/me
       onSignedUp?.(data);
     } catch {
       setErr("Network error. Is the API reachable?");
@@ -147,13 +201,22 @@ export default function InviteSignupPage({ onSignedUp, onBack }) {
             autoComplete="email"
             style={inputStyle}
           />
-          <input
+
+          <PasswordInput
             placeholder="Password"
-            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
-            style={inputStyle}
+            show={showPassword}
+            onToggle={toggleShow}
+          />
+          <PasswordInput
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+            show={showPassword}
+            onToggle={toggleShow}
           />
 
           <input

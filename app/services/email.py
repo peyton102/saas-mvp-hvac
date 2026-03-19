@@ -371,6 +371,37 @@ def _reminder_html(tenant: str, p: dict, window: str) -> str:
     """.strip()
 
 
+def send_password_reset_email(email: str, reset_url: str) -> bool:
+    """Send a password reset link to the given email address."""
+    from_name = getattr(config, "FROM_NAME", "HVAC Bot")
+    subject = f"Reset your {from_name} password"
+    text = (
+        f"Click the link below to reset your password. It expires in 1 hour.\n\n"
+        f"{reset_url}\n\n"
+        f"If you didn't request this, you can safely ignore this email."
+    )
+    html = f"""
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;max-width:480px">
+      <p>Click the button below to reset your <strong>{from_name}</strong> password.
+         The link expires in <strong>1 hour</strong>.</p>
+      <p>
+        <a href="{reset_url}"
+           style="display:inline-block;padding:12px 28px;background:#f97316;color:#111827;
+                  font-weight:700;text-decoration:none;border-radius:8px">
+          Reset Password
+        </a>
+      </p>
+      <p style="color:#6b7280;font-size:13px">
+        Or copy this link:<br>{reset_url}
+      </p>
+      <p style="color:#6b7280;font-size:13px">
+        If you didn't request a password reset, you can safely ignore this email.
+      </p>
+    </div>
+    """.strip()
+    return send_email(email, subject, text, html=html)
+
+
 def send_booking_reminder(tenant: str, payload: dict, window: str) -> bool:
     """
     window: "24h" or "2h" (or any tag like "review" if you reuse it)

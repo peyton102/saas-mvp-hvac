@@ -127,6 +127,20 @@ class ReminderSent(SQLModel, table=True):
     tenant_id: str = Field(default="public", index=True)  # <-- keep "public"
 
 
+# ---------- Password reset ----------
+
+
+class PasswordResetToken(SQLModel, table=True):
+    __tablename__ = "password_reset_token"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    token_hash: str = Field(index=True, unique=True)  # SHA-256 of plaintext token
+    email: str = Field(index=True)
+    expires_at: datetime
+    used_at: Optional[datetime] = Field(default=None)
+
+
 # ---------- Idempotency helper ----------
 
 

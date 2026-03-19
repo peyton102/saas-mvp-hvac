@@ -150,6 +150,8 @@ OPEN_PATHS = {
     "/health",
     "/auth/login",
     "/auth/signup",
+    "/auth/forgot-password",
+    "/auth/reset-password",
     "/_int/whoami-raw",
     "/whoami",
     "/debug/whoami-verbose",
