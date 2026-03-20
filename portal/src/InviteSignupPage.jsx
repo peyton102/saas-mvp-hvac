@@ -88,10 +88,10 @@ function PasswordInput({ placeholder, value, onChange, autoComplete, show, onTog
   );
 }
 
-export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "" }) {
+export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "", initialEmail = "" }) {
   const [inviteCode, setInviteCode] = useState(initialCode);
   const [businessName, setBusinessName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);

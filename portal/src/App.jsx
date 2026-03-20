@@ -10,6 +10,7 @@ import ForgotPasswordPage from "./ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./ResetPasswordPage.jsx";
 import AdminInviteCard from "./components/AdminInviteCard.jsx";
 import MissedCallsCard from "./components/MissedCallsCard.jsx";
+import AdminTab from "./components/AdminTab.jsx";
 
 // ====== CONFIG ======
 const API_BASE =
@@ -395,6 +396,9 @@ const headers = useMemo(() => {
         <TopTab label="Calls" active={tab === "calls"} onClick={() => setTab("calls")} />
         <TopTab label="Bookings" active={tab === "bookings"} onClick={() => setTab("bookings")} />
         <TopTab label="Settings" active={tab === "settings"} onClick={() => setTab("settings")} />
+        {me?.is_admin && (
+          <TopTab label="Admin" active={tab === "admin"} onClick={() => setTab("admin")} admin />
+        )}
       </div>
 
       {/* page body */}
@@ -688,13 +692,17 @@ const headers = useMemo(() => {
         {tab === "calls" && (
           <MissedCallsCard apiBase={BASE} commonHeaders={headers} />
         )}
+
+        {tab === "admin" && me?.is_admin && (
+          <AdminTab apiBase={BASE} commonHeaders={headers} />
+        )}
       </div>
     </div>
   </div>
 );
 
 /** inline helper component for tabs */
-function TopTab({ label, active, onClick }) {
+function TopTab({ label, active, onClick, admin = false }) {
   return (
     <button
       onClick={onClick}
@@ -702,9 +710,15 @@ function TopTab({ label, active, onClick }) {
       style={{
         padding: "10px 12px",
         borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: active ? "rgba(249,115,22,0.18)" : "rgba(255,255,255,0.04)",
-        color: active ? "#f97316" : "rgba(229,231,235,0.85)",
+        border: admin
+          ? (active ? "1px solid rgba(167,139,250,0.5)" : "1px solid rgba(167,139,250,0.25)")
+          : "1px solid rgba(255,255,255,0.10)",
+        background: admin
+          ? (active ? "rgba(167,139,250,0.18)" : "rgba(167,139,250,0.07)")
+          : (active ? "rgba(249,115,22,0.18)" : "rgba(255,255,255,0.04)"),
+        color: admin
+          ? (active ? "#a78bfa" : "rgba(167,139,250,0.85)")
+          : (active ? "#f97316" : "rgba(229,231,235,0.85)"),
         fontWeight: 900,
         cursor: active ? "default" : "pointer",
       }}
@@ -724,9 +738,10 @@ function App() {
   const [showInviteSignup, setShowInviteSignup] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
-  // Check URL for ?reset_token= and ?invite= on initial load
-  const resetToken = new URLSearchParams(window.location.search).get("reset_token");
+  // Check URL for ?reset_token=, ?invite=, ?email= on initial load
+  const resetToken  = new URLSearchParams(window.location.search).get("reset_token");
   const inviteParam = new URLSearchParams(window.location.search).get("invite");
+  const emailParam  = new URLSearchParams(window.location.search).get("email");
 
 
   async function fetchMe(token) {
@@ -808,6 +823,7 @@ function handleLoggedIn(loginData) {
             setShowInviteSignup(false);
           }}
           initialCode={inviteParam || ""}
+          initialEmail={emailParam || ""}
         />
       );
     }

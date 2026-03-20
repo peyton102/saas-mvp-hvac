@@ -80,6 +80,9 @@ class Tenant(SQLModel, table=True):
     # timezone for this tenant (IANA string, e.g. "America/New_York")
     timezone: Optional[str] = Field(default="America/New_York", max_length=64)
 
+    # platform admin flag
+    is_admin: bool = Field(default=False)
+
     # --- QBO fields ---
     qbo_realm_id: Optional[str] = None
     qbo_access_token: Optional[str] = None

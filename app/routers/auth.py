@@ -122,6 +122,7 @@ class MeResponse(BaseModel):
     email: EmailStr
     tenant_slug: str
     needs_setup: bool
+    is_admin: bool = False
 
     business_name: Optional[str] = None
     booking_link: Optional[str] = None
@@ -402,6 +403,14 @@ def me(
     email = current_user["email"]
     tenant_slug = current_user["tenant_slug"]
 
+    # Ensure is_admin column exists (idempotent, SAVEPOINT-safe for PostgreSQL)
+    try:
+        session.exec(text("SAVEPOINT sp_me_is_admin"))
+        session.exec(text("ALTER TABLE tenant ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
+        session.exec(text("RELEASE SAVEPOINT sp_me_is_admin"))
+    except Exception:
+        session.exec(text("ROLLBACK TO SAVEPOINT sp_me_is_admin"))
+
     tenant = session.exec(
         select(Tenant).where(Tenant.slug == tenant_slug)
     ).first()
@@ -421,6 +430,7 @@ def me(
         email=email,
         tenant_slug=tenant_slug,
         needs_setup=needs_setup,
+        is_admin=bool(getattr(tenant, "is_admin", False)),
         business_name=tenant.business_name,
         booking_link=tenant.booking_link,
         review_google_url=tenant.review_google_url,
