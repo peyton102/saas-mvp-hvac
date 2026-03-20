@@ -8,6 +8,8 @@ import { getToken, setToken, clearToken } from "./auth";
 import InviteSignupPage from "./InviteSignupPage.jsx";
 import ForgotPasswordPage from "./ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./ResetPasswordPage.jsx";
+import AdminInviteCard from "./components/AdminInviteCard.jsx";
+import MissedCallsCard from "./components/MissedCallsCard.jsx";
 
 // ====== CONFIG ======
 const API_BASE =
@@ -390,6 +392,7 @@ const headers = useMemo(() => {
         <TopTab label="Home" active={tab === "home"} onClick={() => setTab("home")} />
         <TopTab label="Finance" active={tab === "finance"} onClick={() => setTab("finance")} />
         <TopTab label="Leads" active={tab === "leads"} onClick={() => setTab("leads")} />
+        <TopTab label="Calls" active={tab === "calls"} onClick={() => setTab("calls")} />
         <TopTab label="Bookings" active={tab === "bookings"} onClick={() => setTab("bookings")} />
         <TopTab label="Settings" active={tab === "settings"} onClick={() => setTab("settings")} />
       </div>
@@ -435,13 +438,16 @@ const headers = useMemo(() => {
         )}
 
         {tab === "settings" && (
-  <TenantSettingsCard
-    apiBase={BASE}
-    commonHeaders={headers}
-    tenantSlug={TENANT_SLUG}
-    onCompleteChange={setSettingsComplete}
-  />
-)}
+          <>
+            <TenantSettingsCard
+              apiBase={BASE}
+              commonHeaders={headers}
+              tenantSlug={TENANT_SLUG}
+              onCompleteChange={setSettingsComplete}
+            />
+            <AdminInviteCard apiBase={BASE} commonHeaders={headers} />
+          </>
+        )}
 
 
         {/* ✅ FINANCE: UNCHANGED — DO NOT EDIT THIS BLOCK */}
@@ -678,6 +684,10 @@ const headers = useMemo(() => {
         {tab === "leads" && (
           <LeadsCard tenantKey={TENANT_KEY} apiBase={BASE} commonHeaders={headers} />
         )}
+
+        {tab === "calls" && (
+          <MissedCallsCard apiBase={BASE} commonHeaders={headers} />
+        )}
       </div>
     </div>
   </div>
@@ -714,8 +724,9 @@ function App() {
   const [showInviteSignup, setShowInviteSignup] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
-  // Check URL for ?reset_token= on initial load
+  // Check URL for ?reset_token= and ?invite= on initial load
   const resetToken = new URLSearchParams(window.location.search).get("reset_token");
+  const inviteParam = new URLSearchParams(window.location.search).get("invite");
 
 
   async function fetchMe(token) {
@@ -785,11 +796,18 @@ function handleLoggedIn(loginData) {
       );
     }
 
-    if (showInviteSignup) {
+    if (showInviteSignup || inviteParam) {
       return (
         <InviteSignupPage
-          onSignedUp={handleLoggedIn}
-          onBack={() => setShowInviteSignup(false)}
+          onSignedUp={(data) => {
+            if (inviteParam) window.history.replaceState({}, "", "/");
+            handleLoggedIn(data);
+          }}
+          onBack={() => {
+            if (inviteParam) window.history.replaceState({}, "", "/");
+            setShowInviteSignup(false);
+          }}
+          initialCode={inviteParam || ""}
         />
       );
     }

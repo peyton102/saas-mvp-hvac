@@ -100,6 +100,7 @@ class Settings:
     FROM_EMAIL: str = os.getenv("FROM_EMAIL", "no-reply@example.com")
     EMAIL_OFFICE: str = os.getenv("EMAIL_OFFICE", os.getenv("FROM_EMAIL", "no-reply@example.com"))
     PORTAL_URL: str = os.getenv("PORTAL_URL", "https://saas-mvp-hvac-1.onrender.com")
+    SENDGRID_API_KEY: str = os.getenv("SENDGRID_API_KEY", "")
     SMS_DEBUG: bool = _as_bool("SMS_DEBUG", False)
 
     # Calendly
@@ -130,6 +131,7 @@ SMTP_PASSWORD  = settings.SMTP_PASSWORD
 FROM_EMAIL     = settings.FROM_EMAIL
 EMAIL_OFFICE   = settings.EMAIL_OFFICE
 PORTAL_URL     = settings.PORTAL_URL
+SENDGRID_API_KEY = settings.SENDGRID_API_KEY
 # Twilio aliases (so app.services.sms can read them reliably)
 TWILIO_ACCOUNT_SID = settings.TWILIO_ACCOUNT_SID
 TWILIO_AUTH_TOKEN = settings.TWILIO_AUTH_TOKEN

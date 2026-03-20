@@ -106,6 +106,37 @@ def create_invite(
     return InviteCreateResponse(code=code, created_at=created_at, expires_at=expires_at, note=note)
 
 
+@router.get("/list")
+def list_invites(
+    session: Session = Depends(get_session),
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+):
+    """List all invite codes (admin only)."""
+    _require_admin(x_admin_key)
+    ensure_invite_table(session)
+    rows = session.exec(text("""
+        SELECT code, created_at, expires_at, used_at, note
+        FROM invite_code
+        ORDER BY created_at DESC
+        LIMIT 100
+    """)).all()
+    now = datetime.now(timezone.utc)
+    result = []
+    for r in rows:
+        d = _row_to_dict(r)
+        used = bool(d.get("used_at"))
+        exp_str = d.get("expires_at")
+        expired = False
+        if exp_str:
+            try:
+                exp_dt = datetime.fromisoformat(str(exp_str).replace("Z", "+00:00"))
+                expired = now > exp_dt
+            except Exception:
+                pass
+        result.append({**d, "used": used, "expired": expired})
+    return {"invites": result}
+
+
 @router.get("/verify", response_model=InviteVerifyResponse)
 def verify_invite(
     code: str,
