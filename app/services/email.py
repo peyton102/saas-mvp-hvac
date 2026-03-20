@@ -4,9 +4,6 @@ from __future__ import annotations
 import logging
 import ssl
 import smtplib
-import json
-import urllib.request
-from urllib.error import HTTPError, URLError
 from email.message import EmailMessage
 from datetime import datetime
 from typing import Iterable
@@ -39,73 +36,6 @@ def _as_list(v: str | Iterable[str] | None) -> list[str]:
     return [x for x in v if x]
 
 
-def _detect_sendgrid_api_key() -> str | None:
-    """
-    Prefer explicit SENDGRID_API_KEY; otherwise, if user configured SendGrid SMTP
-    (host=smtp.sendgrid.net, username=apikey) with an SG.* password, use that.
-    """
-    api_key = getattr(config, "SENDGRID_API_KEY", None)
-    if api_key:
-        return api_key
-    host = getattr(config, "SMTP_HOST", "") or ""
-    user = getattr(config, "SMTP_USERNAME", "") or ""
-    pwd = getattr(config, "SMTP_PASSWORD", "") or ""
-    if host.lower().strip() == "smtp.sendgrid.net" and user == "apikey" and pwd.startswith("SG."):
-        return pwd
-    return None
-
-
-def _send_via_sendgrid(
-    to: list[str],
-    subject: str,
-    text: str,
-    html: str | None = None,
-    reply_to: str | None = None,
-) -> bool:
-    api_key = _detect_sendgrid_api_key()
-    if not api_key:
-        return False  # no SendGrid API key configured
-
-    payload = {
-        "personalizations": [{"to": [{"email": e} for e in to]}],
-        "from": {
-            "email": config.FROM_EMAIL,
-            "name": getattr(config, "FROM_NAME", "") or config.FROM_EMAIL,
-        },
-        "subject": subject,
-        "content": [{"type": "text/plain", "value": text or ""}],
-    }
-    if html:
-        payload["content"].append({"type": "text/html", "value": html})
-    if reply_to:
-        payload["reply_to"] = {"email": reply_to}
-
-    req = urllib.request.Request(
-        "https://api.sendgrid.com/v3/mail/send",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20):
-            pass
-        log.info("SendGrid API send ok → %s", to)
-        return True
-    except HTTPError as e:
-        try:
-            body = e.read().decode("utf-8", "ignore")
-        except Exception:
-            body = "<no body>"
-        log.error("SendGrid HTTP %s: %s", e.code, body)
-        return False
-    except URLError as e:
-        log.error("SendGrid network error: %s", e)
-        return False
-    except Exception as e:
-        log.error("SendGrid send failed: %s", e)
-        return False
-
-
 def _send_via_smtp(
     to: list[str],
     subject: str,
@@ -113,21 +43,38 @@ def _send_via_smtp(
     html: str | None = None,
     reply_to: str | None = None,
 ) -> bool:
-    host = getattr(config, "SMTP_HOST", None)
-    user = getattr(config, "SMTP_USERNAME", None)
-    pwd = getattr(config, "SMTP_PASSWORD", None)
+    host = getattr(config, "SMTP_HOST", None) or ""
+    user = getattr(config, "SMTP_USERNAME", None) or ""
+    pwd = getattr(config, "SMTP_PASSWORD", None) or ""
     try:
         port = int(getattr(config, "SMTP_PORT", 587))
     except Exception:
         port = 587
+    from_email = getattr(config, "FROM_EMAIL", "") or ""
+    from_name = getattr(config, "FROM_NAME", "") or from_email
 
-    if not (host and user and pwd):
-        log.error("SMTP creds missing (host/user/pwd)")
+    print(f"[SMTP] attempting send — host={host!r} port={port} user={user!r} from={from_email!r} to={to}")
+    log.info("[SMTP] attempting send — host=%r port=%s user=%r from=%r to=%s", host, port, user, from_email, to)
+
+    if not host:
+        print("[SMTP] ERROR: SMTP_HOST is not set")
+        log.error("[SMTP] SMTP_HOST is not set")
+        return False
+    if not user:
+        print("[SMTP] ERROR: SMTP_USERNAME is not set")
+        log.error("[SMTP] SMTP_USERNAME is not set")
+        return False
+    if not pwd:
+        print("[SMTP] ERROR: SMTP_PASSWORD is not set")
+        log.error("[SMTP] SMTP_PASSWORD is not set")
+        return False
+    if not from_email:
+        print("[SMTP] ERROR: FROM_EMAIL is not set")
+        log.error("[SMTP] FROM_EMAIL is not set")
         return False
 
     msg = EmailMessage()
-    from_name = getattr(config, "FROM_NAME", "") or config.FROM_EMAIL
-    msg["From"] = f"{from_name} <{config.FROM_EMAIL}>"
+    msg["From"] = f"{from_name} <{from_email}>"
     msg["To"] = ", ".join(to)
     msg["Subject"] = subject
     if reply_to:
@@ -137,20 +84,41 @@ def _send_via_smtp(
         msg.add_alternative(html, subtype="html")
 
     try:
+        print(f"[SMTP] connecting to {host}:{port} ...")
         context = ssl.create_default_context()
         with smtplib.SMTP(host, port, timeout=20) as s:
+            s.set_debuglevel(1)  # prints full SMTP conversation to stdout
+            print("[SMTP] connected — sending EHLO ...")
             s.ehlo()
+            print("[SMTP] starting TLS ...")
             s.starttls(context=context)
             s.ehlo()
+            print(f"[SMTP] logging in as {user!r} ...")
             s.login(user, pwd)
+            print("[SMTP] login OK — sending message ...")
             s.send_message(msg)
-        log.info("SMTP send ok → %s via %s:%s", to, host, port)
+        print(f"[SMTP] send OK → to={to} subject={subject!r}")
+        log.info("[SMTP] send OK → to=%s subject=%r", to, subject)
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"[SMTP] AUTH FAILED (bad username/password) — {e}")
+        log.error("[SMTP] AUTH FAILED — %s", e)
+        return False
+    except smtplib.SMTPConnectError as e:
+        print(f"[SMTP] CONNECT FAILED to {host}:{port} — {e}")
+        log.error("[SMTP] CONNECT FAILED to %s:%s — %s", host, port, e)
+        return False
     except smtplib.SMTPException as e:
-        log.error("SMTP send failed: %s", e)
+        print(f"[SMTP] SMTP error — {type(e).__name__}: {e}")
+        log.error("[SMTP] SMTP error — %s: %s", type(e).__name__, e)
+        return False
+    except OSError as e:
+        print(f"[SMTP] network/OS error connecting to {host}:{port} — {e}")
+        log.error("[SMTP] network/OS error — %s", e)
         return False
     except Exception as e:
-        log.error("SMTP error: %s", e)
+        print(f"[SMTP] unexpected error — {type(e).__name__}: {e}")
+        log.error("[SMTP] unexpected error — %s: %s", type(e).__name__, e)
         return False
 
 
@@ -165,24 +133,22 @@ def send_email(
     reply_to: str | None = None,
 ) -> bool:
     """
-    Sends an email using SendGrid (HTTP API) if available; otherwise SMTP.
-    - Respects config.EMAIL_DRY_RUN (prints/logs but doesn't send)
+    Sends an email via SMTP.
+    - Respects config.EMAIL_DRY_RUN (logs but doesn't send)
     - `to` can be a string or list of strings
     - optional `reply_to`
     """
     to_list = _as_list(to)
     if not to_list:
-        log.error("send_email called with empty recipient list")
+        print("[EMAIL] ERROR: send_email called with empty recipient list")
+        log.error("[EMAIL] send_email called with empty recipient list")
         return False
 
-    if getattr(config, "EMAIL_DRY_RUN", True):
-        log.info("[EMAIL DRY RUN] to=%s subject=%s", to_list, subject)
-        print(f"[EMAIL DRY RUN] to={to_list} subject={subject}")
+    if getattr(config, "EMAIL_DRY_RUN", False):
+        print(f"[EMAIL DRY RUN] to={to_list} subject={subject!r}")
+        log.info("[EMAIL DRY RUN] to=%s subject=%r", to_list, subject)
         return True
 
-    # Try SendGrid API first if key is present; fall back to SMTP
-    if _detect_sendgrid_api_key() and _send_via_sendgrid(to_list, subject, text, html, reply_to):
-        return True
     return _send_via_smtp(to_list, subject, text, html, reply_to)
 
 

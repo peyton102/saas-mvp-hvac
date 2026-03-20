@@ -92,7 +92,7 @@ class Settings:
     LEADS_CSV: str = os.getenv("LEADS_CSV", "data/leads.csv")
 
     # Email (optional)
-    EMAIL_DRY_RUN: bool = _as_bool("EMAIL_DRY_RUN", True)
+    EMAIL_DRY_RUN: bool = _as_bool("EMAIL_DRY_RUN", False)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
     SMTP_PORT: int = _as_int("SMTP_PORT", 587)
     SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "")
