@@ -312,10 +312,14 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
     )
 
     # make sure password_hash column exists (no-op if already there)
+    # SAVEPOINT required for PostgreSQL: a failed DDL aborts the whole transaction;
+    # bare except:pass leaves it in an error state, breaking all subsequent queries.
     try:
+        session.exec(text("SAVEPOINT sp_login_add_col"))
         session.exec(text("ALTER TABLE tenant ADD COLUMN password_hash TEXT"))
+        session.exec(text("RELEASE SAVEPOINT sp_login_add_col"))
     except Exception:
-        pass
+        session.exec(text("ROLLBACK TO SAVEPOINT sp_login_add_col"))
 
     # 1) fetch tenant (API key is hashed — cannot be retrieved after signup)
     stmt = text(
@@ -505,9 +509,11 @@ def reset_password(payload: ResetPasswordRequest, session: Session = Depends(get
 
     # Update password on the tenant row
     try:
+        session.exec(text("SAVEPOINT sp_reset_add_col"))
         session.exec(text("ALTER TABLE tenant ADD COLUMN password_hash TEXT"))
+        session.exec(text("RELEASE SAVEPOINT sp_reset_add_col"))
     except Exception:
-        pass
+        session.exec(text("ROLLBACK TO SAVEPOINT sp_reset_add_col"))
 
     new_hash = hash_password(payload.password)
     result = session.exec(
