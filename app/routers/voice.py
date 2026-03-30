@@ -110,9 +110,15 @@ def _tenant_from_headers(request: Request) -> str:
 
 def _external_url_for_signature(request: Request) -> str:
     hdr = request.headers
+    # Render sets x-forwarded-proto but not x-forwarded-host; fall back to host header
     proto = (hdr.get("x-forwarded-proto") or request.url.scheme or "https").split(",")[0].strip()
-    host  = (hdr.get("x-forwarded-host")  or hdr.get("host") or request.url.netloc).split(",")[0].strip()
-    return f"{proto}://{host}{request.url.path}"
+    host = (hdr.get("host") or request.url.netloc).split(",")[0].strip()
+    url = f"{proto}://{host}{request.url.path}"
+    # Twilio signs the full URL including query string — must include it or sig fails
+    qs = request.url.query
+    if qs:
+        url += f"?{qs}"
+    return url
 
 async def _verify_twilio_signature(request: Request) -> bool:
     if not getattr(config, "TWILIO_VALIDATE_SIGNATURES", False):
@@ -299,7 +305,7 @@ async def twilio_voice_recorded(
             print(f"[VOICE] voicemail attach error: {e}")
 
     b = brand(tenant_id)
-    body = f"Thanks for the voicemail! {b['BOOKING_LINK']}"
+    body = f"Hi, we missed your call! {b['FROM_NAME']} will get back to you shortly."
     try:
         if from_num and not _blocked_number(from_num) and _after_hours():
             if not storage.sent_recently(from_num, minutes=getattr(config, "ANTI_SPAM_MINUTES", 120)):
@@ -374,7 +380,7 @@ async def twilio_voice_missed(
     def _send_missed_call_effects():
         try:
             if not _blocked_number(from_num):
-                caller_msg = "Hi, we missed your call! We'll get back to you shortly."
+                caller_msg = f"Hi, we missed your call! {b['FROM_NAME']} will get back to you shortly."
                 send_sms(from_num, caller_msg)
         except Exception as e:
             print(f"[MISSED] caller SMS error: {e}")
