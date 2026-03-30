@@ -272,6 +272,89 @@ async def twilio_voice_recorded(
     vr.say("Thanks. We just texted you our booking link. Goodbye.", voice="alice")
     return PlainTextResponse(str(vr), media_type="application/xml")
 
+@router.post("/twilio/voice/missed")
+async def twilio_voice_missed(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """
+    Twilio status callback for unanswered/missed inbound calls.
+    Configure in Twilio Console: Voice -> Phone Number -> "Call Status Changes"
+    URL: https://<your-domain>/twilio/voice/missed
+    Fires when CallStatus is 'no-answer' or 'busy'.
+    """
+    if not await _verify_twilio_signature(request):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Twilio signature")
+
+    try:
+        form = await request.form()
+    except Exception as e:
+        print(f"[MISSED] form parse error: {e}")
+        form = {}
+
+    call_status = (form.get("CallStatus") or "").strip().lower()
+    from_num_raw = (form.get("From") or "").strip()
+    from_num = normalize_us_phone(from_num_raw) or from_num_raw
+    caller = (form.get("CallerName") or "").strip()
+    call_sid = (form.get("CallSid") or "").strip()
+
+    print(f"[MISSED] tenant={tenant_id} status={call_status} from={from_num} sid={call_sid}")
+
+    # Only act on actual missed/unanswered calls
+    if call_status not in ("no-answer", "busy", "failed"):
+        return PlainTextResponse("", status_code=204)
+
+    if not from_num:
+        return PlainTextResponse("", status_code=204)
+
+    # Dedupe by CallSid so retries don't double-send
+    if call_sid and not _dedupe_insert(session, source=f"missed_call:{tenant_id}", event_id=call_sid):
+        print(f"[MISSED] duplicate CallSid={call_sid}, skipping")
+        return PlainTextResponse("", status_code=204)
+
+    # 1. Save lead with source="missed_call"
+    try:
+        session.add(LeadModel(
+            name=(caller or "").strip(),
+            phone=from_num,
+            email=None,
+            message="Missed call",
+            tenant_id=tenant_id,
+            source="missed_call",
+        ))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"[MISSED] DB lead insert error: {e}")
+
+    b = brand(tenant_id)
+
+    # 2. SMS to caller
+    def _send_missed_call_effects():
+        try:
+            if not _blocked_number(from_num):
+                caller_msg = "Hi, we missed your call! We'll get back to you shortly."
+                send_sms(from_num, caller_msg)
+        except Exception as e:
+            print(f"[MISSED] caller SMS error: {e}")
+
+        # 3. Alert the office
+        try:
+            from app.services.sms import _office_destination_for_tenant, send_sms as _send
+            office_to = _office_destination_for_tenant(tenant_id)
+            if office_to:
+                alert_body = f"Missed call from {from_num}" + (f" ({caller})" if caller else "") + f" — {b['FROM_NAME']}"
+                _send(office_to, alert_body)
+        except Exception as e:
+            print(f"[MISSED] office alert error: {e}")
+
+    background_tasks.add_task(_send_missed_call_effects)
+
+    return PlainTextResponse("", status_code=204)
+
+
 @router.get("/twilio/voice")
 def twilio_voice_get():
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>

@@ -24,6 +24,7 @@ class Lead(SQLModel, table=True):
     message: Optional[str] = None
     tenant_id: str = Field(default="public", index=True)  # <-- keep "public"
     status: Optional[str] = Field(default="new", max_length=20)
+    source: Optional[str] = Field(default=None, max_length=50)  # e.g. "missed_call", "web_form"
 
 
 class Booking(SQLModel, table=True):
