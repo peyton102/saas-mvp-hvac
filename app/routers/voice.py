@@ -97,8 +97,13 @@ def _external_url_for_signature(request: Request) -> str:
 async def _verify_twilio_signature(request: Request) -> bool:
     if not getattr(config, "TWILIO_VALIDATE_SIGNATURES", False):
         return True
+    auth_token = (getattr(config, "TWILIO_AUTH_TOKEN", "") or "").strip()
+    if not auth_token:
+        print("[VOICE] WARNING: TWILIO_AUTH_TOKEN not set — skipping signature validation", flush=True)
+        return True
     signature = request.headers.get("X-Twilio-Signature", "")
     if not signature:
+        print("[VOICE] WARNING: request missing X-Twilio-Signature header", flush=True)
         return False
     url = _external_url_for_signature(request)
     params = {}
@@ -109,8 +114,11 @@ async def _verify_twilio_signature(request: Request) -> bool:
             params = dict(form)
         except Exception:
             params = {}
-    validator = RequestValidator(config.TWILIO_AUTH_TOKEN)
-    return bool(validator.validate(url, params, signature))
+    validator = RequestValidator(auth_token)
+    result = bool(validator.validate(url, params, signature))
+    if not result:
+        print(f"[VOICE] Twilio signature mismatch — url={url} sig={signature[:20]}...", flush=True)
+    return result
 
 def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
     try:
@@ -379,11 +387,15 @@ def twilio_voice_get():
 
 @router.get("/debug/twilio-token")
 def debug_twilio_token(request: Request):
-    tok = (getattr(config, "TWILIO_AUTH_TOKEN", "") or "")
+    tok = (getattr(config, "TWILIO_AUTH_TOKEN", "") or "").strip()
     return {
         "validate": bool(getattr(config, "TWILIO_VALIDATE_SIGNATURES", False)),
+        "token_set": bool(tok),
         "token_len": len(tok),
+        "token_prefix": tok[:4] + "..." if tok else "(empty)",
+        "account_sid_set": bool((getattr(config, "TWILIO_ACCOUNT_SID", "") or "").strip()),
         "host": request.headers.get("host"),
+        "forwarded_proto": request.headers.get("x-forwarded-proto"),
     }
 
 @router.get("/debug/twilio-sig")
