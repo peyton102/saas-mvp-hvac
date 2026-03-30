@@ -15,7 +15,27 @@ from app import config, storage
 from app.db import get_session
 from app.services.sms import send_sms
 from app.models import WebhookDedup, Lead as LeadModel
-from ..deps import get_tenant_id
+from ..deps import get_tenant_id as _get_tenant_id_strict
+
+
+async def get_tenant_id_public(
+    request: Request,
+    tenant: Optional[str] = None,
+) -> str:
+    """
+    Tenant resolver for public Twilio webhooks.
+    Twilio sends no auth headers, so we can't use the strict resolver.
+    Falls back to 'default' rather than raising 401.
+    """
+    # Check middleware-set tenant first (won't be set for open paths, but just in case)
+    state_tenant = getattr(request.state, "tenant_id", None)
+    if state_tenant:
+        return str(state_tenant)
+    # Allow ?tenant= override for multi-tenant setups
+    tenant_q = request.query_params.get("tenant", "").strip()
+    if tenant_q:
+        return tenant_q
+    return "default"
 from app.tenantold import brand
 from app.utils.phone import normalize_us_phone
 
@@ -181,7 +201,7 @@ async def twilio_voice(
     request: Request,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_tenant_id),
+    tenant_id: str = Depends(get_tenant_id_public),
 ):
     if not await _verify_twilio_signature(request):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Twilio signature")
@@ -239,7 +259,7 @@ async def twilio_voice(
 async def twilio_voice_recorded(
     request: Request,
     session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_tenant_id),
+    tenant_id: str = Depends(get_tenant_id_public),
 ):
     if not await _verify_twilio_signature(request):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Twilio signature")
@@ -296,7 +316,7 @@ async def twilio_voice_missed(
     request: Request,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_tenant_id),
+    tenant_id: str = Depends(get_tenant_id_public),
 ):
     """
     Twilio status callback for unanswered/missed inbound calls.
