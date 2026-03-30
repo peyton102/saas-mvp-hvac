@@ -121,7 +121,7 @@ def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
         session.rollback()
         return False
 
-def _log_lead_db(session: Session, phone: str, name: str, tenant_id: str):
+def _log_lead_db(session: Session, phone: str, name: str, tenant_id: str, source: Optional[str] = None):
     if not phone:
         return
     try:
@@ -131,6 +131,7 @@ def _log_lead_db(session: Session, phone: str, name: str, tenant_id: str):
             email=None,
             message="Inbound call",
             tenant_id=tenant_id,
+            source=source,
         ))
         session.commit()
     except Exception as e:
@@ -204,9 +205,8 @@ async def twilio_voice(
         f"Prefer a call? Reply here."
     )
 
-    _log_lead_db(session, from_num, caller, tenant_id)
-
     after_hours = _is_after_hours(request)
+    _log_lead_db(session, from_num, caller, tenant_id, source="missed_call" if after_hours else None)
     print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} from={from_num} after_hours={after_hours}")
 
     if not after_hours and first_time and from_num and not _blocked_number(from_num):
@@ -254,7 +254,18 @@ async def twilio_voice_recorded(
             ).first()
             if last:
                 last.message = (last.message or "") + (f"\nVoicemail: {recording_url}" if recording_url else "")
+                last.source = "missed_call"
                 session.add(last); session.commit()
+            else:
+                session.add(LeadModel(
+                    name=(caller or "").strip(),
+                    phone=from_num,
+                    email=None,
+                    message=f"Voicemail: {recording_url}" if recording_url else "Voicemail",
+                    tenant_id=tenant_id,
+                    source="missed_call",
+                ))
+                session.commit()
         except Exception as e:
             session.rollback()
             print(f"[VOICE] voicemail attach error: {e}")
