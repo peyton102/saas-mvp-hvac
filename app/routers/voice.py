@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app import config, storage
 from app.db import get_session
-from app.services.sms import send_sms
+from app.services.sms import send_sms, get_brand_for_tenant
 from app.models import WebhookDedup, Lead as LeadModel
 from ..deps import get_tenant_id as _get_tenant_id_strict
 
@@ -305,9 +305,10 @@ async def twilio_voice_recorded(
             session.rollback()
             print(f"[VOICE] voicemail attach error: {e}")
 
-    b = brand(tenant_id)
-    print(f"[RECORDED] brand lookup — tenant_id={tenant_id!r} FROM_NAME={b['FROM_NAME']!r}", flush=True)
-    body = f"Hi, we missed your call! {b['FROM_NAME']} will get back to you shortly."
+    b = get_brand_for_tenant(tenant_id)
+    business_name = b.get("business_name") or tenant_id
+    print(f"[RECORDED] brand lookup — tenant_id={tenant_id!r} business_name={business_name!r}", flush=True)
+    body = f"Hi, we missed your call! {business_name} will get back to you shortly."
     try:
         if from_num and not _blocked_number(from_num) and _after_hours():
             if not storage.sent_recently(from_num, minutes=getattr(config, "ANTI_SPAM_MINUTES", 120)):
@@ -376,13 +377,14 @@ async def twilio_voice_missed(
         session.rollback()
         print(f"[MISSED] DB lead insert error: {e}")
 
-    b = brand(tenant_id)
+    b = get_brand_for_tenant(tenant_id)
+    business_name = b.get("business_name") or tenant_id
 
     # 2. SMS to caller
     def _send_missed_call_effects():
         try:
             if not _blocked_number(from_num):
-                caller_msg = f"Hi, we missed your call! {b['FROM_NAME']} will get back to you shortly."
+                caller_msg = f"Hi, we missed your call! {business_name} will get back to you shortly."
                 send_sms(from_num, caller_msg)
         except Exception as e:
             print(f"[MISSED] caller SMS error: {e}")
@@ -392,7 +394,7 @@ async def twilio_voice_missed(
             from app.services.sms import _office_destination_for_tenant, send_sms as _send
             office_to = _office_destination_for_tenant(tenant_id)
             if office_to:
-                alert_body = f"Missed call from {from_num}" + (f" ({caller})" if caller else "") + f" — {b['FROM_NAME']}"
+                alert_body = f"Missed call from {from_num}" + (f" ({caller})" if caller else "") + f" — {business_name}"
                 _send(office_to, alert_body)
         except Exception as e:
             print(f"[MISSED] office alert error: {e}")
