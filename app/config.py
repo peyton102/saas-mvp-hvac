@@ -86,7 +86,7 @@ class Settings:
     TWILIO_MESSAGING_SERVICE_SID: str = os.getenv("TWILIO_MESSAGING_SERVICE_SID", "").strip()
     TWILIO_FROM: str = os.getenv("TWILIO_FROM", "").strip()
     SMS_DRY_RUN: bool = _as_bool("SMS_DRY_RUN", False)
-    TWILIO_VALIDATE_SIGNATURES: bool = _as_bool("TWILIO_VALIDATE_SIGNATURES", True)
+    TWILIO_VALIDATE_SIGNATURES: bool = _as_bool("TWILIO_VALIDATE_SIGNATURES", False)
 
     # Storage
     LEADS_CSV: str = os.getenv("LEADS_CSV", "data/leads.csv")
