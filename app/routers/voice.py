@@ -232,6 +232,7 @@ async def twilio_voice(
     first_time = _dedupe_insert(session, source=f"twilio_voice:{tenant_id}", event_id=event_id)
 
     b = brand(tenant_id)
+    print(f"[VOICE] brand lookup — tenant_id={tenant_id!r} FROM_NAME={b['FROM_NAME']!r}", flush=True)
     first = caller.split(" ")[0] if caller else "there"
     msg = (
         f"Hey {first}, thanks for contacting {b['FROM_NAME']}! "
@@ -248,14 +249,14 @@ async def twilio_voice(
 
     vr = VoiceResponse()
     if after_hours:
-        vr.say(f"Thanks for calling {b['FROM_NAME']}. We're currently unavailable. "
-               "Please leave a brief message after the beep, and we'll text you our booking link.",
+        vr.say("Thanks for calling. We're currently unavailable. "
+               "Please leave a brief message after the beep.",
                voice="alice")
         vr.record(max_length=120, play_beep=True, action="/twilio/voice/recorded", method="POST")
         vr.say("Got it. Goodbye.")
         vr.hangup()
     else:
-        vr.say(f"Thanks for calling {b['FROM_NAME']}. We just texted you our booking link. We'll be in touch shortly.",
+        vr.say("Thanks for calling. We just texted you our booking link. We'll be in touch shortly.",
                voice="alice")
         vr.hangup()
 
@@ -305,6 +306,7 @@ async def twilio_voice_recorded(
             print(f"[VOICE] voicemail attach error: {e}")
 
     b = brand(tenant_id)
+    print(f"[RECORDED] brand lookup — tenant_id={tenant_id!r} FROM_NAME={b['FROM_NAME']!r}", flush=True)
     body = f"Hi, we missed your call! {b['FROM_NAME']} will get back to you shortly."
     try:
         if from_num and not _blocked_number(from_num) and _after_hours():
