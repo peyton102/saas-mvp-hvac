@@ -162,6 +162,8 @@ OPEN_PATHS = {
     "/redoc",
     # backup admin endpoints (they do their own bearer auth)
     "/backup/debug-admin-env",
+    # public debug helpers
+    "/debug/twilio-token",
 }
 
 IS_DEV = (str(os.getenv("ENV") or getattr(config, "ENV", "dev")).lower() == "dev")
