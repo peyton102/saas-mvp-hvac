@@ -112,14 +112,16 @@ async def create_lead(
         "message": payload.message or "",
     }
 
-    # Customer auto-reply (only if not throttled and explicitly requested)
-    if sms_ok and payload.send_auto_reply:
+    # Auto-reply to lead: public web form always gets one; manual entry only if checkbox checked
+    send_reply = sms_ok and (not payload.manual_entry or payload.send_auto_reply)
+    if send_reply:
         sms_ok = lead_auto_reply_sms(tenant_id, sms_payload)
     else:
         sms_ok = False
 
-    # Office notification (no throttle – internal)
-    _office_ok = lead_office_notify_sms(tenant_id, sms_payload)
+    # Office notification: always except when manually triggering the auto-reply checkbox
+    if not payload.send_auto_reply:
+        _office_ok = lead_office_notify_sms(tenant_id, sms_payload)
 
     # CSV log (only when DB_FIRST is false)
     if not getattr(config.settings, "DB_FIRST", True):

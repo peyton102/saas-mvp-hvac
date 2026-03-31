@@ -157,7 +157,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     try {
       await apiFetch("/lead", {
         method: "POST",
-        body: JSON.stringify({ ...form, send_auto_reply: form.sendAutoReply, source: "web" }),
+        body: JSON.stringify({ ...form, send_auto_reply: form.sendAutoReply, manual_entry: true, source: "web" }),
       });
       setForm({ name: "", phone: "", email: "", message: "", sendAutoReply: false });
       loadLeads();
