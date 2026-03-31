@@ -73,7 +73,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   // ✅ use apiBase if provided, else fall back to /api
   const BASE = (typeof apiBase === "string" && apiBase.trim()) ? apiBase : BASE_FALLBACK;
 
-  const [form, setForm] = useState({ name: "", phone: "", email: "", message: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", message: "", sendAutoReply: false });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -157,9 +157,9 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     try {
       await apiFetch("/lead", {
         method: "POST",
-        body: JSON.stringify({ ...form, source: "web" }),
+        body: JSON.stringify({ ...form, send_auto_reply: form.sendAutoReply, source: "web" }),
       });
-      setForm({ name: "", phone: "", email: "", message: "" });
+      setForm({ name: "", phone: "", email: "", message: "", sendAutoReply: false });
       loadLeads();
     } catch (err) {
       alert(`Submit failed: ${err.message || err}`);
@@ -422,6 +422,14 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           value={form.message}
           onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
         />
+        <label style={{ gridColumn: "span 2", display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={form.sendAutoReply}
+            onChange={(e) => setForm((f) => ({ ...f, sendAutoReply: e.target.checked }))}
+          />
+          Send automatic text reply
+        </label>
         <button type="submit" style={{ gridColumn: "span 2", padding: "8px 12px" }}>
           Submit
         </button>

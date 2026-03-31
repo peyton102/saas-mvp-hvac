@@ -112,9 +112,11 @@ async def create_lead(
         "message": payload.message or "",
     }
 
-    # Customer auto-reply (only if not throttled)
-    if sms_ok:
+    # Customer auto-reply (only if not throttled and explicitly requested)
+    if sms_ok and payload.send_auto_reply:
         sms_ok = lead_auto_reply_sms(tenant_id, sms_payload)
+    else:
+        sms_ok = False
 
     # Office notification (no throttle – internal)
     _office_ok = lead_office_notify_sms(tenant_id, sms_payload)
