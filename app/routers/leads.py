@@ -112,9 +112,13 @@ async def create_lead(
         "message": payload.message or "",
     }
 
-    # Auto-reply to lead: public web form always gets one; manual entry only if checkbox checked
-    send_reply = sms_ok and (not payload.manual_entry or payload.send_auto_reply)
-    if send_reply:
+    # Auto-reply to lead:
+    # - manual + checkbox: always send (bypass throttle — user explicitly requested it)
+    # - public web form: send only if not throttled
+    # - manual no checkbox: don't send
+    if payload.manual_entry and payload.send_auto_reply:
+        sms_ok = lead_auto_reply_sms(tenant_id, sms_payload)
+    elif not payload.manual_entry and sms_ok:
         sms_ok = lead_auto_reply_sms(tenant_id, sms_payload)
     else:
         sms_ok = False
