@@ -36,7 +36,6 @@ async def get_tenant_id_public(
     if tenant_q:
         return tenant_q
     return "default"
-from app.tenantold import brand
 from app.utils.phone import normalize_us_phone
 
 router = APIRouter(prefix="", tags=["voice"])
@@ -231,12 +230,14 @@ async def twilio_voice(
 
     first_time = _dedupe_insert(session, source=f"twilio_voice:{tenant_id}", event_id=event_id)
 
-    b = brand(tenant_id)
-    print(f"[VOICE] brand lookup — tenant_id={tenant_id!r} FROM_NAME={b['FROM_NAME']!r}", flush=True)
+    b = get_brand_for_tenant(tenant_id)
+    business_name = b.get("business_name") or tenant_id
+    booking_link = b.get("booking_link") or ""
+    print(f"[VOICE] brand lookup — tenant_id={tenant_id!r} business_name={business_name!r}", flush=True)
     first = caller.split(" ")[0] if caller else "there"
     msg = (
-        f"Hey {first}, thanks for contacting {b['FROM_NAME']}! "
-        f"{b['BOOKING_LINK']} "
+        f"Hey {first}, thanks for contacting {business_name}! "
+        f"{booking_link} "
         f"Prefer a call? Reply here."
     )
 
