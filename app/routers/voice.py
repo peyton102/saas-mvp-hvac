@@ -14,29 +14,64 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app import config, storage
 from app.db import get_session
 from app.services.sms import send_sms, get_brand_for_tenant
-from app.models import WebhookDedup, Lead as LeadModel
+from app.models import WebhookDedup, Lead as LeadModel, Tenant
+from app.utils.phone import normalize_us_phone
 from ..deps import get_tenant_id as _get_tenant_id_strict
 
 
 async def get_tenant_id_public(
     request: Request,
     tenant: Optional[str] = None,
+    session: Session = Depends(get_session),
 ) -> str:
     """
     Tenant resolver for public Twilio webhooks.
-    Twilio sends no auth headers, so we can't use the strict resolver.
-    Falls back to 'default' rather than raising 401.
+    Priority:
+      1) request.state.tenant_id (set by middleware)
+      2) X-API-Key header via TENANT_KEYS
+      3) Authorization: Bearer via TENANT_KEYS
+      4) ?tenant= query param
+      5) Twilio 'To' field matched against Tenant.phone in DB
+      6) 'default'
     """
-    # Check middleware-set tenant first (won't be set for open paths, but just in case)
     state_tenant = getattr(request.state, "tenant_id", None)
-    if state_tenant:
+    if state_tenant and state_tenant != "public":
         return str(state_tenant)
-    # Allow ?tenant= override for multi-tenant setups
+
+    keys = getattr(config, "TENANT_KEYS", None)
+    if not isinstance(keys, dict) and hasattr(config, "settings"):
+        keys = getattr(config.settings, "TENANT_KEYS", None)
+    keys = keys or {}
+
+    api_key = (request.headers.get("x-api-key") or "").strip()
+    if api_key and api_key in keys:
+        return str(keys[api_key])
+
+    auth = (request.headers.get("authorization") or "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        if token in keys:
+            return str(keys[token])
+
     tenant_q = request.query_params.get("tenant", "").strip()
     if tenant_q:
         return tenant_q
+
+    try:
+        form = await request.form()
+        to_raw = (form.get("To") or "").strip()
+        if to_raw:
+            to_norm = normalize_us_phone(to_raw) or to_raw
+            tenants = session.exec(
+                select(Tenant).where(Tenant.phone != None, Tenant.phone != "")
+            ).all()
+            for t in tenants:
+                if normalize_us_phone(t.phone or "") == to_norm:
+                    return t.slug
+    except Exception as e:
+        print(f"[VOICE] tenant-by-To lookup error: {e}", flush=True)
+
     return "default"
-from app.utils.phone import normalize_us_phone
 
 router = APIRouter(prefix="", tags=["voice"])
 
