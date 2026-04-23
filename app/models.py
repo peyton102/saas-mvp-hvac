@@ -109,6 +109,9 @@ class TenantSettings(SQLModel, table=True):
     business_phone: Optional[str] = Field(default="", max_length=50)
     review_link: Optional[str] = Field(default="", max_length=512)
 
+    # Twilio number assigned to this tenant (used for webhook tenant lookup)
+    twilio_number: Optional[str] = Field(default="", max_length=50)
+
     # Optional extras if you want to drive internal alerts from settings
     office_sms_to: Optional[str] = Field(default="", max_length=50)
     office_email_to: Optional[str] = Field(default="", max_length=255)

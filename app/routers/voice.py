@@ -13,8 +13,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app import config, storage
 from app.db import get_session
-from app.services.sms import send_sms, get_brand_for_tenant
-from app.models import WebhookDedup, Lead as LeadModel, Tenant
+from app.services.sms import send_sms, get_brand_for_tenant, _office_destination_for_tenant
+from app.models import WebhookDedup, Lead as LeadModel, Tenant, TenantSettings
 from app.utils.phone import normalize_us_phone
 from ..deps import get_tenant_id as _get_tenant_id_strict
 
@@ -62,6 +62,14 @@ async def get_tenant_id_public(
         to_raw = (form.get("To") or "").strip()
         if to_raw:
             to_norm = normalize_us_phone(to_raw) or to_raw
+            # First: check TenantSettings.twilio_number (the Twilio number the owner configured)
+            settings_rows = session.exec(
+                select(TenantSettings).where(TenantSettings.twilio_number != None, TenantSettings.twilio_number != "")
+            ).all()
+            for s in settings_rows:
+                if normalize_us_phone(s.twilio_number or "") == to_norm:
+                    return s.tenant_id
+            # Fallback: legacy match against Tenant.phone
             tenants = session.exec(
                 select(Tenant).where(Tenant.phone != None, Tenant.phone != "")
             ).all()
@@ -210,7 +218,7 @@ def _blocked_number(phone: str) -> bool:
     bl = (getattr(config, "SMS_BLOCKLIST", "") or "").split(",")
     return phone in [x.strip() for x in bl if x.strip()]
 
-def _handle_voice_side_effects(from_number: str, caller_name: str, body: str, tenant_id: str):
+def _handle_voice_side_effects(from_number: str, caller_name: str, body: str, tenant_id: str, business_name: str = ""):
     try:
         minutes = getattr(config, "ANTI_SPAM_MINUTES", 120)
         ok = False
@@ -231,6 +239,15 @@ def _handle_voice_side_effects(from_number: str, caller_name: str, body: str, te
             )
         except Exception:
             pass
+        # Office alert for forwarded missed call
+        try:
+            office_to = _office_destination_for_tenant(tenant_id)
+            if office_to:
+                label = business_name or tenant_id
+                alert = f"Missed call from {from_number}" + (f" ({caller_name})" if caller_name else "") + f" — {label}"
+                send_sms(office_to, alert)
+        except Exception as e:
+            print(f"[VOICE] office alert error: {e}")
     except Exception as e:
         print(f"[VOICE ERROR] {e}")
 
@@ -281,7 +298,7 @@ async def twilio_voice(
     print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} from={from_num} after_hours={after_hours}")
 
     if not after_hours and first_time and from_num and not _blocked_number(from_num):
-        background_tasks.add_task(_handle_voice_side_effects, from_num, caller, msg, tenant_id)
+        background_tasks.add_task(_handle_voice_side_effects, from_num, caller, msg, tenant_id, business_name)
 
     vr = VoiceResponse()
     if after_hours:
