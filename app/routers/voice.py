@@ -4,7 +4,7 @@ from fastapi.responses import Response, PlainTextResponse
 from sqlmodel import Session, select
 from sqlalchemy.exc import IntegrityError
 from twilio.request_validator import RequestValidator
-from twilio.twiml.voice_response import VoiceResponse, Dial
+from twilio.twiml.voice_response import VoiceResponse
 import hashlib
 from typing import Optional
 from datetime import datetime, timezone
@@ -31,8 +31,10 @@ async def get_tenant_id_public(
       2) X-API-Key header via TENANT_KEYS
       3) Authorization: Bearer via TENANT_KEYS
       4) ?tenant= query param
-      5) Twilio 'To' field matched against Tenant.phone in DB
-      6) 'default'
+      5) Twilio 'ForwardedFrom' matched against TenantSettings.business_phone (call forwarding)
+      6) Twilio 'To' matched against TenantSettings.twilio_number
+      7) Twilio 'To' matched against Tenant.phone (legacy)
+      8) 'default'
     """
     state_tenant = getattr(request.state, "tenant_id", None)
     if state_tenant and state_tenant != "public":
@@ -59,17 +61,30 @@ async def get_tenant_id_public(
 
     try:
         form = await request.form()
+
+        # Call-forwarding path: ForwardedFrom is the owner's real number the customer originally dialed
+        forwarded_raw = (form.get("ForwardedFrom") or "").strip()
+        if forwarded_raw:
+            forwarded_norm = normalize_us_phone(forwarded_raw) or forwarded_raw
+            settings_rows = session.exec(
+                select(TenantSettings).where(TenantSettings.business_phone != None, TenantSettings.business_phone != "")
+            ).all()
+            for s in settings_rows:
+                if normalize_us_phone(s.business_phone or "") == forwarded_norm:
+                    print(f"[VOICE] tenant resolved via ForwardedFrom={forwarded_raw} → {s.tenant_id}", flush=True)
+                    return s.tenant_id
+
+        # Direct-call path: To is the Twilio number
         to_raw = (form.get("To") or "").strip()
         if to_raw:
             to_norm = normalize_us_phone(to_raw) or to_raw
-            # First: check TenantSettings.twilio_number (the Twilio number the owner configured)
             settings_rows = session.exec(
                 select(TenantSettings).where(TenantSettings.twilio_number != None, TenantSettings.twilio_number != "")
             ).all()
             for s in settings_rows:
                 if normalize_us_phone(s.twilio_number or "") == to_norm:
                     return s.tenant_id
-            # Fallback: legacy match against Tenant.phone
+            # Legacy: match against Tenant.phone
             tenants = session.exec(
                 select(Tenant).where(Tenant.phone != None, Tenant.phone != "")
             ).all()
@@ -77,7 +92,8 @@ async def get_tenant_id_public(
                 if normalize_us_phone(t.phone or "") == to_norm:
                     return t.slug
     except Exception as e:
-        print(f"[VOICE] tenant-by-To lookup error: {e}", flush=True)
+        session.rollback()
+        print(f"[VOICE] tenant lookup error: {e}", flush=True)
 
     return "default"
 
@@ -190,11 +206,16 @@ async def _verify_twilio_signature(request: Request) -> bool:
 
 def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
     try:
+        session.rollback()  # clear any aborted transaction left by earlier errors
         session.add(WebhookDedup(source=source, event_id=event_id))
         session.commit()
         return True
     except IntegrityError:
         session.rollback()
+        return False
+    except Exception as e:
+        session.rollback()
+        print(f"[DEDUPE] insert error: {e}", flush=True)
         return False
 
 def _log_lead_db(session: Session, phone: str, name: str, tenant_id: str, source: Optional[str] = None):
@@ -291,25 +312,6 @@ async def twilio_voice(
     _log_lead_db(session, from_num, caller, tenant_id, source="missed_call" if after_hours else None)
     print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} from={from_num} after_hours={after_hours}")
 
-    # If the tenant has a forward_to number, try to connect the caller to the owner first.
-    # The dial-status callback handles the missed-call SMS if the owner doesn't pick up.
-    forward_to = None
-    try:
-        ts = session.exec(select(TenantSettings).where(TenantSettings.tenant_id == tenant_id)).first()
-        if ts:
-            forward_to = normalize_us_phone(ts.forward_to or "") or None
-    except Exception as e:
-        print(f"[VOICE] forward_to lookup error: {e}", flush=True)
-
-    if forward_to:
-        print(f"[VOICE] forwarding call from {from_num} to {forward_to}", flush=True)
-        vr = VoiceResponse()
-        d = Dial(action="/twilio/voice/dial-status", method="POST", timeout=20, answer_on_bridge=True)
-        d.number(forward_to)
-        vr.append(d)
-        return PlainTextResponse(str(vr), media_type="application/xml")
-
-    # No forward_to configured — existing behavior
     first = caller.split(" ")[0] if caller else "there"
     msg = (
         f"Hey {first}, thanks for contacting {business_name}! "
@@ -333,58 +335,6 @@ async def twilio_voice(
                voice="alice")
         vr.hangup()
 
-    return PlainTextResponse(str(vr), media_type="application/xml")
-
-
-@router.post("/twilio/voice/dial-status")
-async def twilio_voice_dial_status(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_tenant_id_public),
-):
-    """
-    Twilio <Dial> action callback. Fires when the forwarded call leg ends.
-    If the owner answered (completed), do nothing. Otherwise fire the missed-call SMS.
-    """
-    if not await _verify_twilio_signature(request):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Twilio signature")
-
-    try:
-        form = await request.form()
-    except Exception as e:
-        print(f"[DIAL-STATUS] form parse error: {e}")
-        form = {}
-
-    dial_status = (form.get("DialCallStatus") or "").strip().lower()
-    from_num_raw = (form.get("From") or "").strip()
-    from_num = normalize_us_phone(from_num_raw) or from_num_raw
-    caller = (form.get("CallerName") or "").strip()
-    call_sid = (form.get("CallSid") or "").strip()
-
-    print(f"[DIAL-STATUS] tenant={tenant_id} dial_status={dial_status} from={from_num} sid={call_sid}")
-
-    vr = VoiceResponse()
-
-    if dial_status == "completed":
-        # Owner answered — call connected and finished normally, nothing to do
-        return PlainTextResponse(str(vr), media_type="application/xml")
-
-    # Owner didn't answer (no-answer, busy, failed, canceled) — send missed-call SMS
-    if call_sid and not _dedupe_insert(session, source=f"dial_status:{tenant_id}", event_id=call_sid):
-        print(f"[DIAL-STATUS] duplicate CallSid={call_sid}, skipping")
-        vr.hangup()
-        return PlainTextResponse(str(vr), media_type="application/xml")
-
-    b = get_brand_for_tenant(tenant_id)
-    business_name = b.get("business_name") or tenant_id
-    msg = f"Hi, we missed your call! {business_name} will get back to you shortly."
-
-    if from_num and not _blocked_number(from_num):
-        background_tasks.add_task(_handle_voice_side_effects, from_num, caller, msg, tenant_id, business_name)
-
-    vr.say("Thanks for calling. We just texted you. We'll be in touch shortly.", voice="alice")
-    vr.hangup()
     return PlainTextResponse(str(vr), media_type="application/xml")
 
 @router.post("/twilio/voice/recorded", response_class=PlainTextResponse)

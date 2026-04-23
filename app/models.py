@@ -112,9 +112,6 @@ class TenantSettings(SQLModel, table=True):
     # Twilio number assigned to this tenant (used for webhook tenant lookup)
     twilio_number: Optional[str] = Field(default="", max_length=50)
 
-    # Owner's real cell to try forwarding inbound calls to before sending missed-call SMS
-    forward_to: Optional[str] = Field(default="", max_length=50)
-
     # Optional extras if you want to drive internal alerts from settings
     office_sms_to: Optional[str] = Field(default="", max_length=50)
     office_email_to: Optional[str] = Field(default="", max_length=255)
