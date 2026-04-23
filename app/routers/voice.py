@@ -383,7 +383,7 @@ async def twilio_voice_recorded(
     b = get_brand_for_tenant(tenant_id)
     business_name = b.get("business_name") or tenant_id
     print(f"[RECORDED] brand lookup — tenant_id={tenant_id!r} business_name={business_name!r}", flush=True)
-    body = f"Hi, we missed your call! {business_name} will get back to you shortly."
+    body = "Hi! We missed your call and want to make sure you get taken care of. We'll be in touch shortly."
     try:
         if from_num and not _blocked_number(from_num) and _after_hours():
             if not storage.sent_recently(from_num, minutes=getattr(config, "ANTI_SPAM_MINUTES", 120)):
@@ -459,7 +459,7 @@ async def twilio_voice_missed(
     def _send_missed_call_effects():
         try:
             if not _blocked_number(from_num):
-                caller_msg = f"Hi, we missed your call! {business_name} will get back to you shortly."
+                caller_msg = "Hi! We missed your call and want to make sure you get taken care of. We'll be in touch shortly."
                 send_sms(from_num, caller_msg)
         except Exception as e:
             print(f"[MISSED] caller SMS error: {e}")
