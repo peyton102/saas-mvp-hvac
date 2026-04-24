@@ -22,8 +22,15 @@ class VapiIntakePayload(BaseModel):
 
 
 def _resolve_tenant(forwarded_from: Optional[str], session: Session) -> str:
-    """Match forwarded_from against TenantSettings.business_phone. Falls back to 'default'."""
+    """Match forwarded_from against TenantSettings.business_phone. Falls back to 'default'.
+
+    forwarded_from must be sent by the VAPI assistant in the POST payload. If it is
+    missing, all leads will be attributed to 'default' instead of the correct tenant.
+    Check VAPI assistant config if you see tenant_id='default' in logs.
+    """
     if not forwarded_from:
+        print("[VAPI] WARNING: forwarded_from missing — cannot resolve tenant, falling back to 'default'. "
+              "Check that the VAPI assistant is sending forwarded_from in its POST payload.", flush=True)
         return "default"
     norm = normalize_us_phone(forwarded_from) or forwarded_from
     rows = session.exec(
@@ -34,7 +41,11 @@ def _resolve_tenant(forwarded_from: Optional[str], session: Session) -> str:
     ).all()
     for s in rows:
         if normalize_us_phone(s.business_phone or "") == norm:
+            print(f"[VAPI] tenant resolved: forwarded_from={forwarded_from!r} → tenant_id={s.tenant_id!r}", flush=True)
             return s.tenant_id
+    print(f"[VAPI] WARNING: forwarded_from={forwarded_from!r} (normalized={norm!r}) did not match any "
+          f"TenantSettings.business_phone — falling back to 'default'. "
+          f"Make sure the tenant's business_phone is set in TenantSettings.", flush=True)
     return "default"
 
 
@@ -44,6 +55,8 @@ def vapi_intake(
     session: Session = Depends(get_session),
 ):
     tenant_id = _resolve_tenant(payload.forwarded_from, session)
+    print(f"[VAPI] intake — forwarded_from={payload.forwarded_from!r} tenant_id={tenant_id!r} "
+          f"caller={payload.phone!r} name={payload.name!r}", flush=True)
 
     # Build message from reason + notes
     message_parts = [payload.reason or "", payload.notes or ""]

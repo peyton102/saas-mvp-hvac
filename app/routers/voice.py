@@ -391,6 +391,20 @@ async def twilio_voice_recorded(
     except Exception as e:
         print(f"[VOICE] voicemail SMS error: {e}")
 
+    # Alert the office that a voicemail was left
+    try:
+        office_to = _office_destination_for_tenant(tenant_id)
+        if office_to:
+            voicemail_alert = (
+                f"Voicemail from {from_num}" +
+                (f" ({caller})" if caller else "") +
+                f" — {business_name}" +
+                (f"\n{recording_url}" if recording_url else "")
+            )
+            send_sms(office_to, voicemail_alert)
+    except Exception as e:
+        print(f"[VOICE] voicemail office alert error: {e}")
+
     vr = VoiceResponse()
     vr.say("Thanks. We just texted you our booking link. Goodbye.", voice="alice")
     return PlainTextResponse(str(vr), media_type="application/xml")
@@ -404,9 +418,15 @@ async def twilio_voice_missed(
 ):
     """
     Twilio status callback for unanswered/missed inbound calls.
-    Configure in Twilio Console: Voice -> Phone Number -> "Call Status Changes"
-    URL: https://<your-domain>/twilio/voice/missed
     Fires when CallStatus is 'no-answer' or 'busy'.
+
+    REQUIRED TWILIO CONSOLE SETUP (per phone number):
+      1. Go to Twilio Console → Phone Numbers → Manage → Active Numbers
+      2. Click the number, scroll to "Voice & Fax"
+      3. Under "Call Status Changes", set the webhook URL to:
+         https://<your-domain>/twilio/voice/missed  (HTTP POST)
+      Without this, Twilio will never call this endpoint and missed calls
+      will not be logged or alerted.
     """
     if not await _verify_twilio_signature(request):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Twilio signature")
