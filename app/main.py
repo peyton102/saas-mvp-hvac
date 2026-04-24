@@ -31,6 +31,7 @@ from app.deps import get_tenant_id
 from app.routers.demo import router as demo_router
 from app.routers.leads import router as leads_router
 from app.routers.voice import router as voice_router
+from app.routers.vapi import router as vapi_router
 from app.routers.calendly import router as calendly_router
 from app.routers.reminders import router as reminders_router
 from app.routers.tasks import router as tasks_router
@@ -296,6 +297,7 @@ app.include_router(calendly_router, dependencies=[Depends(get_tenant_id)])
 
 
 app.include_router(voice_router)
+app.include_router(vapi_router)
 app.include_router(finance_debug.router)
 app.include_router(backup.router)
 app.include_router(tenantold.router)
