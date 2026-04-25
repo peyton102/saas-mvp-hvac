@@ -67,19 +67,34 @@ def _extract_from_vapi_body(body: dict) -> dict:
     # The Twilio/VAPI number that received the call — validated against TWILIO_PHONE_NUMBER env var.
     called_number = (call.get("phoneNumber") or {}).get("number") or ""
 
+    # Log full call object keys + known nested objects so we can see exactly what Vapi sends
+    print(f"[VAPI EXTRACT] call keys: {list(call.keys())}", flush=True)
+    provider_details = call.get("phoneCallProviderDetails") or {}
+    metadata = call.get("metadata") or {}
+    debugging = call.get("inboundPhoneCallDebuggingArtifacts") or {}
+    print(f"[VAPI EXTRACT] phoneCallProviderDetails={provider_details}", flush=True)
+    print(f"[VAPI EXTRACT] metadata={metadata}", flush=True)
+    print(f"[VAPI EXTRACT] inboundPhoneCallDebuggingArtifacts={debugging}", flush=True)
+    print(f"[VAPI EXTRACT] forwardingPhoneNumber={call.get('forwardingPhoneNumber')!r} "
+          f"forwardedFrom={call.get('forwardedFrom')!r}", flush=True)
+
     # forwarded_from — the original number the caller dialed before Twilio forwarding.
     # Priority:
-    #   1. customParameters.forwarded_from — injected by /twilio/voice as a query param on the
-    #      <Redirect> to https://api.vapi.ai/twilio/inbound_call; Vapi surfaces it here.
-    #   2. call.forwardingPhoneNumber — native Twilio forwarding field, present when Twilio
-    #      itself forwarded the call (backup in case customParameters aren't populated).
-    provider_details = call.get("phoneCallProviderDetails") or {}
+    #   1. phoneCallProviderDetails.customParameters.forwarded_from — Vapi's standard location
+    #      for customParameters passed via <Number customParameters="..."> TwiML.
+    #   2. metadata.forwarded_from — Vapi may surface query params passed to inbound_call URL here.
+    #   3. inboundPhoneCallDebuggingArtifacts.forwarded_from — another possible location.
+    #   4. call.forwardingPhoneNumber / call.forwardedFrom — native Twilio forwarding fields.
     custom_params = provider_details.get("customParameters") or {}
     forwarded_from = (
         custom_params.get("forwarded_from")
+        or metadata.get("forwarded_from")
+        or debugging.get("forwarded_from")
         or call.get("forwardingPhoneNumber")
+        or call.get("forwardedFrom")
         or ""
     )
+    print(f"[VAPI EXTRACT] resolved forwarded_from={forwarded_from!r}", flush=True)
 
     # Prefer structuredData fields extracted by the assistant, fall back to summary
     name    = structured.get("name")    or structured.get("caller_name")   or ""
