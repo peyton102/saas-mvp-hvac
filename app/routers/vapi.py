@@ -6,8 +6,9 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from typing import Any, Optional
 
+from app.call_cache import lookup as cache_lookup, evict as cache_evict
 from app.db import get_session
-from app.models import Lead as LeadModel, Tenant, TenantSettings
+from app.models import Lead as LeadModel, TenantSettings
 from app.services.sms import get_brand_for_tenant, _office_destination_for_tenant, send_sms
 from app.utils.phone import normalize_us_phone
 
@@ -20,9 +21,8 @@ class VapiIntakePayload(BaseModel):
     reason: Optional[str] = None
     notes: Optional[str] = None
     language: Optional[str] = None
-    called_number: Optional[str] = None    # call.phoneNumber.number — validated against TWILIO_PHONE_NUMBER
-    phone_number_id: Optional[str] = None  # call.phoneNumberId — matched against Tenant.vapi_phone_number_id
-    forwarded_from: Optional[str] = None   # call.forwardingPhoneNumber — matched against business_phone for tenant lookup
+    called_number: Optional[str] = None   # call.phoneNumber.number — validated against TWILIO_PHONE_NUMBER
+    forwarded_from: Optional[str] = None  # resolved from cache (call.id) or Twilio fields
 
 
 def _extract_from_vapi_body(body: dict) -> dict:
@@ -68,39 +68,28 @@ def _extract_from_vapi_body(body: dict) -> dict:
     # The Twilio/VAPI number that received the call — validated against TWILIO_PHONE_NUMBER env var.
     called_number = (call.get("phoneNumber") or {}).get("number") or ""
 
-    # Vapi's internal phone number ID — matched against Tenant.vapi_phone_number_id.
-    phone_number_id = call.get("phoneNumberId") or (call.get("phoneNumber") or {}).get("id") or ""
-    print(f"[VAPI EXTRACT] phoneNumberId={call.get('phoneNumberId')!r} "
-          f"phoneNumber.id={(call.get('phoneNumber') or {}).get('id')!r}", flush=True)
-
-    # Log full call object keys + known nested objects so we can see exactly what Vapi sends
+    # call.id matches the originating Twilio CallSid — use it to look up ForwardedFrom
+    # from the in-memory cache written by /twilio/voice when the call came in.
+    call_id = call.get("id") or ""
     print(f"[VAPI EXTRACT] call keys: {list(call.keys())}", flush=True)
-    provider_details = call.get("phoneCallProviderDetails") or {}
-    metadata = call.get("metadata") or {}
-    debugging = call.get("inboundPhoneCallDebuggingArtifacts") or {}
-    print(f"[VAPI EXTRACT] phoneCallProviderDetails={provider_details}", flush=True)
-    print(f"[VAPI EXTRACT] metadata={metadata}", flush=True)
-    print(f"[VAPI EXTRACT] inboundPhoneCallDebuggingArtifacts={debugging}", flush=True)
-    print(f"[VAPI EXTRACT] forwardingPhoneNumber={call.get('forwardingPhoneNumber')!r} "
+    print(f"[VAPI EXTRACT] call.id={call_id!r} called_number={called_number!r} "
+          f"forwardingPhoneNumber={call.get('forwardingPhoneNumber')!r} "
           f"forwardedFrom={call.get('forwardedFrom')!r}", flush=True)
 
-    # forwarded_from — the original number the caller dialed before Twilio forwarding.
-    # Priority:
-    #   1. phoneCallProviderDetails.customParameters.forwarded_from — Vapi's standard location
-    #      for customParameters passed via <Number customParameters="..."> TwiML.
-    #   2. metadata.forwarded_from — Vapi may surface query params passed to inbound_call URL here.
-    #   3. inboundPhoneCallDebuggingArtifacts.forwarded_from — another possible location.
-    #   4. call.forwardingPhoneNumber / call.forwardedFrom — native Twilio forwarding fields.
-    custom_params = provider_details.get("customParameters") or {}
+    # forwarded_from — priority:
+    #   1. In-memory cache keyed by CallSid (most reliable — set by /twilio/voice)
+    #   2. call.forwardingPhoneNumber / call.forwardedFrom — native Twilio fields as fallback
+    cached = cache_lookup(call_id)
     forwarded_from = (
-        custom_params.get("forwarded_from")
-        or metadata.get("forwarded_from")
-        or debugging.get("forwarded_from")
+        cached
         or call.get("forwardingPhoneNumber")
         or call.get("forwardedFrom")
         or ""
     )
-    print(f"[VAPI EXTRACT] resolved forwarded_from={forwarded_from!r}", flush=True)
+    if cached:
+        cache_evict(call_id)
+    print(f"[VAPI EXTRACT] forwarded_from={forwarded_from!r} "
+          f"(source={'cache' if cached else 'twilio_field'})", flush=True)
 
     # Prefer structuredData fields extracted by the assistant, fall back to summary
     name    = structured.get("name")    or structured.get("caller_name")   or ""
@@ -113,30 +102,19 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "reason": reason,
         "notes": notes,
         "called_number": called_number,
-        "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
     }
 
 
-def _resolve_tenant(
-    called_number: Optional[str],
-    phone_number_id: Optional[str],
-    forwarded_from: Optional[str],
-    session: Session,
-) -> Optional[str]:
+def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str], session: Session) -> Optional[str]:
     """Identify the tenant from a VAPI end-of-call report.
 
     Step 1 — validate the call:
       Confirm call.phoneNumber.number matches TWILIO_PHONE_NUMBER env var (non-fatal).
 
-    Step 2 — resolve by Vapi phone number ID:
-      Match call.phoneNumberId against Tenant.vapi_phone_number_id. This is the most
-      reliable method — each tenant stores the ID of their Vapi phone number in settings.
-
-    Step 3 — resolve by forwarded_from:
-      Fall back to matching call.forwardingPhoneNumber against TenantSettings.business_phone.
-
-    Returns None if no tenant is found. Caller must handle None — never save without a tenant.
+    Step 2 — resolve by forwarded_from:
+      Match forwarded_from (sourced from in-memory cache or Twilio native fields) against
+      TenantSettings.business_phone. Returns None if no match — never falls back to 'default'.
     """
     twilio_number = normalize_us_phone(os.getenv("TWILIO_PHONE_NUMBER", "").strip()) or ""
 
@@ -151,45 +129,25 @@ def _resolve_tenant(
     else:
         print("[VAPI] WARNING: TWILIO_PHONE_NUMBER env var not set — skipping call validation.", flush=True)
 
-    # Step 2: resolve by Vapi phone number ID
-    if phone_number_id:
-        tenants = session.exec(
-            select(Tenant).where(
-                Tenant.vapi_phone_number_id != None,
-                Tenant.vapi_phone_number_id != "",
-            )
-        ).all()
-        candidates_id = {t.slug: t.vapi_phone_number_id for t in tenants}
-        print(f"[VAPI] phone_number_id lookup: phone_number_id={phone_number_id!r} "
-              f"candidates={candidates_id}", flush=True)
-        for t in tenants:
-            if t.vapi_phone_number_id == phone_number_id:
-                print(f"[VAPI] tenant resolved via phone_number_id={phone_number_id!r} → {t.slug!r}", flush=True)
-                return t.slug
-        print(f"[VAPI] phone_number_id={phone_number_id!r} did not match any Tenant.vapi_phone_number_id — "
-              f"trying forwarded_from fallback.", flush=True)
-    else:
-        print("[VAPI] phone_number_id missing — skipping ID-based lookup, trying forwarded_from.", flush=True)
-
-    # Step 3: resolve by forwarded_from vs business_phone
+    # Step 2: resolve by forwarded_from vs business_phone
     if not forwarded_from:
-        print("[VAPI] ERROR: forwarded_from also empty — cannot resolve tenant. "
-              "Set vapi_phone_number_id in tenant settings for reliable routing.", flush=True)
+        print("[VAPI] ERROR: forwarded_from empty — cannot resolve tenant. "
+              "Check that /twilio/voice is storing ForwardedFrom in the cache for this CallSid.", flush=True)
         return None
 
     norm_fwd = normalize_us_phone(forwarded_from) or forwarded_from
     rows = session.exec(select(TenantSettings)).all()
-    candidates_bp = {s.tenant_id: normalize_us_phone(s.business_phone or "") for s in rows if s.business_phone}
-    print(f"[VAPI] forwarded_from lookup: forwarded_from={forwarded_from!r} normalized={norm_fwd!r} "
-          f"candidates={candidates_bp}", flush=True)
+    candidates = {s.tenant_id: normalize_us_phone(s.business_phone or "") for s in rows if s.business_phone}
+    print(f"[VAPI] tenant lookup: forwarded_from={forwarded_from!r} normalized={norm_fwd!r} "
+          f"candidates={candidates}", flush=True)
 
     for s in rows:
         if normalize_us_phone(s.business_phone or "") == norm_fwd:
-            print(f"[VAPI] tenant resolved via forwarded_from={forwarded_from!r} → {s.tenant_id!r}", flush=True)
+            print(f"[VAPI] tenant resolved: forwarded_from={forwarded_from!r} → {s.tenant_id!r}", flush=True)
             return s.tenant_id
 
-    print(f"[VAPI] ERROR: phone_number_id={phone_number_id!r} and forwarded_from={forwarded_from!r} both "
-          f"unmatched — lead will NOT be saved.", flush=True)
+    print(f"[VAPI] ERROR: forwarded_from={forwarded_from!r} (normalized={norm_fwd!r}) unmatched — "
+          f"lead will NOT be saved.", flush=True)
     return None
 
 
@@ -212,10 +170,9 @@ async def vapi_intake(
     flat = _extract_from_vapi_body(body) if isinstance(body, dict) else {}
     payload = VapiIntakePayload(**{k: v for k, v in flat.items() if k in VapiIntakePayload.model_fields})
 
-    tenant_id = _resolve_tenant(payload.called_number, payload.phone_number_id, payload.forwarded_from, session)
-    print(f"[VAPI] intake — phone_number_id={payload.phone_number_id!r} called_number={payload.called_number!r} "
-          f"forwarded_from={payload.forwarded_from!r} tenant_id={tenant_id!r} "
-          f"caller={payload.phone!r} name={payload.name!r}", flush=True)
+    tenant_id = _resolve_tenant(payload.called_number, payload.forwarded_from, session)
+    print(f"[VAPI] intake — called_number={payload.called_number!r} forwarded_from={payload.forwarded_from!r} "
+          f"tenant_id={tenant_id!r} caller={payload.phone!r} name={payload.name!r}", flush=True)
 
     if tenant_id is None:
         print(f"[VAPI] DROPPING lead — tenant unresolved. "

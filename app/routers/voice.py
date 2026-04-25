@@ -1,6 +1,7 @@
 # app/routers/voice.py
 import os
 import urllib.parse
+from app.call_cache import store as cache_store
 from fastapi import APIRouter, Request, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response, PlainTextResponse
 from sqlmodel import Session, select
@@ -324,11 +325,12 @@ async def twilio_voice(
           f"from={from_num} forwarded_from={forwarded_from_raw!r} after_hours={after_hours}")
 
     # --- Forward to VAPI if configured ---
-    # Redirect the live call to Vapi's inbound call URL so Vapi takes over handling.
-    # forwarded_from is appended as a query parameter so Vapi includes it in the
-    # end-of-call report, where /vapi/intake reads it for tenant resolution.
+    # Store ForwardedFrom in the in-memory cache keyed by CallSid before redirecting.
+    # Vapi's end-of-call report includes call.id == Twilio CallSid, so /vapi/intake
+    # can look up the correct ForwardedFrom without relying on query params.
     vapi_phone = os.getenv("VAPI_PHONE_NUMBER", "").strip()
     if vapi_phone:
+        cache_store(call_sid, forwarded_from_raw)
         vapi_url = "https://api.vapi.ai/twilio/inbound_call"
         if forwarded_from_raw:
             vapi_url += "?" + urllib.parse.urlencode({"forwarded_from": forwarded_from_raw})
