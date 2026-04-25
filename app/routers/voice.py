@@ -1,6 +1,5 @@
 # app/routers/voice.py
 import os
-import urllib.parse
 from fastapi import APIRouter, Request, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response, PlainTextResponse
 from sqlmodel import Session, select
@@ -325,21 +324,19 @@ async def twilio_voice(
 
     # --- Forward to VAPI if configured ---
     # Set VAPI_PHONE_NUMBER in env (the Twilio number assigned to your VAPI assistant).
-    # When ForwardedFrom is present we know the caller originally dialed the owner's real
-    # number; we embed that as a custom parameter so VAPI can pass it back in the
-    # end-of-call webhook and /vapi/intake can resolve the correct tenant.
+    # Tenant resolution happens in /vapi/intake using call.phoneNumber.number, which VAPI
+    # populates automatically — no custom parameters needed here.
     vapi_phone = os.getenv("VAPI_PHONE_NUMBER", "").strip()
-    if vapi_phone and forwarded_from_raw:
-        custom_params = urllib.parse.urlencode({"forwarded_from": forwarded_from_raw})
+    if vapi_phone:
         twiml = (
             '<?xml version="1.0" encoding="UTF-8"?>'
             "<Response>"
             "<Dial>"
-            f'<Number customParameters="{custom_params}">{vapi_phone}</Number>'
+            f"<Number>{vapi_phone}</Number>"
             "</Dial>"
             "</Response>"
         )
-        print(f"[VOICE] forwarding to VAPI={vapi_phone} with forwarded_from={forwarded_from_raw!r}", flush=True)
+        print(f"[VOICE] forwarding to VAPI={vapi_phone}", flush=True)
         return PlainTextResponse(twiml, media_type="application/xml")
 
     # --- Default flow (no VAPI phone set, or direct call with no ForwardedFrom) ---
