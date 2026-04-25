@@ -67,9 +67,19 @@ def _extract_from_vapi_body(body: dict) -> dict:
     # The Twilio/VAPI number that received the call — validated against TWILIO_PHONE_NUMBER env var.
     called_number = (call.get("phoneNumber") or {}).get("number") or ""
 
-    # The original number the caller dialed before Twilio forwarding kicked in.
-    # Matched against TenantSettings.business_phone to identify the tenant.
-    forwarded_from = call.get("forwardingPhoneNumber") or ""
+    # forwarded_from — the original number the caller dialed before Twilio forwarding.
+    # Priority:
+    #   1. customParameters.forwarded_from — injected by /twilio/voice as a query param on the
+    #      <Redirect> to https://api.vapi.ai/twilio/inbound_call; Vapi surfaces it here.
+    #   2. call.forwardingPhoneNumber — native Twilio forwarding field, present when Twilio
+    #      itself forwarded the call (backup in case customParameters aren't populated).
+    provider_details = call.get("phoneCallProviderDetails") or {}
+    custom_params = provider_details.get("customParameters") or {}
+    forwarded_from = (
+        custom_params.get("forwarded_from")
+        or call.get("forwardingPhoneNumber")
+        or ""
+    )
 
     # Prefer structuredData fields extracted by the assistant, fall back to summary
     name    = structured.get("name")    or structured.get("caller_name")   or ""
