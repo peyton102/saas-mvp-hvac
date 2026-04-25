@@ -174,6 +174,7 @@ OPEN_PREFIXES = (
     "/book",
     "/lead",
     "/twilio/voice",
+    "/vapi/",
     "/webhooks/calendly",
     "/backup/",
     "/cron/",
