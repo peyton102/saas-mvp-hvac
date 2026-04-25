@@ -292,6 +292,13 @@ async def twilio_voice(
         print(f"[VOICE] form parse error: {e}")
         form = {}
 
+    print(
+        f"[VOICE RAW] From={form.get('From')!r} To={form.get('To')!r} "
+        f"ForwardedFrom={form.get('ForwardedFrom')!r} Called={form.get('Called')!r} "
+        f"Direction={form.get('Direction')!r} full_form={dict(form)}",
+        flush=True,
+    )
+
     from_num_raw = (form.get("From") or "").strip()
     from_num = normalize_us_phone(from_num_raw) or from_num_raw
     caller = (form.get("CallerName") or "").strip()
