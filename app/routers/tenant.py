@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app import config
@@ -13,6 +14,20 @@ from app.models import Tenant
 from app.services.review_link_resolver import resolve_and_save_google_review_link
 
 router = APIRouter(prefix="/tenant", tags=["tenant"])
+
+
+def _ensure_tenant_columns(db: Session) -> None:
+    """Add new tenant columns if they don't exist yet (safe to call on every request)."""
+    migrations = [
+        ("sp_ten_vapi_pid", "ALTER TABLE tenant ADD COLUMN vapi_phone_number_id TEXT DEFAULT ''"),
+    ]
+    for sp, ddl in migrations:
+        try:
+            db.exec(text(f"SAVEPOINT {sp}"))
+            db.exec(text(ddl))
+            db.exec(text(f"RELEASE SAVEPOINT {sp}"))
+        except Exception:
+            db.exec(text(f"ROLLBACK TO SAVEPOINT {sp}"))
 
 _DEFAULT_TZ = "America/New_York"
 
@@ -189,6 +204,7 @@ class TenantSettingsIn(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     timezone: Optional[str] = None  # IANA tz string, e.g. "America/Chicago"
+    vapi_phone_number_id: Optional[str] = None
 
 
 class ProfileIn(BaseModel):
@@ -279,6 +295,7 @@ def update_tenant_settings(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_session),
 ):
+    _ensure_tenant_columns(db)
     t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -310,6 +327,7 @@ def get_tenant_settings(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_session),
 ):
+    _ensure_tenant_columns(db)
     t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -326,6 +344,7 @@ def get_tenant_settings(
         "website": t.website,
         "address": t.address,
         "timezone": t.timezone or _DEFAULT_TZ,
+        "vapi_phone_number_id": t.vapi_phone_number_id or "",
     }
 
 

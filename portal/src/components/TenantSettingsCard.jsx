@@ -15,6 +15,7 @@ export default function TenantSettingsCard({
     review_google_url: "",
     email: "",
     phone: "",
+    vapi_phone_number_id: "",
   });
 
   const isSettingsComplete = useMemo(() => {
@@ -78,6 +79,7 @@ export default function TenantSettingsCard({
           review_google_url: data.review_google_url ?? "",
           email: data.email ?? "",
           phone: data.phone ?? "",
+          vapi_phone_number_id: data.vapi_phone_number_id ?? "",
         };
 
         // If booking_link is empty in DB, auto-fill it using tenantSlug + portal base
@@ -312,6 +314,19 @@ if ((!raw || looksLikePrefixOnly) && computedBookingLink) {
             style={{ width: "100%", marginTop: 4 }}
             {...bind("phone")}
           />
+        </label>
+
+        <label style={{ fontSize: 13 }}>
+          Vapi Phone Number ID
+          <input
+            type="text"
+            style={{ width: "100%", marginTop: 4 }}
+            placeholder="e.g. abc123..."
+            {...bind("vapi_phone_number_id")}
+          />
+          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+            Found in your Vapi dashboard under Phone Numbers. Used to route AI calls to the correct tenant.
+          </div>
         </label>
 
         <div style={{ marginTop: 8 }}>

@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from typing import Any, Optional
 
 from app.db import get_session
-from app.models import Lead as LeadModel, TenantSettings
+from app.models import Lead as LeadModel, Tenant, TenantSettings
 from app.services.sms import get_brand_for_tenant, _office_destination_for_tenant, send_sms
 from app.utils.phone import normalize_us_phone
 
@@ -20,8 +20,9 @@ class VapiIntakePayload(BaseModel):
     reason: Optional[str] = None
     notes: Optional[str] = None
     language: Optional[str] = None
-    called_number: Optional[str] = None   # call.phoneNumber.number — validated against TWILIO_PHONE_NUMBER
-    forwarded_from: Optional[str] = None  # call.forwardingPhoneNumber — matched against business_phone for tenant lookup
+    called_number: Optional[str] = None    # call.phoneNumber.number — validated against TWILIO_PHONE_NUMBER
+    phone_number_id: Optional[str] = None  # call.phoneNumberId — matched against Tenant.vapi_phone_number_id
+    forwarded_from: Optional[str] = None   # call.forwardingPhoneNumber — matched against business_phone for tenant lookup
 
 
 def _extract_from_vapi_body(body: dict) -> dict:
@@ -67,6 +68,11 @@ def _extract_from_vapi_body(body: dict) -> dict:
     # The Twilio/VAPI number that received the call — validated against TWILIO_PHONE_NUMBER env var.
     called_number = (call.get("phoneNumber") or {}).get("number") or ""
 
+    # Vapi's internal phone number ID — matched against Tenant.vapi_phone_number_id.
+    phone_number_id = call.get("phoneNumberId") or (call.get("phoneNumber") or {}).get("id") or ""
+    print(f"[VAPI EXTRACT] phoneNumberId={call.get('phoneNumberId')!r} "
+          f"phoneNumber.id={(call.get('phoneNumber') or {}).get('id')!r}", flush=True)
+
     # Log full call object keys + known nested objects so we can see exactly what Vapi sends
     print(f"[VAPI EXTRACT] call keys: {list(call.keys())}", flush=True)
     provider_details = call.get("phoneCallProviderDetails") or {}
@@ -107,21 +113,30 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "reason": reason,
         "notes": notes,
         "called_number": called_number,
+        "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
     }
 
 
-def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str], session: Session) -> Optional[str]:
+def _resolve_tenant(
+    called_number: Optional[str],
+    phone_number_id: Optional[str],
+    forwarded_from: Optional[str],
+    session: Session,
+) -> Optional[str]:
     """Identify the tenant from a VAPI end-of-call report.
 
     Step 1 — validate the call:
-      Confirm call.phoneNumber.number matches TWILIO_PHONE_NUMBER env var.
-      Logs a warning if it doesn't, but continues (non-fatal).
+      Confirm call.phoneNumber.number matches TWILIO_PHONE_NUMBER env var (non-fatal).
 
-    Step 2 — identify the tenant:
-      Match forwarded_from against TenantSettings.business_phone.
-      Returns None (no fallback) if forwarded_from is missing or no match found.
-      Caller must handle None — do not save leads without a resolved tenant.
+    Step 2 — resolve by Vapi phone number ID:
+      Match call.phoneNumberId against Tenant.vapi_phone_number_id. This is the most
+      reliable method — each tenant stores the ID of their Vapi phone number in settings.
+
+    Step 3 — resolve by forwarded_from:
+      Fall back to matching call.forwardingPhoneNumber against TenantSettings.business_phone.
+
+    Returns None if no tenant is found. Caller must handle None — never save without a tenant.
     """
     twilio_number = normalize_us_phone(os.getenv("TWILIO_PHONE_NUMBER", "").strip()) or ""
 
@@ -136,27 +151,45 @@ def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str],
     else:
         print("[VAPI] WARNING: TWILIO_PHONE_NUMBER env var not set — skipping call validation.", flush=True)
 
-    # Step 2: resolve tenant
+    # Step 2: resolve by Vapi phone number ID
+    if phone_number_id:
+        tenants = session.exec(
+            select(Tenant).where(
+                Tenant.vapi_phone_number_id != None,
+                Tenant.vapi_phone_number_id != "",
+            )
+        ).all()
+        candidates_id = {t.slug: t.vapi_phone_number_id for t in tenants}
+        print(f"[VAPI] phone_number_id lookup: phone_number_id={phone_number_id!r} "
+              f"candidates={candidates_id}", flush=True)
+        for t in tenants:
+            if t.vapi_phone_number_id == phone_number_id:
+                print(f"[VAPI] tenant resolved via phone_number_id={phone_number_id!r} → {t.slug!r}", flush=True)
+                return t.slug
+        print(f"[VAPI] phone_number_id={phone_number_id!r} did not match any Tenant.vapi_phone_number_id — "
+              f"trying forwarded_from fallback.", flush=True)
+    else:
+        print("[VAPI] phone_number_id missing — skipping ID-based lookup, trying forwarded_from.", flush=True)
+
+    # Step 3: resolve by forwarded_from vs business_phone
     if not forwarded_from:
-        print("[VAPI] ERROR: forwarded_from is empty — cannot identify tenant. "
-              "Check that /twilio/voice is appending ?forwarded_from= to the Vapi redirect URL.", flush=True)
+        print("[VAPI] ERROR: forwarded_from also empty — cannot resolve tenant. "
+              "Set vapi_phone_number_id in tenant settings for reliable routing.", flush=True)
         return None
 
     norm_fwd = normalize_us_phone(forwarded_from) or forwarded_from
     rows = session.exec(select(TenantSettings)).all()
-
-    # Dump every candidate for comparison so mismatches are visible in logs
-    candidates = {s.tenant_id: normalize_us_phone(s.business_phone or "") for s in rows if s.business_phone}
-    print(f"[VAPI] tenant lookup: forwarded_from={forwarded_from!r} normalized={norm_fwd!r} "
-          f"candidates={candidates}", flush=True)
+    candidates_bp = {s.tenant_id: normalize_us_phone(s.business_phone or "") for s in rows if s.business_phone}
+    print(f"[VAPI] forwarded_from lookup: forwarded_from={forwarded_from!r} normalized={norm_fwd!r} "
+          f"candidates={candidates_bp}", flush=True)
 
     for s in rows:
         if normalize_us_phone(s.business_phone or "") == norm_fwd:
-            print(f"[VAPI] tenant resolved: forwarded_from={forwarded_from!r} → tenant_id={s.tenant_id!r}", flush=True)
+            print(f"[VAPI] tenant resolved via forwarded_from={forwarded_from!r} → {s.tenant_id!r}", flush=True)
             return s.tenant_id
 
-    print(f"[VAPI] ERROR: forwarded_from={forwarded_from!r} (normalized={norm_fwd!r}) did not match any "
-          f"TenantSettings.business_phone. No tenant resolved — lead will NOT be saved.", flush=True)
+    print(f"[VAPI] ERROR: phone_number_id={phone_number_id!r} and forwarded_from={forwarded_from!r} both "
+          f"unmatched — lead will NOT be saved.", flush=True)
     return None
 
 
@@ -179,9 +212,10 @@ async def vapi_intake(
     flat = _extract_from_vapi_body(body) if isinstance(body, dict) else {}
     payload = VapiIntakePayload(**{k: v for k, v in flat.items() if k in VapiIntakePayload.model_fields})
 
-    tenant_id = _resolve_tenant(payload.called_number, payload.forwarded_from, session)
-    print(f"[VAPI] intake — called_number={payload.called_number!r} forwarded_from={payload.forwarded_from!r} "
-          f"tenant_id={tenant_id!r} caller={payload.phone!r} name={payload.name!r}", flush=True)
+    tenant_id = _resolve_tenant(payload.called_number, payload.phone_number_id, payload.forwarded_from, session)
+    print(f"[VAPI] intake — phone_number_id={payload.phone_number_id!r} called_number={payload.called_number!r} "
+          f"forwarded_from={payload.forwarded_from!r} tenant_id={tenant_id!r} "
+          f"caller={payload.phone!r} name={payload.name!r}", flush=True)
 
     if tenant_id is None:
         print(f"[VAPI] DROPPING lead — tenant unresolved. "
