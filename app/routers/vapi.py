@@ -62,11 +62,19 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or ""
     )
 
-    # The business number that was originally called (used for tenant resolution)
-    phone_number_obj = call.get("phoneNumber") or {}
+    # forwarded_from resolution — priority order:
+    #   1. customParameters.forwarded_from — set by /twilio/voice via <Number customParameters="...">
+    #      This is the most reliable source: it's the owner's real business number that the
+    #      caller originally dialed before call-forwarding kicked in.
+    #   2. forwardingPhoneNumber — present on the call object when Twilio forwards a call
+    #   3. phoneNumber.number — the VAPI/Twilio number (fallback; works if twilio_number is set
+    #      in TenantSettings instead of business_phone)
+    provider_details = call.get("phoneCallProviderDetails") or {}
+    custom_params = provider_details.get("customParameters") or {}
     forwarded_from = (
-        phone_number_obj.get("number")          # Twilio number assigned to this tenant
-        or call.get("forwardingPhoneNumber")     # original number caller dialed before forwarding
+        custom_params.get("forwarded_from")         # injected by /twilio/voice <Dial>
+        or call.get("forwardingPhoneNumber")         # native Twilio forwarding field
+        or (call.get("phoneNumber") or {}).get("number")  # VAPI/Twilio number fallback
         or ""
     )
 

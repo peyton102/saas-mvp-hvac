@@ -1,4 +1,6 @@
 # app/routers/voice.py
+import os
+import urllib.parse
 from fastapi import APIRouter, Request, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response, PlainTextResponse
 from sqlmodel import Session, select
@@ -294,6 +296,7 @@ async def twilio_voice(
     from_num = normalize_us_phone(from_num_raw) or from_num_raw
     caller = (form.get("CallerName") or "").strip()
     call_sid = (form.get("CallSid") or "").strip()
+    forwarded_from_raw = (form.get("ForwardedFrom") or "").strip()
 
     if call_sid:
         event_id = call_sid
@@ -310,8 +313,29 @@ async def twilio_voice(
 
     after_hours = _is_after_hours(request)
     _log_lead_db(session, from_num, caller, tenant_id, source="missed_call" if after_hours else None)
-    print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} from={from_num} after_hours={after_hours}")
+    print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} "
+          f"from={from_num} forwarded_from={forwarded_from_raw!r} after_hours={after_hours}")
 
+    # --- Forward to VAPI if configured ---
+    # Set VAPI_PHONE_NUMBER in env (the Twilio number assigned to your VAPI assistant).
+    # When ForwardedFrom is present we know the caller originally dialed the owner's real
+    # number; we embed that as a custom parameter so VAPI can pass it back in the
+    # end-of-call webhook and /vapi/intake can resolve the correct tenant.
+    vapi_phone = os.getenv("VAPI_PHONE_NUMBER", "").strip()
+    if vapi_phone and forwarded_from_raw:
+        custom_params = urllib.parse.urlencode({"forwarded_from": forwarded_from_raw})
+        twiml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            "<Response>"
+            "<Dial>"
+            f'<Number customParameters="{custom_params}">{vapi_phone}</Number>'
+            "</Dial>"
+            "</Response>"
+        )
+        print(f"[VOICE] forwarding to VAPI={vapi_phone} with forwarded_from={forwarded_from_raw!r}", flush=True)
+        return PlainTextResponse(twiml, media_type="application/xml")
+
+    # --- Default flow (no VAPI phone set, or direct call with no ForwardedFrom) ---
     first = caller.split(" ")[0] if caller else "there"
     msg = (
         f"Hey {first}, thanks for contacting {business_name}! "
