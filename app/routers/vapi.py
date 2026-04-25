@@ -96,7 +96,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
     }
 
 
-def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str], session: Session) -> str:
+def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str], session: Session) -> Optional[str]:
     """Identify the tenant from a VAPI end-of-call report.
 
     Step 1 — validate the call:
@@ -104,8 +104,9 @@ def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str],
       Logs a warning if it doesn't, but continues (non-fatal).
 
     Step 2 — identify the tenant:
-      Match forwarded_from (call.forwardingPhoneNumber) against TenantSettings.business_phone.
-      If no match or forwarded_from is absent, falls back to 'default'.
+      Match forwarded_from against TenantSettings.business_phone.
+      Returns None (no fallback) if forwarded_from is missing or no match found.
+      Caller must handle None — do not save leads without a resolved tenant.
     """
     twilio_number = normalize_us_phone(os.getenv("TWILIO_PHONE_NUMBER", "").strip()) or ""
 
@@ -122,24 +123,26 @@ def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str],
 
     # Step 2: resolve tenant
     if not forwarded_from:
-        print("[VAPI] forwarded_from missing — cannot identify tenant, falling back to 'default'.", flush=True)
-        return "default"
+        print("[VAPI] ERROR: forwarded_from is empty — cannot identify tenant. "
+              "Check that /twilio/voice is appending ?forwarded_from= to the Vapi redirect URL.", flush=True)
+        return None
 
     norm_fwd = normalize_us_phone(forwarded_from) or forwarded_from
-    rows = session.exec(
-        select(TenantSettings).where(
-            TenantSettings.business_phone != None,
-            TenantSettings.business_phone != "",
-        )
-    ).all()
+    rows = session.exec(select(TenantSettings)).all()
+
+    # Dump every candidate for comparison so mismatches are visible in logs
+    candidates = {s.tenant_id: normalize_us_phone(s.business_phone or "") for s in rows if s.business_phone}
+    print(f"[VAPI] tenant lookup: forwarded_from={forwarded_from!r} normalized={norm_fwd!r} "
+          f"candidates={candidates}", flush=True)
+
     for s in rows:
         if normalize_us_phone(s.business_phone or "") == norm_fwd:
             print(f"[VAPI] tenant resolved: forwarded_from={forwarded_from!r} → tenant_id={s.tenant_id!r}", flush=True)
             return s.tenant_id
 
-    print(f"[VAPI] WARNING: forwarded_from={forwarded_from!r} (normalized={norm_fwd!r}) did not match any "
-          f"TenantSettings.business_phone — falling back to 'default'.", flush=True)
-    return "default"
+    print(f"[VAPI] ERROR: forwarded_from={forwarded_from!r} (normalized={norm_fwd!r}) did not match any "
+          f"TenantSettings.business_phone. No tenant resolved — lead will NOT be saved.", flush=True)
+    return None
 
 
 @router.post("/vapi/intake")
@@ -165,6 +168,12 @@ async def vapi_intake(
     print(f"[VAPI] intake — called_number={payload.called_number!r} forwarded_from={payload.forwarded_from!r} "
           f"tenant_id={tenant_id!r} caller={payload.phone!r} name={payload.name!r}", flush=True)
 
+    if tenant_id is None:
+        print(f"[VAPI] DROPPING lead — tenant unresolved. "
+              f"caller={payload.phone!r} name={payload.name!r} reason={payload.reason!r} "
+              f"notes={payload.notes!r} forwarded_from={payload.forwarded_from!r}", flush=True)
+        return {"status": "error", "detail": "tenant not resolved"}
+
     # Build message from reason + notes
     message_parts = [payload.reason or "", payload.notes or ""]
     message = " | ".join(p for p in message_parts if p).strip() or "Inbound call via Vapi"
@@ -185,7 +194,7 @@ async def vapi_intake(
         session.rollback()
         print(f"[VAPI] lead insert error: {e}", flush=True)
 
-    # Office SMS
+    # Office SMS — send everything the AI collected to the tenant's office number
     try:
         office_to = _office_destination_for_tenant(tenant_id)
         if office_to:
@@ -193,12 +202,19 @@ async def vapi_intake(
             business_name = b.get("business_name") or tenant_id
             name_display = (payload.name or "Unknown").strip()
             phone_display = (payload.phone or "unknown").strip()
-            reason_display = (payload.reason or "no reason given").strip()
-            alert = (
-                f"New lead from {name_display} at {phone_display} — "
-                f"{reason_display}. They called {business_name}."
-            )
-            send_sms(office_to, alert)
+            reason_display = (payload.reason or "").strip()
+            notes_display = (payload.notes or "").strip()
+            alert_parts = [f"New AI call lead for {business_name}",
+                           f"Name: {name_display}",
+                           f"Phone: {phone_display}"]
+            if reason_display:
+                alert_parts.append(f"Reason: {reason_display}")
+            if notes_display:
+                alert_parts.append(f"Notes: {notes_display}")
+            send_sms(office_to, "\n".join(alert_parts))
+            print(f"[VAPI] office SMS sent to {office_to} for tenant={tenant_id!r}", flush=True)
+        else:
+            print(f"[VAPI] no office_sms_to configured for tenant={tenant_id!r} — skipping SMS", flush=True)
     except Exception as e:
         print(f"[VAPI] office SMS error: {e}", flush=True)
 
