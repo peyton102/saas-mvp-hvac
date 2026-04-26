@@ -19,7 +19,6 @@ router = APIRouter(prefix="/tenant", tags=["tenant"])
 def _ensure_tenant_columns(db: Session) -> None:
     """Add new tenant columns if they don't exist yet (safe to call on every request)."""
     migrations = [
-        ("sp_ten_vapi_pid", "ALTER TABLE tenant ADD COLUMN vapi_phone_number_id TEXT DEFAULT ''"),
     ]
     for sp, ddl in migrations:
         try:
@@ -204,7 +203,6 @@ class TenantSettingsIn(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     timezone: Optional[str] = None  # IANA tz string, e.g. "America/Chicago"
-    vapi_phone_number_id: Optional[str] = None
 
 
 class ProfileIn(BaseModel):
@@ -344,7 +342,6 @@ def get_tenant_settings(
         "website": t.website,
         "address": t.address,
         "timezone": t.timezone or _DEFAULT_TZ,
-        "vapi_phone_number_id": t.vapi_phone_number_id or "",
     }
 
 
