@@ -102,6 +102,10 @@ async def get_tenant_id_public(
 
 router = APIRouter(prefix="", tags=["voice"])
 
+
+def _vapi_enabled() -> bool:
+    return bool((os.getenv("VAPI_PHONE_NUMBER", "") or "").strip())
+
 def utcnow():
     return datetime.now(tz=timezone.utc)
 
@@ -320,7 +324,6 @@ async def twilio_voice(
     print(f"[VOICE] brand lookup — tenant_id={tenant_id!r} business_name={business_name!r}", flush=True)
 
     after_hours = _is_after_hours(request)
-    _log_lead_db(session, from_num, caller, tenant_id, source="missed_call" if after_hours else None)
     print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} "
           f"from={from_num} forwarded_from={forwarded_from_raw!r} after_hours={after_hours}")
 
@@ -342,6 +345,8 @@ async def twilio_voice(
         )
         print(f"[VOICE] redirecting to VAPI inbound_call URL, forwarded_from={forwarded_from_raw!r}", flush=True)
         return PlainTextResponse(twiml, media_type="application/xml")
+
+    _log_lead_db(session, from_num, caller, tenant_id, source="missed_call" if after_hours else None)
 
     # --- Default flow (no VAPI phone set, or direct call with no ForwardedFrom) ---
     first = caller.split(" ")[0] if caller else "there"
@@ -382,6 +387,12 @@ async def twilio_voice_recorded(
         form = await request.form()
     except Exception:
         form = {}
+
+    if _vapi_enabled():
+        print(f"[RECORDED] Vapi-enabled flow - skipping Twilio voicemail persistence for tenant={tenant_id!r}", flush=True)
+        vr = VoiceResponse()
+        vr.say("Thanks. Goodbye.", voice="alice")
+        return PlainTextResponse(str(vr), media_type="application/xml")
 
     from_num = normalize_us_phone((form.get("From") or "").strip()) or ""
     recording_url = (form.get("RecordingUrl") or "").strip()
@@ -476,6 +487,10 @@ async def twilio_voice_missed(
     call_sid = (form.get("CallSid") or "").strip()
 
     print(f"[MISSED] tenant={tenant_id} status={call_status} from={from_num} sid={call_sid}")
+
+    if _vapi_enabled():
+        print(f"[MISSED] Vapi-enabled flow - skipping Twilio missed-call save/SMS for tenant={tenant_id!r}", flush=True)
+        return PlainTextResponse("", status_code=204)
 
     # Only act on actual missed/unanswered calls
     if call_status not in ("no-answer", "busy", "failed"):

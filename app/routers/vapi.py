@@ -2,18 +2,20 @@
 import json as _json
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from typing import Any, Optional
 
 from app.call_cache import lookup as cache_lookup, evict as cache_evict
 from app.db import get_session
-from app.models import Lead as LeadModel, Tenant
+from app.models import Lead as LeadModel, Tenant, WebhookDedup
 from app.services.sms import get_brand_for_tenant, _office_destination_for_tenant, send_sms
 
 router = APIRouter(prefix="", tags=["vapi"])
 
 
 class VapiIntakePayload(BaseModel):
+    call_id: Optional[str] = None
     name: Optional[str] = None
     phone: Optional[str] = None
     reason: Optional[str] = None
@@ -80,6 +82,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
     notes   = structured.get("notes")   or structured.get("details")       or ""
 
     return {
+        "call_id": call_id,
         "name": name,
         "phone": phone,
         "reason": reason,
@@ -114,6 +117,21 @@ def _resolve_tenant(phone_number_id: Optional[str], session: Session) -> Optiona
     return None
 
 
+def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
+    try:
+        session.rollback()
+        session.add(WebhookDedup(source=source, event_id=event_id))
+        session.commit()
+        return True
+    except IntegrityError:
+        session.rollback()
+        return False
+    except Exception as e:
+        session.rollback()
+        print(f"[VAPI] dedupe insert error: {e}", flush=True)
+        return False
+
+
 @router.post("/vapi/intake")
 async def vapi_intake(
     request: Request,
@@ -143,7 +161,11 @@ async def vapi_intake(
               f"notes={payload.notes!r} forwarded_from={payload.forwarded_from!r}", flush=True)
         return {"status": "error", "detail": "tenant not resolved"}
 
-    # Build message from reason + notes
+    if payload.call_id and not _dedupe_insert(session, source=f"vapi_intake:{tenant_id}", event_id=payload.call_id):
+        print(f"[VAPI] duplicate intake ignored for tenant={tenant_id!r} call_id={payload.call_id!r}", flush=True)
+        return {"status": "ok", "tenant_id": tenant_id, "deduped": True}
+
+    # Save a concise summary, not the raw transcript.
     message_parts = [payload.reason or "", payload.notes or ""]
     message = " | ".join(p for p in message_parts if p).strip() or "Inbound call via Vapi"
 
