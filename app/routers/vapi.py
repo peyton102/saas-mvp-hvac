@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from app.call_cache import lookup as cache_lookup, evict as cache_evict
 from app.db import get_session
-from app.models import Lead as LeadModel, TenantSettings
+from app.models import Lead as LeadModel, Tenant
 from app.services.sms import get_brand_for_tenant, _office_destination_for_tenant, send_sms
 
 router = APIRouter(prefix="", tags=["vapi"])
@@ -96,21 +96,21 @@ def _resolve_tenant(phone_number_id: Optional[str], session: Session) -> Optiona
         return None
 
     rows = session.exec(
-        select(TenantSettings).where(
-            TenantSettings.twilio_number != None,
-            TenantSettings.twilio_number != "",
+        select(Tenant).where(
+            Tenant.twilio_number != None,
+            Tenant.twilio_number != "",
         )
     ).all()
-    candidates = {s.tenant_id: s.twilio_number for s in rows}
+    candidates = {t.slug: t.twilio_number for t in rows}
     print(f"[VAPI] tenant lookup: phone_number_id={phone_number_id!r} candidates={candidates}", flush=True)
 
-    for s in rows:
-        if (s.twilio_number or "").strip() == phone_number_id.strip():
-            print(f"[VAPI] tenant resolved: phone_number_id={phone_number_id!r} → {s.tenant_id!r}", flush=True)
-            return s.tenant_id
+    for t in rows:
+        if (t.twilio_number or "").strip() == phone_number_id.strip():
+            print(f"[VAPI] tenant resolved: phone_number_id={phone_number_id!r} → {t.slug!r}", flush=True)
+            return t.slug
 
     print(f"[VAPI] ERROR: phone_number_id={phone_number_id!r} unmatched against "
-          f"TenantSettings.twilio_number — lead will NOT be saved.", flush=True)
+          f"Tenant.twilio_number — lead will NOT be saved.", flush=True)
     return None
 
 

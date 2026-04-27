@@ -81,6 +81,9 @@ class Tenant(SQLModel, table=True):
     # timezone for this tenant (IANA string, e.g. "America/New_York")
     timezone: Optional[str] = Field(default="America/New_York", max_length=64)
 
+    # Vapi Phone Number ID — used to route end-of-call webhooks to this tenant
+    twilio_number: Optional[str] = Field(default="", max_length=128)
+
     # platform admin flag
     is_admin: bool = Field(default=False)
 

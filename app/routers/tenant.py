@@ -19,6 +19,7 @@ router = APIRouter(prefix="/tenant", tags=["tenant"])
 def _ensure_tenant_columns(db: Session) -> None:
     """Add new tenant columns if they don't exist yet (safe to call on every request)."""
     migrations = [
+        ("add_twilio_number", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS twilio_number TEXT DEFAULT ''"),
     ]
     for sp, ddl in migrations:
         try:
