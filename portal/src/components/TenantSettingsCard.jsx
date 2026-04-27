@@ -317,13 +317,16 @@ if ((!raw || looksLikePrefixOnly) && computedBookingLink) {
         </label>
 
         <label style={{ fontSize: 13 }}>
-          Twilio Number (your assigned inbound number)
+          Vapi Phone Number ID
           <input
-            type="tel"
+            type="text"
             style={{ width: "100%", marginTop: 4 }}
-            placeholder="+15555551234"
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
             {...bind("twilio_number")}
           />
+          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+            Found in Vapi dashboard → Phone Numbers → your number → ID field
+          </div>
         </label>
 
         <div style={{ marginTop: 8 }}>
