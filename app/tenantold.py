@@ -229,6 +229,7 @@ class TenantSettingsIn(BaseModel):
     review_google_url: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    twilio_number: Optional[str] = None
 
 
 @router.post("/settings")
@@ -293,6 +294,7 @@ def get_tenant_settings(
         "phone": t.phone,
         "website": t.website,
         "address": t.address,
+        "twilio_number": t.twilio_number or "",
     }
 
 
