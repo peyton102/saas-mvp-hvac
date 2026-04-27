@@ -26,7 +26,7 @@ from app.routers import backup
 from app import config
 from app import models  # noqa: F401
 from app import models_finance  # noqa: F401
-from app.db import create_db_and_tables
+from app.db import create_db_and_tables, run_startup_migrations
 from app.deps import get_tenant_id
 from app.routers.demo import router as demo_router
 from app.routers.leads import router as leads_router
@@ -326,5 +326,6 @@ app.include_router(reminders_router)
 def on_startup():
     setup_logging()
     create_db_and_tables()
+    run_startup_migrations()
     logging.warning
     logging.info("✅ Startup complete")

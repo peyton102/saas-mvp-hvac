@@ -4,7 +4,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app import config
@@ -14,20 +13,6 @@ from app.models import Tenant
 from app.services.review_link_resolver import resolve_and_save_google_review_link
 
 router = APIRouter(prefix="/tenant", tags=["tenant"])
-
-
-def _ensure_tenant_columns(db: Session) -> None:
-    """Add new tenant columns if they don't exist yet (safe to call on every request)."""
-    migrations = [
-        ("add_twilio_number", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS twilio_number TEXT DEFAULT ''"),
-    ]
-    for sp, ddl in migrations:
-        try:
-            db.exec(text(f"SAVEPOINT {sp}"))
-            db.exec(text(ddl))
-            db.exec(text(f"RELEASE SAVEPOINT {sp}"))
-        except Exception:
-            db.exec(text(f"ROLLBACK TO SAVEPOINT {sp}"))
 
 _DEFAULT_TZ = "America/New_York"
 
@@ -295,7 +280,6 @@ def update_tenant_settings(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_session),
 ):
-    _ensure_tenant_columns(db)
     t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -327,7 +311,6 @@ def get_tenant_settings(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_session),
 ):
-    _ensure_tenant_columns(db)
     t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tenant not found")
