@@ -106,48 +106,44 @@ def _extract_from_vapi_body(body: dict) -> dict:
     }
 
 
-def _resolve_tenant(called_number: Optional[str], forwarded_from: Optional[str], session: Session) -> Optional[str]:
-    """Identify the tenant from a VAPI end-of-call report.
-
-    Step 1 — validate the call:
-      Confirm call.phoneNumber.number matches TWILIO_PHONE_NUMBER env var (non-fatal).
-
-    Step 2 — resolve by forwarded_from:
-      Match forwarded_from (sourced from in-memory cache or Twilio native fields) against
-      TenantSettings.business_phone. Returns None if no match — never falls back to 'default'.
-    """
-    twilio_number = normalize_us_phone(os.getenv("TWILIO_PHONE_NUMBER", "").strip()) or ""
-
-    # Step 1: validate
-    if twilio_number:
-        norm_called = normalize_us_phone(called_number or "") or (called_number or "")
-        if norm_called != twilio_number:
-            print(f"[VAPI] WARNING: called_number={called_number!r} does not match "
-                  f"TWILIO_PHONE_NUMBER={twilio_number!r} — unexpected origin.", flush=True)
-        else:
-            print(f"[VAPI] call validated: called_number={called_number!r} matches TWILIO_PHONE_NUMBER", flush=True)
-    else:
-        print("[VAPI] WARNING: TWILIO_PHONE_NUMBER env var not set — skipping call validation.", flush=True)
-
-    # Step 2: resolve by forwarded_from vs business_phone
-    if not forwarded_from:
-        print("[VAPI] ERROR: forwarded_from empty — cannot resolve tenant. "
-              "Check that /twilio/voice is storing ForwardedFrom in the cache for this CallSid.", flush=True)
+def _resolve_tenant(called_number: Optional[str], session: Session) -> Optional[str]:
+    """Identify the tenant by matching call.phoneNumber.number against TenantSettings.twilio_number."""
+    if not called_number:
+        print("[VAPI] ERROR: called_number empty — cannot resolve tenant.", flush=True)
         return None
 
-    norm_fwd = normalize_us_phone(forwarded_from) or forwarded_from
-    rows = session.exec(select(TenantSettings)).all()
-    candidates = {s.tenant_id: normalize_us_phone(s.business_phone or "") for s in rows if s.business_phone}
-    print(f"[VAPI] tenant lookup: forwarded_from={forwarded_from!r} normalized={norm_fwd!r} "
+    try:
+        norm = normalize_us_phone(called_number) or called_number
+    except Exception:
+        norm = called_number
+
+    rows = session.exec(
+        select(TenantSettings).where(
+            TenantSettings.twilio_number != None,
+            TenantSettings.twilio_number != "",
+        )
+    ).all()
+    candidates = {}
+    for s in rows:
+        try:
+            candidates[s.tenant_id] = normalize_us_phone(s.twilio_number or "") or s.twilio_number
+        except Exception:
+            candidates[s.tenant_id] = s.twilio_number
+
+    print(f"[VAPI] tenant lookup: called_number={called_number!r} normalized={norm!r} "
           f"candidates={candidates}", flush=True)
 
     for s in rows:
-        if normalize_us_phone(s.business_phone or "") == norm_fwd:
-            print(f"[VAPI] tenant resolved: forwarded_from={forwarded_from!r} → {s.tenant_id!r}", flush=True)
+        try:
+            s_norm = normalize_us_phone(s.twilio_number or "") or s.twilio_number
+        except Exception:
+            s_norm = s.twilio_number
+        if s_norm == norm:
+            print(f"[VAPI] tenant resolved: called_number={called_number!r} → {s.tenant_id!r}", flush=True)
             return s.tenant_id
 
-    print(f"[VAPI] ERROR: forwarded_from={forwarded_from!r} (normalized={norm_fwd!r}) unmatched — "
-          f"lead will NOT be saved.", flush=True)
+    print(f"[VAPI] ERROR: called_number={called_number!r} (normalized={norm!r}) unmatched against "
+          f"TenantSettings.twilio_number — lead will NOT be saved.", flush=True)
     return None
 
 
@@ -170,7 +166,7 @@ async def vapi_intake(
     flat = _extract_from_vapi_body(body) if isinstance(body, dict) else {}
     payload = VapiIntakePayload(**{k: v for k, v in flat.items() if k in VapiIntakePayload.model_fields})
 
-    tenant_id = _resolve_tenant(payload.called_number, payload.forwarded_from, session)
+    tenant_id = _resolve_tenant(payload.called_number, session)
     print(f"[VAPI] intake — called_number={payload.called_number!r} forwarded_from={payload.forwarded_from!r} "
           f"tenant_id={tenant_id!r} caller={payload.phone!r} name={payload.name!r}", flush=True)
 

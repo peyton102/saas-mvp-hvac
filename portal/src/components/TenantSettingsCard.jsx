@@ -15,6 +15,7 @@ export default function TenantSettingsCard({
     review_google_url: "",
     email: "",
     phone: "",
+    twilio_number: "",
   });
 
   const isSettingsComplete = useMemo(() => {
@@ -78,6 +79,7 @@ export default function TenantSettingsCard({
           review_google_url: data.review_google_url ?? "",
           email: data.email ?? "",
           phone: data.phone ?? "",
+          twilio_number: data.twilio_number ?? "",
         };
 
         // If booking_link is empty in DB, auto-fill it using tenantSlug + portal base
@@ -311,6 +313,16 @@ if ((!raw || looksLikePrefixOnly) && computedBookingLink) {
             type="tel"
             style={{ width: "100%", marginTop: 4 }}
             {...bind("phone")}
+          />
+        </label>
+
+        <label style={{ fontSize: 13 }}>
+          Twilio Number (your assigned inbound number)
+          <input
+            type="tel"
+            style={{ width: "100%", marginTop: 4 }}
+            placeholder="+15555551234"
+            {...bind("twilio_number")}
           />
         </label>
 
