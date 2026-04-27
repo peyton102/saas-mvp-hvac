@@ -327,52 +327,21 @@ async def twilio_voice(
     print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} "
           f"from={from_num} forwarded_from={forwarded_from_raw!r} after_hours={after_hours}")
 
-    # --- Forward to VAPI if configured ---
-    # Store ForwardedFrom in the in-memory cache keyed by CallSid before redirecting.
-    # Vapi's end-of-call report includes call.id == Twilio CallSid, so /vapi/intake
-    # can look up the correct ForwardedFrom without relying on query params.
-    vapi_phone = os.getenv("VAPI_PHONE_NUMBER", "").strip()
-    if vapi_phone:
-        cache_store(call_sid, forwarded_from_raw)
-        vapi_url = "https://api.vapi.ai/twilio/inbound_call"
-        if forwarded_from_raw:
-            vapi_url += "?" + urllib.parse.urlencode({"forwarded_from": forwarded_from_raw})
-        twiml = (
-            '<?xml version="1.0" encoding="UTF-8"?>'
-            "<Response>"
-            f'<Redirect method="POST">{vapi_url}</Redirect>'
-            "</Response>"
-        )
-        print(f"[VOICE] redirecting to VAPI inbound_call URL, forwarded_from={forwarded_from_raw!r}", flush=True)
-        return PlainTextResponse(twiml, media_type="application/xml")
-
-    _log_lead_db(session, from_num, caller, tenant_id, source="missed_call" if after_hours else None)
-
-    # --- Default flow (no VAPI phone set, or direct call with no ForwardedFrom) ---
-    first = caller.split(" ")[0] if caller else "there"
-    msg = (
-        f"Hey {first}, thanks for contacting {business_name}! "
-        f"{booking_link} "
-        f"Prefer a call? Reply here."
+    # Always hand the call off to Vapi first.
+    # Post-call summary handling happens in /vapi/intake, which is where
+    # leads and office SMS should be created for this flow.
+    cache_store(call_sid, forwarded_from_raw)
+    vapi_url = "https://api.vapi.ai/twilio/inbound_call"
+    if forwarded_from_raw:
+        vapi_url += "?" + urllib.parse.urlencode({"forwarded_from": forwarded_from_raw})
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response>"
+        f'<Redirect method="POST">{vapi_url}</Redirect>'
+        "</Response>"
     )
-
-    if not after_hours and first_time and from_num and not _blocked_number(from_num):
-        background_tasks.add_task(_handle_voice_side_effects, from_num, caller, msg, tenant_id, business_name)
-
-    vr = VoiceResponse()
-    if after_hours:
-        vr.say("Thanks for calling. We're currently unavailable. "
-               "Please leave a brief message after the beep.",
-               voice="alice")
-        vr.record(max_length=120, play_beep=True, action="/twilio/voice/recorded", method="POST")
-        vr.say("Got it. Goodbye.")
-        vr.hangup()
-    else:
-        vr.say("Thanks for calling. We just texted you our booking link. We'll be in touch shortly.",
-               voice="alice")
-        vr.hangup()
-
-    return PlainTextResponse(str(vr), media_type="application/xml")
+    print(f"[VOICE] redirecting to VAPI inbound_call URL, forwarded_from={forwarded_from_raw!r}", flush=True)
+    return PlainTextResponse(twiml, media_type="application/xml")
 
 @router.post("/twilio/voice/recorded", response_class=PlainTextResponse)
 async def twilio_voice_recorded(
