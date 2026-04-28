@@ -357,11 +357,11 @@ async def twilio_voice_recorded(
     except Exception:
         form = {}
 
-    if _vapi_enabled():
-        print(f"[RECORDED] Vapi-enabled flow - skipping Twilio voicemail persistence for tenant={tenant_id!r}", flush=True)
-        vr = VoiceResponse()
-        vr.say("Thanks. Goodbye.", voice="alice")
-        return PlainTextResponse(str(vr), media_type="application/xml")
+    print(f"[RECORDED] skipping Twilio voicemail persistence for tenant={tenant_id!r}", flush=True)
+
+    vr = VoiceResponse()
+    vr.say("Thanks. Goodbye.", voice="alice")
+    return PlainTextResponse(str(vr), media_type="application/xml")
 
     from_num = normalize_us_phone((form.get("From") or "").strip()) or ""
     recording_url = (form.get("RecordingUrl") or "").strip()
@@ -456,6 +456,9 @@ async def twilio_voice_missed(
     call_sid = (form.get("CallSid") or "").strip()
 
     print(f"[MISSED] tenant={tenant_id} status={call_status} from={from_num} sid={call_sid}")
+
+    print(f"[MISSED] skipping Twilio missed-call save/SMS for tenant={tenant_id!r}", flush=True)
+    return PlainTextResponse("", status_code=204)
 
     if _vapi_enabled():
         print(f"[MISSED] Vapi-enabled flow - skipping Twilio missed-call save/SMS for tenant={tenant_id!r}", flush=True)
