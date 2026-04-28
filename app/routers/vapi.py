@@ -23,6 +23,8 @@ class VapiIntakePayload(BaseModel):
     notes: Optional[str] = None
     language: Optional[str] = None
     summary: Optional[str] = None
+    zip: Optional[str] = None
+    timing: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
 
@@ -176,6 +178,40 @@ def _split_reason_and_notes(reason: Optional[str], notes: Optional[str]) -> tupl
     return _compact_reason(reason), _compact_notes(notes, fallback_text=reason)
 
 
+def _extract_zip(value: Optional[str]) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    match = re.search(r"\b(\d{5})\b", text)
+    return match.group(1) if match else ""
+
+
+def _extract_timing(*values: Optional[str]) -> str:
+    patterns = [
+        r"\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(morning|afternoon|evening))?(?:\s+at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)))?\b",
+        r"\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b",
+    ]
+    for value in values:
+        text = _clean_text(value)
+        if not text:
+            continue
+        match = re.search(patterns[0], text, re.IGNORECASE)
+        if match:
+            day = (match.group(1) or "").lower()
+            part = (match.group(2) or "").lower()
+            at_time = (match.group(3) or "").lower()
+            result = day
+            if part:
+                result = f"{result} {part}"
+            if at_time:
+                result = f"{result} at {at_time}"
+            return result.strip()
+        match = re.search(patterns[1], text, re.IGNORECASE)
+        if match:
+            return match.group(1).lower()
+    return ""
+
+
 def _reason_for_sms(reason: Optional[str], summary: Optional[str]) -> str:
     reason_text = _clean_text(reason)
     if reason_text and reason_text.lower() != "pending":
@@ -243,8 +279,24 @@ def _extract_from_vapi_body(body: dict) -> dict:
     )
     reason = structured.get("reason") or structured.get("issue") or summary or ""
     notes = structured.get("notes") or structured.get("details") or ""
+    zip_code = (
+        structured.get("zip")
+        or structured.get("zip_code")
+        or structured.get("zipcode")
+        or structured.get("postal_code")
+        or ""
+    )
+    timing = (
+        structured.get("timing")
+        or structured.get("preferred_time")
+        or structured.get("preferred_day")
+        or structured.get("preferred_day_time")
+        or ""
+    )
     phone = _extract_phone_from_text(notes, summary) or _normalize_phone(phone)
     reason = _compact_reason(reason)
+    zip_code = _extract_zip(zip_code or notes or summary)
+    timing = _clean_text(timing) or _extract_timing(notes, summary)
 
     return {
         "call_id": call_id,
@@ -253,6 +305,8 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "reason": reason,
         "notes": notes,
         "summary": summary,
+        "zip": zip_code,
+        "timing": timing,
         "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
     }
@@ -377,6 +431,10 @@ async def vapi_intake(
                 f"Phone: {phone_display}",
                 f"Reason: {reason_display or 'Pending'}",
             ]
+            if payload.zip:
+                alert_parts.append(f"ZIP: {payload.zip}")
+            if payload.timing:
+                alert_parts.append(f"Timing: {payload.timing}")
             if notes_display:
                 alert_parts.append(f"Notes: {notes_display}")
             send_sms(office_to, "\n".join(alert_parts))
