@@ -37,25 +37,104 @@ def _clean_text(value: Optional[str]) -> str:
     return re.sub(r"\s+", " ", (value or "")).strip()
 
 
-def _split_reason_and_notes(reason: Optional[str], notes: Optional[str]) -> tuple[str, str]:
-    reason_text = _clean_text(reason)
-    notes_text = _clean_text(notes)
+def _normalize_phone(value: Optional[str]) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    digits = re.sub(r"\D", "", text)
+    if len(digits) == 10:
+        return digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return digits
+    return text
 
-    if not reason_text:
-        return "", notes_text
 
-    match = re.match(r"(.+?[.!?])(?:\s+|$)(.*)", reason_text)
+def _extract_name_from_text(*values: Optional[str]) -> str:
+    patterns = [
+        r"\b(?:their|the caller'?s|caller)\s+name\s+(?:is|was)\s+([A-Z][a-z]+)\b",
+        r"\b([A-Z][a-z]+)\s+called\b",
+    ]
+    for value in values:
+        text = _clean_text(value)
+        if not text:
+            continue
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                candidate = match.group(1).strip(" ,.")
+                return candidate[:1].upper() + candidate[1:]
+    return ""
+
+
+def _extract_phone_from_text(*values: Optional[str]) -> str:
+    patterns = [
+        r"\b(?:callback|call\s*back|best)\s+(?:number|phone)\D*([+]?\d[\d\-\(\)\s]{8,}\d)",
+        r"\bphone\s+number\D*([+]?\d[\d\-\(\)\s]{8,}\d)",
+    ]
+    for value in values:
+        text = _clean_text(value)
+        if not text:
+            continue
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                phone = _normalize_phone(match.group(1))
+                if phone:
+                    return phone
+    return ""
+
+
+def _compact_reason(value: Optional[str]) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+
+    if len(text) <= 60 and not re.search(r"\b(called|assistant|contact|schedule|confirm)\b", text, re.IGNORECASE):
+        return text.rstrip(".")
+
+    patterns = [
+        r"\b(?:because|for)\s+(their\s+)?(.+?)(?:\s+and\s+(?:needed|needs|requested)|[.!?]|$)",
+        r"\b(?:issue|reason)\D+(.+?)(?:[.!?]|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            phrase = match.group(match.lastindex).strip(" ,.")
+            phrase = re.sub(r"^(their|the)\s+", "", phrase, flags=re.IGNORECASE)
+            return phrase[:1].upper() + phrase[1:]
+
+    match = re.match(r"(.+?)(?:[.!?]|$)", text)
     if match:
-        short_reason = match.group(1).strip()
-        remainder = match.group(2).strip()
-    else:
-        short_reason = reason_text
-        remainder = ""
+        return match.group(1).strip(" ,.")
+    return text
 
-    if remainder:
-        notes_text = f"{notes_text}; {remainder}" if notes_text else remainder
 
-    return short_reason, notes_text
+def _compact_notes(value: Optional[str], fallback_text: Optional[str] = None) -> str:
+    combined = _clean_text(value)
+    fallback = _clean_text(fallback_text)
+    source = combined or fallback
+    if not source:
+        return ""
+
+    parts: list[str] = []
+
+    zip_match = re.search(r"\bZIP(?:\s+code)?\D*(\d{5})\b", source, re.IGNORECASE)
+    if zip_match:
+        parts.append(f"ZIP {zip_match.group(1)}")
+
+    if re.search(r"\burgent|asap|immediate|right away|fastest possible\b", source, re.IGNORECASE):
+        parts.append("urgent repair")
+    elif re.search(r"\btoday or tomorrow\b", source, re.IGNORECASE):
+        parts.append("today or tomorrow")
+
+    if not parts and combined and len(combined) <= 80:
+        parts.append(combined.rstrip("."))
+
+    return ", ".join(dict.fromkeys(parts))
+
+
+def _split_reason_and_notes(reason: Optional[str], notes: Optional[str]) -> tuple[str, str]:
+    return _compact_reason(reason), _compact_notes(notes, fallback_text=reason)
 
 
 def _extract_from_vapi_body(body: dict) -> dict:
@@ -70,9 +149,20 @@ def _extract_from_vapi_body(body: dict) -> dict:
     call = msg.get("call") or {}
     analysis = msg.get("analysis") or {}
     structured = analysis.get("structuredData") or {}
+    summary = msg.get("summary") or ""
 
     customer = call.get("customer") or {}
-    phone = customer.get("number") or ""
+    phone = (
+        structured.get("phone")
+        or structured.get("callback_phone")
+        or structured.get("callbackPhone")
+        or structured.get("callback_number")
+        or structured.get("callbackNumber")
+        or structured.get("phone_number")
+        or structured.get("phoneNumber")
+        or customer.get("number")
+        or ""
+    )
 
     phone_number_id = call.get("phoneNumberId") or ""
 
@@ -91,9 +181,16 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or ""
     )
 
-    name = structured.get("name") or structured.get("caller_name") or ""
-    reason = structured.get("reason") or structured.get("issue") or msg.get("summary") or ""
+    name = (
+        structured.get("name")
+        or structured.get("caller_name")
+        or _extract_name_from_text(summary, structured.get("notes"), structured.get("details"))
+        or ""
+    )
+    reason = structured.get("reason") or structured.get("issue") or summary or ""
     notes = structured.get("notes") or structured.get("details") or ""
+    phone = _extract_phone_from_text(notes, summary) or _normalize_phone(phone)
+    reason = _compact_reason(reason)
 
     return {
         "call_id": call_id,
