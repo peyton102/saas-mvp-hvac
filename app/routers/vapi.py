@@ -22,6 +22,7 @@ class VapiIntakePayload(BaseModel):
     reason: Optional[str] = None
     notes: Optional[str] = None
     language: Optional[str] = None
+    summary: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
 
@@ -47,6 +48,20 @@ def _normalize_phone(value: Optional[str]) -> str:
     if len(digits) == 11 and digits.startswith("1"):
         return digits
     return text
+
+
+def _format_display_phone(value: Optional[str]) -> str:
+    normalized = _normalize_phone(value)
+    if not normalized:
+        return ""
+    digits = re.sub(r"\D", "", normalized)
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    if normalized.startswith("+"):
+        return normalized
+    return normalized
 
 
 def _extract_name_from_text(*values: Optional[str]) -> str:
@@ -127,6 +142,30 @@ def _compact_notes(value: Optional[str], fallback_text: Optional[str] = None) ->
     elif re.search(r"\btoday or tomorrow\b", source, re.IGNORECASE):
         parts.append("today or tomorrow")
 
+    preferred_patterns = [
+        r"\b(?:prefer(?:red)?|best|available)\s+(?:time|day|day/time|date)\D*(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(morning|afternoon|evening))?",
+        r"\b(?:today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(morning|afternoon|evening))?\b",
+    ]
+    for pattern in preferred_patterns:
+        match = re.search(pattern, source, re.IGNORECASE)
+        if match:
+            day = match.group(1)
+            day_part = match.group(2) if match.lastindex and match.lastindex >= 2 else ""
+            preferred = day.lower()
+            if day_part:
+                preferred = f"{preferred} {day_part.lower()}"
+            parts.append(f"prefers {preferred}")
+            break
+
+    time_match = re.search(
+        r"\b(?:prefer(?:red)?|best|available)\s+(?:time|day|day/time|date)\D*"
+        r"((?:\d{1,2})(?::\d{2})?\s*(?:am|pm)|(?:morning|afternoon|evening))\b",
+        source,
+        re.IGNORECASE,
+    ) or re.search(r"\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b", source, re.IGNORECASE)
+    if time_match:
+        parts.append(f"prefers {time_match.group(1).lower()}")
+
     if not parts and combined and len(combined) <= 80:
         parts.append(combined.rstrip("."))
 
@@ -135,6 +174,21 @@ def _compact_notes(value: Optional[str], fallback_text: Optional[str] = None) ->
 
 def _split_reason_and_notes(reason: Optional[str], notes: Optional[str]) -> tuple[str, str]:
     return _compact_reason(reason), _compact_notes(notes, fallback_text=reason)
+
+
+def _reason_for_sms(reason: Optional[str], summary: Optional[str]) -> str:
+    reason_text = _clean_text(reason)
+    if reason_text and reason_text.lower() != "pending":
+        return _compact_reason(reason_text)
+
+    summary_text = _clean_text(summary)
+    if not summary_text:
+        return ""
+
+    match = re.match(r"(.+?)(?:[.!?]|$)", summary_text)
+    if match:
+        return match.group(1).strip(" ,.")
+    return summary_text
 
 
 def _extract_from_vapi_body(body: dict) -> dict:
@@ -198,6 +252,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "phone": phone,
         "reason": reason,
         "notes": notes,
+        "summary": summary,
         "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
     }
@@ -313,15 +368,15 @@ async def vapi_intake(
             b = get_brand_for_tenant(tenant_id)
             business_name = b.get("business_name") or tenant_id
             name_display = (payload.name or "Unknown").strip()
-            phone_display = (payload.phone or "unknown").strip()
-            reason_display, notes_display = _split_reason_and_notes(payload.reason, payload.notes)
+            phone_display = _format_display_phone(payload.phone) or "unknown"
+            reason_display = _reason_for_sms(payload.reason, payload.summary)
+            _, notes_display = _split_reason_and_notes(payload.reason, payload.notes)
             alert_parts = [
                 f"New Lead - {business_name}",
                 f"Name: {name_display}",
                 f"Phone: {phone_display}",
+                f"Reason: {reason_display or 'Pending'}",
             ]
-            if reason_display:
-                alert_parts.append(f"Reason: {reason_display}")
             if notes_display:
                 alert_parts.append(f"Notes: {notes_display}")
             send_sms(office_to, "\n".join(alert_parts))
