@@ -1,5 +1,6 @@
 # app/routers/vapi.py
 import json as _json
+import re
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +31,31 @@ def _message_type(body: Any) -> str:
         return ""
     msg = body.get("message") or {}
     return str(msg.get("type") or "").strip()
+
+
+def _clean_text(value: Optional[str]) -> str:
+    return re.sub(r"\s+", " ", (value or "")).strip()
+
+
+def _split_reason_and_notes(reason: Optional[str], notes: Optional[str]) -> tuple[str, str]:
+    reason_text = _clean_text(reason)
+    notes_text = _clean_text(notes)
+
+    if not reason_text:
+        return "", notes_text
+
+    match = re.match(r"(.+?[.!?])(?:\s+|$)(.*)", reason_text)
+    if match:
+        short_reason = match.group(1).strip()
+        remainder = match.group(2).strip()
+    else:
+        short_reason = reason_text
+        remainder = ""
+
+    if remainder:
+        notes_text = f"{notes_text}; {remainder}" if notes_text else remainder
+
+    return short_reason, notes_text
 
 
 def _extract_from_vapi_body(body: dict) -> dict:
@@ -191,10 +217,9 @@ async def vapi_intake(
             business_name = b.get("business_name") or tenant_id
             name_display = (payload.name or "Unknown").strip()
             phone_display = (payload.phone or "unknown").strip()
-            reason_display = (payload.reason or "").strip()
-            notes_display = (payload.notes or "").strip()
+            reason_display, notes_display = _split_reason_and_notes(payload.reason, payload.notes)
             alert_parts = [
-                f"New AI call lead for {business_name}",
+                f"New Lead - {business_name}",
                 f"Name: {name_display}",
                 f"Phone: {phone_display}",
             ]
