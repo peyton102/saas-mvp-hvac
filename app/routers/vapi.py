@@ -21,34 +21,22 @@ class VapiIntakePayload(BaseModel):
     reason: Optional[str] = None
     notes: Optional[str] = None
     language: Optional[str] = None
-    phone_number_id: Optional[str] = None  # call.phoneNumberId — matched against TenantSettings.twilio_number
+    phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
+
+
+def _message_type(body: Any) -> str:
+    if not isinstance(body, dict):
+        return ""
+    msg = body.get("message") or {}
+    return str(msg.get("type") or "").strip()
 
 
 def _extract_from_vapi_body(body: dict) -> dict:
     """
     VAPI sends end-of-call webhooks as a nested structure, not the flat fields
-    this endpoint originally expected. This function normalises both formats:
-
-    Flat (custom POST from VAPI tool/function):
-      { "name": "...", "phone": "...", "reason": "...", "forwarded_from": "..." }
-
-    VAPI end-of-call report (sent automatically when call ends):
-      {
-        "message": {
-          "type": "end-of-call-report",
-          "call": {
-            "customer": { "number": "+1..." },
-            "phoneNumber": { "number": "+1..." }   ← the Twilio number
-          },
-          "analysis": { "structuredData": { ... } },
-          "summary": "..."
-        }
-      }
-
-    Returns a flat dict with keys: name, phone, reason, notes, forwarded_from.
+    this endpoint originally expected. This function normalises both formats.
     """
-    # Already flat — used when VAPI is configured with a custom function/tool call
     if "message" not in body:
         return body
 
@@ -57,18 +45,19 @@ def _extract_from_vapi_body(body: dict) -> dict:
     analysis = msg.get("analysis") or {}
     structured = analysis.get("structuredData") or {}
 
-    # Caller's number
     customer = call.get("customer") or {}
     phone = customer.get("number") or ""
 
-    # Vapi phone number ID — present in every webhook, used to identify the tenant
     phone_number_id = call.get("phoneNumberId") or ""
 
     call_id = call.get("id") or ""
     print(f"[VAPI EXTRACT] call keys: {list(call.keys())}", flush=True)
-    print(f"[VAPI EXTRACT] call.id={call_id!r} phoneNumberId={phone_number_id!r} "
-          f"forwardingPhoneNumber={call.get('forwardingPhoneNumber')!r} "
-          f"forwardedFrom={call.get('forwardedFrom')!r}", flush=True)
+    print(
+        f"[VAPI EXTRACT] call.id={call_id!r} phoneNumberId={phone_number_id!r} "
+        f"forwardingPhoneNumber={call.get('forwardingPhoneNumber')!r} "
+        f"forwardedFrom={call.get('forwardedFrom')!r}",
+        flush=True,
+    )
 
     forwarded_from = (
         call.get("forwardingPhoneNumber")
@@ -76,10 +65,9 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or ""
     )
 
-    # Prefer structuredData fields extracted by the assistant, fall back to summary
-    name    = structured.get("name")    or structured.get("caller_name")   or ""
-    reason  = structured.get("reason")  or structured.get("issue")         or msg.get("summary") or ""
-    notes   = structured.get("notes")   or structured.get("details")       or ""
+    name = structured.get("name") or structured.get("caller_name") or ""
+    reason = structured.get("reason") or structured.get("issue") or msg.get("summary") or ""
+    notes = structured.get("notes") or structured.get("details") or ""
 
     return {
         "call_id": call_id,
@@ -93,9 +81,9 @@ def _extract_from_vapi_body(body: dict) -> dict:
 
 
 def _resolve_tenant(phone_number_id: Optional[str], session: Session) -> Optional[str]:
-    """Identify the tenant by matching call.phoneNumberId against TenantSettings.twilio_number."""
+    """Identify the tenant by matching call.phoneNumberId against Tenant.twilio_number."""
     if not phone_number_id:
-        print("[VAPI] ERROR: phone_number_id empty — cannot resolve tenant.", flush=True)
+        print("[VAPI] ERROR: phone_number_id empty - cannot resolve tenant.", flush=True)
         return None
 
     rows = session.exec(
@@ -109,11 +97,14 @@ def _resolve_tenant(phone_number_id: Optional[str], session: Session) -> Optiona
 
     for t in rows:
         if (t.twilio_number or "").strip() == phone_number_id.strip():
-            print(f"[VAPI] tenant resolved: phone_number_id={phone_number_id!r} → {t.slug!r}", flush=True)
+            print(f"[VAPI] tenant resolved: phone_number_id={phone_number_id!r} -> {t.slug!r}", flush=True)
             return t.slug
 
-    print(f"[VAPI] ERROR: phone_number_id={phone_number_id!r} unmatched against "
-          f"Tenant.twilio_number — lead will NOT be saved.", flush=True)
+    print(
+        f"[VAPI] ERROR: phone_number_id={phone_number_id!r} unmatched against "
+        f"Tenant.twilio_number - lead will NOT be saved.",
+        flush=True,
+    )
     return None
 
 
@@ -137,7 +128,6 @@ async def vapi_intake(
     request: Request,
     session: Session = Depends(get_session),
 ):
-    # Log raw body — this is the first thing to check when data isn't arriving
     try:
         raw_body = await request.body()
         raw_text = raw_body.decode("utf-8", errors="replace")
@@ -147,25 +137,34 @@ async def vapi_intake(
         print(f"[VAPI] body parse error: {e}", flush=True)
         body = {}
 
-    # Normalise flat vs VAPI end-of-call-report format
+    msg_type = _message_type(body)
+    if msg_type and msg_type != "end-of-call-report":
+        print(f"[VAPI] ignoring non-final event type={msg_type!r}", flush=True)
+        return {"status": "ok", "ignored_event_type": msg_type}
+
     flat = _extract_from_vapi_body(body) if isinstance(body, dict) else {}
     payload = VapiIntakePayload(**{k: v for k, v in flat.items() if k in VapiIntakePayload.model_fields})
 
     tenant_id = _resolve_tenant(payload.phone_number_id, session)
-    print(f"[VAPI] intake — phone_number_id={payload.phone_number_id!r} forwarded_from={payload.forwarded_from!r} "
-          f"tenant_id={tenant_id!r} caller={payload.phone!r} name={payload.name!r}", flush=True)
+    print(
+        f"[VAPI] intake - phone_number_id={payload.phone_number_id!r} forwarded_from={payload.forwarded_from!r} "
+        f"tenant_id={tenant_id!r} caller={payload.phone!r} name={payload.name!r}",
+        flush=True,
+    )
 
     if tenant_id is None:
-        print(f"[VAPI] DROPPING lead — tenant unresolved. "
-              f"caller={payload.phone!r} name={payload.name!r} reason={payload.reason!r} "
-              f"notes={payload.notes!r} forwarded_from={payload.forwarded_from!r}", flush=True)
+        print(
+            f"[VAPI] DROPPING lead - tenant unresolved. "
+            f"caller={payload.phone!r} name={payload.name!r} reason={payload.reason!r} "
+            f"notes={payload.notes!r} forwarded_from={payload.forwarded_from!r}",
+            flush=True,
+        )
         return {"status": "error", "detail": "tenant not resolved"}
 
     if payload.call_id and not _dedupe_insert(session, source=f"vapi_intake:{tenant_id}", event_id=payload.call_id):
         print(f"[VAPI] duplicate intake ignored for tenant={tenant_id!r} call_id={payload.call_id!r}", flush=True)
         return {"status": "ok", "tenant_id": tenant_id, "deduped": True}
 
-    # Save a concise summary, not the raw transcript.
     message_parts = [payload.reason or "", payload.notes or ""]
     message = " | ".join(p for p in message_parts if p).strip() or "Inbound call via Vapi"
 
@@ -185,7 +184,6 @@ async def vapi_intake(
         session.rollback()
         print(f"[VAPI] lead insert error: {e}", flush=True)
 
-    # Office SMS — send everything the AI collected to the tenant's office number
     try:
         office_to = _office_destination_for_tenant(tenant_id)
         if office_to:
@@ -195,9 +193,11 @@ async def vapi_intake(
             phone_display = (payload.phone or "unknown").strip()
             reason_display = (payload.reason or "").strip()
             notes_display = (payload.notes or "").strip()
-            alert_parts = [f"New AI call lead for {business_name}",
-                           f"Name: {name_display}",
-                           f"Phone: {phone_display}"]
+            alert_parts = [
+                f"New AI call lead for {business_name}",
+                f"Name: {name_display}",
+                f"Phone: {phone_display}",
+            ]
             if reason_display:
                 alert_parts.append(f"Reason: {reason_display}")
             if notes_display:
@@ -205,7 +205,7 @@ async def vapi_intake(
             send_sms(office_to, "\n".join(alert_parts))
             print(f"[VAPI] office SMS sent to {office_to} for tenant={tenant_id!r}", flush=True)
         else:
-            print(f"[VAPI] no office_sms_to configured for tenant={tenant_id!r} — skipping SMS", flush=True)
+            print(f"[VAPI] no office_sms_to configured for tenant={tenant_id!r} - skipping SMS", flush=True)
     except Exception as e:
         print(f"[VAPI] office SMS error: {e}", flush=True)
 
