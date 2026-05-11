@@ -20,8 +20,6 @@ class VapiIntakePayload(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     issue: Optional[str] = None
-    urgency: Optional[str] = None
-    property_type: Optional[str] = None
     language: Optional[str] = None
     summary: Optional[str] = None
     zip: Optional[str] = None
@@ -283,12 +281,6 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or summary
         or ""
     )
-    urgency = structured.get("urgency") or ""
-    property_type = (
-        structured.get("property_type")
-        or structured.get("propertyType")
-        or ""
-    )
     zip_code = (
         structured.get("zip")
         or structured.get("zip_code")
@@ -305,8 +297,6 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "name": name,
         "phone": phone,
         "issue": issue,
-        "urgency": _clean_text(urgency),
-        "property_type": _clean_text(property_type),
         "summary": summary,
         "zip": zip_code,
         "phone_number_id": phone_number_id,
@@ -399,7 +389,7 @@ async def vapi_intake(
         print(f"[VAPI] duplicate intake ignored for tenant={tenant_id!r} call_id={payload.call_id!r}", flush=True)
         return {"status": "ok", "tenant_id": tenant_id, "deduped": True}
 
-    message_parts = [payload.issue or "", payload.urgency or "", payload.property_type or ""]
+    message_parts = [payload.issue or ""]
     message = " | ".join(p for p in message_parts if p).strip() or "Inbound call via Vapi"
 
     lead = LeadModel(
@@ -423,8 +413,6 @@ async def vapi_intake(
             "name": payload.name,
             "phone": payload.phone,
             "issue": payload.issue,
-            "urgency": payload.urgency,
-            "property_type": payload.property_type,
             "zip": payload.zip,
         })
         print(f"[VAPI] office SMS sent for tenant={tenant_id!r}", flush=True)

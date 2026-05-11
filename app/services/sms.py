@@ -509,7 +509,7 @@ def lead_office_notify_sms(tenant_id: str, payload: dict) -> bool:
 def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
     """
     SMS to the office when a new Vapi AI call lead comes in.
-    payload fields: name, phone, issue, urgency, property_type, zip
+    payload fields: name, phone, issue, zip
     """
     office_to = _office_destination_for_tenant(tenant_id)
     if not office_to:
@@ -523,8 +523,6 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
     phone_raw = (payload.get("phone") or "").strip()
     phone = _normalize_phone(phone_raw) or phone_raw or "Unknown"
     issue = (payload.get("issue") or "").strip() or "—"
-    urgency = (payload.get("urgency") or "").strip() or "—"
-    property_type = (payload.get("property_type") or "").strip() or "—"
     zip_code = (payload.get("zip") or "").strip() or "—"
 
     body = (
@@ -532,8 +530,6 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
         f"Name: {name}\n"
         f"Phone: {phone}\n"
         f"Issue: {issue}\n"
-        f"Urgency: {urgency}\n"
-        f"Type: {property_type}\n"
         f"ZIP: {zip_code}"
     )
 
