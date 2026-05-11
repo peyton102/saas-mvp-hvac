@@ -10,7 +10,7 @@ from typing import Any, Optional
 from app.call_cache import lookup as cache_lookup, evict as cache_evict
 from app.db import get_session
 from app.models import Lead as LeadModel, Tenant, WebhookDedup
-from app.services.sms import get_brand_for_tenant, _office_destination_for_tenant, send_sms
+from app.services.sms import vapi_lead_office_sms
 
 router = APIRouter(prefix="", tags=["vapi"])
 
@@ -19,12 +19,12 @@ class VapiIntakePayload(BaseModel):
     call_id: Optional[str] = None
     name: Optional[str] = None
     phone: Optional[str] = None
-    reason: Optional[str] = None
-    notes: Optional[str] = None
+    issue: Optional[str] = None
+    urgency: Optional[str] = None
+    property_type: Optional[str] = None
     language: Optional[str] = None
     summary: Optional[str] = None
     zip: Optional[str] = None
-    timing: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
 
@@ -274,11 +274,21 @@ def _extract_from_vapi_body(body: dict) -> dict:
     name = (
         structured.get("name")
         or structured.get("caller_name")
-        or _extract_name_from_text(summary, structured.get("notes"), structured.get("details"))
+        or _extract_name_from_text(summary)
         or ""
     )
-    reason = structured.get("reason") or structured.get("issue") or summary or ""
-    notes = structured.get("notes") or structured.get("details") or ""
+    issue = (
+        structured.get("issue")
+        or structured.get("reason")
+        or summary
+        or ""
+    )
+    urgency = structured.get("urgency") or ""
+    property_type = (
+        structured.get("property_type")
+        or structured.get("propertyType")
+        or ""
+    )
     zip_code = (
         structured.get("zip")
         or structured.get("zip_code")
@@ -286,27 +296,19 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or structured.get("postal_code")
         or ""
     )
-    timing = (
-        structured.get("timing")
-        or structured.get("preferred_time")
-        or structured.get("preferred_day")
-        or structured.get("preferred_day_time")
-        or ""
-    )
-    phone = _extract_phone_from_text(notes, summary) or _normalize_phone(phone)
-    reason = _compact_reason(reason)
-    zip_code = _extract_zip(zip_code or notes or summary)
-    timing = _clean_text(timing) or _extract_timing(notes, summary)
+    phone = _extract_phone_from_text(issue, summary) or _normalize_phone(phone)
+    issue = _compact_reason(issue)
+    zip_code = _extract_zip(zip_code or summary)
 
     return {
         "call_id": call_id,
         "name": name,
         "phone": phone,
-        "reason": reason,
-        "notes": notes,
+        "issue": issue,
+        "urgency": _clean_text(urgency),
+        "property_type": _clean_text(property_type),
         "summary": summary,
         "zip": zip_code,
-        "timing": timing,
         "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
     }
@@ -387,8 +389,8 @@ async def vapi_intake(
     if tenant_id is None:
         print(
             f"[VAPI] DROPPING lead - tenant unresolved. "
-            f"caller={payload.phone!r} name={payload.name!r} reason={payload.reason!r} "
-            f"notes={payload.notes!r} forwarded_from={payload.forwarded_from!r}",
+            f"caller={payload.phone!r} name={payload.name!r} issue={payload.issue!r} "
+            f"forwarded_from={payload.forwarded_from!r}",
             flush=True,
         )
         return {"status": "error", "detail": "tenant not resolved"}
@@ -397,7 +399,7 @@ async def vapi_intake(
         print(f"[VAPI] duplicate intake ignored for tenant={tenant_id!r} call_id={payload.call_id!r}", flush=True)
         return {"status": "ok", "tenant_id": tenant_id, "deduped": True}
 
-    message_parts = [payload.reason or "", payload.notes or ""]
+    message_parts = [payload.issue or "", payload.urgency or "", payload.property_type or ""]
     message = " | ".join(p for p in message_parts if p).strip() or "Inbound call via Vapi"
 
     lead = LeadModel(
@@ -417,30 +419,15 @@ async def vapi_intake(
         print(f"[VAPI] lead insert error: {e}", flush=True)
 
     try:
-        office_to = _office_destination_for_tenant(tenant_id)
-        if office_to:
-            b = get_brand_for_tenant(tenant_id)
-            business_name = b.get("business_name") or tenant_id
-            name_display = (payload.name or "Unknown").strip()
-            phone_display = _format_display_phone(payload.phone) or "unknown"
-            reason_display = _reason_for_sms(payload.reason, payload.summary)
-            _, notes_display = _split_reason_and_notes(payload.reason, payload.notes)
-            alert_parts = [
-                f"New Lead - {business_name}",
-                f"Name: {name_display}",
-                f"Phone: {phone_display}",
-                f"Reason: {reason_display or 'Pending'}",
-            ]
-            if payload.zip:
-                alert_parts.append(f"ZIP: {payload.zip}")
-            if payload.timing:
-                alert_parts.append(f"Timing: {payload.timing}")
-            if notes_display:
-                alert_parts.append(f"Notes: {notes_display}")
-            send_sms(office_to, "\n".join(alert_parts))
-            print(f"[VAPI] office SMS sent to {office_to} for tenant={tenant_id!r}", flush=True)
-        else:
-            print(f"[VAPI] no office_sms_to configured for tenant={tenant_id!r} - skipping SMS", flush=True)
+        vapi_lead_office_sms(tenant_id, {
+            "name": payload.name,
+            "phone": payload.phone,
+            "issue": payload.issue,
+            "urgency": payload.urgency,
+            "property_type": payload.property_type,
+            "zip": payload.zip,
+        })
+        print(f"[VAPI] office SMS sent for tenant={tenant_id!r}", flush=True)
     except Exception as e:
         print(f"[VAPI] office SMS error: {e}", flush=True)
 

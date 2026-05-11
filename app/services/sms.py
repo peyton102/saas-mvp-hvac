@@ -506,6 +506,40 @@ def lead_office_notify_sms(tenant_id: str, payload: dict) -> bool:
     return send_sms(office_to, body)
 
 
+def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
+    """
+    SMS to the office when a new Vapi AI call lead comes in.
+    payload fields: name, phone, issue, urgency, property_type, zip
+    """
+    office_to = _office_destination_for_tenant(tenant_id)
+    if not office_to:
+        print("[vapi_lead_office_sms] No office SMS destination; skipping.")
+        return False
+
+    brand = get_brand_for_tenant(tenant_id)
+    business_name = brand.get("business_name") or tenant_id
+
+    name = (payload.get("name") or "").strip() or "Unknown"
+    phone_raw = (payload.get("phone") or "").strip()
+    phone = _normalize_phone(phone_raw) or phone_raw or "Unknown"
+    issue = (payload.get("issue") or "").strip() or "—"
+    urgency = (payload.get("urgency") or "").strip() or "—"
+    property_type = (payload.get("property_type") or "").strip() or "—"
+    zip_code = (payload.get("zip") or "").strip() or "—"
+
+    body = (
+        f"🚨 New Lead — {business_name}\n"
+        f"Name: {name}\n"
+        f"Phone: {phone}\n"
+        f"Issue: {issue}\n"
+        f"Urgency: {urgency}\n"
+        f"Type: {property_type}\n"
+        f"ZIP: {zip_code}"
+    )
+
+    return send_sms(office_to, body)
+
+
 def booking_office_notify_sms(tenant_id: str, payload: dict) -> bool:
     """
     Notify the office when a new booking is created.
