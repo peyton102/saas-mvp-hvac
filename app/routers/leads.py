@@ -403,7 +403,7 @@ def list_calls(
     rows = session.exec(
         select(LeadModel)
         .where(LeadModel.tenant_id == tenant_id)
-        .where(LeadModel.message.contains("Inbound call"))
+        .where(LeadModel.source == "vapi")
         .order_by(LeadModel.id.desc())
         .limit(limit)
     ).all()

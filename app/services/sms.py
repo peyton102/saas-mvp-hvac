@@ -537,18 +537,18 @@ def booking_office_notify_sms(tenant_id: str, payload: dict) -> bool:
 
 # ---------- System alert SMS (add-only block) ----------
 
-# Hard-coded alert destination for server errors (Peyton)
-ALERT_SMS_TO = "+18145642212"
+# Alert destination for server errors — set ALERT_SMS_TO in your environment.
+ALERT_SMS_TO = os.getenv("ALERT_SMS_TO", "").strip()
 
 
 def alert_sms(message: str) -> bool:
     """
     Fire-and-forget alert SMS for *system errors*.
-    Always goes to ALERT_SMS_TO (your number), with a short prefix + truncation.
+    Destination is read from the ALERT_SMS_TO environment variable.
     """
     dest = ALERT_SMS_TO
     if not dest:
-        print("[ALERT SMS] No ALERT_SMS_TO set; skipping.")
+        print("[ALERT SMS] ALERT_SMS_TO not set; skipping.")
         return False
 
     prefix = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).strftime("%m/%d %H:%M")
