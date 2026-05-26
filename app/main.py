@@ -48,6 +48,7 @@ from app import tenantold
 from app.routers import auth
 from app.routers.invites import router as invite_router
 from app.routers.admin_invites import router as admin_invites_router
+from app.routers.admin_tenant_mgmt import router as admin_tenant_mgmt_router
 from app.routers import cron
 
 def gen_op_id(route: APIRoute):
@@ -154,6 +155,9 @@ OPEN_PATHS = {
     "/auth/signup",
     "/auth/forgot-password",
     "/auth/reset-password",
+    "/auth/invite/create",
+    "/auth/invite/list",
+    "/auth/invite/verify",
     "/_int/whoami-raw",
     "/whoami",
     "/debug/whoami-verbose",
@@ -319,6 +323,7 @@ app.include_router(finance_export_router.router)
 app.include_router(auth.router)
 app.include_router(invite_router)
 app.include_router(admin_invites_router)
+app.include_router(admin_tenant_mgmt_router)
 app.include_router(cron.router)
 app.include_router(reminders_router)
 # ---------- Startup ----------
