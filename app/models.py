@@ -24,6 +24,7 @@ class Lead(SQLModel, table=True):
     message: Optional[str] = None
     tenant_id: str = Field(default="public", index=True)  # <-- keep "public"
     status: Optional[str] = Field(default="new", max_length=20)
+    source: Optional[str] = Field(default=None, max_length=50)  # e.g. "missed_call", "web_form"
 
 
 class Booking(SQLModel, table=True):
@@ -80,6 +81,12 @@ class Tenant(SQLModel, table=True):
     # timezone for this tenant (IANA string, e.g. "America/New_York")
     timezone: Optional[str] = Field(default="America/New_York", max_length=64)
 
+    # Vapi Phone Number ID — used to route end-of-call webhooks to this tenant
+    twilio_number: Optional[str] = Field(default="", max_length=128)
+
+    # platform admin flag
+    is_admin: bool = Field(default=False)
+
     # --- QBO fields ---
     qbo_realm_id: Optional[str] = None
     qbo_access_token: Optional[str] = None
@@ -104,6 +111,9 @@ class TenantSettings(SQLModel, table=True):
     business_name: Optional[str] = Field(default="", max_length=255)
     business_phone: Optional[str] = Field(default="", max_length=50)
     review_link: Optional[str] = Field(default="", max_length=512)
+
+    # Twilio number assigned to this tenant (used for webhook tenant lookup)
+    twilio_number: Optional[str] = Field(default="", max_length=50)
 
     # Optional extras if you want to drive internal alerts from settings
     office_sms_to: Optional[str] = Field(default="", max_length=50)

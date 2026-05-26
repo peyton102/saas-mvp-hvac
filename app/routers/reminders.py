@@ -286,18 +286,27 @@ def _send_for_tenant(session: Session, tenant_id: str, look_back_minutes: int) -
         except Exception as e:
             print(f"[REMINDER EMAIL ERROR] {e}")
 
-        session.add(ReminderModel(
-            tenant_id=tenant_id,
-            phone=phone,
-            name=name,
-            booking_start=_utc_naive(start_dt),
-            booking_end=_utc_naive(end_dt) if end_dt else None,
-            template=template,
-            message=body + ("" if not email_ok else " [email sent]"),
-            source=it.get("source", "cron"),
-            sms_sent=bool(ok),
-        ))
-        session.commit()
+        # Commit the ReminderSent log row. If the commit fails, roll back so the
+        # PostgreSQL transaction doesn't stay in an aborted state — which would
+        # cause "current transaction is aborted" on every subsequent SQL statement.
+        try:
+            session.add(ReminderModel(
+                tenant_id=tenant_id,
+                phone=phone,
+                name=name,
+                booking_start=_utc_naive(start_dt),
+                booking_end=_utc_naive(end_dt) if end_dt else None,
+                template=template,
+                message=body + ("" if not email_ok else " [email sent]"),
+                source=it.get("source", "cron"),
+                sms_sent=bool(ok),
+            ))
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            failures += 1
+            print(f"[REMINDER COMMIT ERROR] tenant={tenant_id} phone={phone} template={template}: {e}")
+            continue
 
         if ok:
             sent += 1
@@ -357,7 +366,18 @@ def send_reminders_all(
     for t in tenant_ids:
         if not t:
             continue
-        m = _send_for_tenant(session, t, look_back_minutes)
+        try:
+            m = _send_for_tenant(session, t, look_back_minutes)
+        except Exception as e:
+            # Roll back so the aborted transaction doesn't infect the next tenant's queries.
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            print(f"[REMINDER ERROR] tenant={t}: {e}")
+            per_tenant[t] = {"sent": 0, "skipped_duplicates": 0, "failures": 1, "error": str(e)}
+            totals["failures"] += 1
+            continue
         per_tenant[t] = m
         totals["sent"] += m["sent"]
         totals["skipped_duplicates"] += m["skipped_duplicates"]

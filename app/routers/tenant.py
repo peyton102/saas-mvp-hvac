@@ -189,6 +189,7 @@ class TenantSettingsIn(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     timezone: Optional[str] = None  # IANA tz string, e.g. "America/Chicago"
+    twilio_number: Optional[str] = None
 
 
 class ProfileIn(BaseModel):
@@ -326,6 +327,7 @@ def get_tenant_settings(
         "website": t.website,
         "address": t.address,
         "timezone": t.timezone or _DEFAULT_TZ,
+        "twilio_number": t.twilio_number or "",
     }
 
 

@@ -112,12 +112,20 @@ async def create_lead(
         "message": payload.message or "",
     }
 
-    # Customer auto-reply (only if not throttled)
-    if sms_ok:
+    # Auto-reply to lead:
+    # - manual + checkbox: always send (bypass throttle — user explicitly requested it)
+    # - public web form: send only if not throttled
+    # - manual no checkbox: don't send
+    if payload.manual_entry and payload.send_auto_reply:
         sms_ok = lead_auto_reply_sms(tenant_id, sms_payload)
+    elif not payload.manual_entry and sms_ok:
+        sms_ok = lead_auto_reply_sms(tenant_id, sms_payload)
+    else:
+        sms_ok = False
 
-    # Office notification (no throttle – internal)
-    _office_ok = lead_office_notify_sms(tenant_id, sms_payload)
+    # Office notification: always except when manually triggering the auto-reply checkbox
+    if not payload.send_auto_reply:
+        _office_ok = lead_office_notify_sms(tenant_id, sms_payload)
 
     # CSV log (only when DB_FIRST is false)
     if not getattr(config.settings, "DB_FIRST", True):
@@ -385,6 +393,40 @@ def list_leads(
         for r in rows
     ]
     return {"count": len(items), "items": items}
+@router.get("/calls")
+def list_calls(
+    limit: int = Query(200, ge=1, le=500),
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Return inbound call leads for the current tenant."""
+    rows = session.exec(
+        select(LeadModel)
+        .where(LeadModel.tenant_id == tenant_id)
+        .where(LeadModel.source == "vapi")
+        .order_by(LeadModel.id.desc())
+        .limit(limit)
+    ).all()
+    items = [
+        {
+            "id": r.id,
+            "created_at": (
+                (r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc))
+                .astimezone(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z")
+                if r.created_at else None
+            ),
+            "name": r.name,
+            "phone": r.phone,
+            "message": r.message or "",
+            "status": (getattr(r, "status", None) or "new"),
+        }
+        for r in rows
+    ]
+    return {"count": len(items), "items": items}
+
+
 @router.delete("/leads/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_lead_public(
     lead_id: int,

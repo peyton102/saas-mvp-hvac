@@ -5,6 +5,8 @@ class LeadIn(BaseModel):
     phone: str
     email: EmailStr | None = None
     message: str | None = None
+    send_auto_reply: bool = False
+    manual_entry: bool = False
 
 class LeadOut(BaseModel):
     sms_sent: bool

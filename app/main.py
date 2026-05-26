@@ -26,11 +26,12 @@ from app.routers import backup
 from app import config
 from app import models  # noqa: F401
 from app import models_finance  # noqa: F401
-from app.db import create_db_and_tables
+from app.db import create_db_and_tables, run_startup_migrations
 from app.deps import get_tenant_id
 from app.routers.demo import router as demo_router
 from app.routers.leads import router as leads_router
 from app.routers.voice import router as voice_router
+from app.routers.vapi import router as vapi_router
 from app.routers.calendly import router as calendly_router
 from app.routers.reminders import router as reminders_router
 from app.routers.tasks import router as tasks_router
@@ -46,6 +47,7 @@ from app.routers import health, finance, finance_debug, sms_debug, voice, calend
 from app import tenantold
 from app.routers import auth
 from app.routers.invites import router as invite_router
+from app.routers.admin_invites import router as admin_invites_router
 from app.routers import cron
 
 def gen_op_id(route: APIRoute):
@@ -161,6 +163,8 @@ OPEN_PATHS = {
     "/redoc",
     # backup admin endpoints (they do their own bearer auth)
     "/backup/debug-admin-env",
+    # public debug helpers
+    "/debug/twilio-token",
 }
 
 IS_DEV = (str(os.getenv("ENV") or getattr(config, "ENV", "dev")).lower() == "dev")
@@ -170,6 +174,7 @@ OPEN_PREFIXES = (
     "/book",
     "/lead",
     "/twilio/voice",
+    "/vapi/",
     "/webhooks/calendly",
     "/backup/",
     "/cron/",
@@ -293,6 +298,7 @@ app.include_router(calendly_router, dependencies=[Depends(get_tenant_id)])
 
 
 app.include_router(voice_router)
+app.include_router(vapi_router)
 app.include_router(finance_debug.router)
 app.include_router(backup.router)
 app.include_router(tenantold.router)
@@ -312,6 +318,7 @@ app.include_router(qbo_export_router.router)
 app.include_router(finance_export_router.router)
 app.include_router(auth.router)
 app.include_router(invite_router)
+app.include_router(admin_invites_router)
 app.include_router(cron.router)
 app.include_router(reminders_router)
 # ---------- Startup ----------
@@ -319,5 +326,6 @@ app.include_router(reminders_router)
 def on_startup():
     setup_logging()
     create_db_and_tables()
+    run_startup_migrations()
     logging.warning
     logging.info("✅ Startup complete")
