@@ -68,6 +68,7 @@ _CORS_ORIGINS = [
     "https://saas-mvp-hvac.onrender.com",
     "https://saas-mvp-hvac-staging.onrender.com",
     "https://saas-mvp-hvac-1.onrender.com",
+    "https://hvac-staging-site.onrender.com",
 ]
 _extra = os.getenv("CORS_EXTRA_ORIGINS", "")
 for _o in _extra.replace(",", " ").split():
