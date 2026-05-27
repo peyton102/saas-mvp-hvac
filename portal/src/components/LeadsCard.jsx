@@ -183,7 +183,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     { key: "name",       label: "Name",          w: "110px" },
     { key: "phone",      label: "Phone",          w: "120px" },
     { key: "message",    label: "Issue",          w: "180px" },
-    { key: "service_urgency", label: "Timing",   w: "90px"  },
+    { key: "service_urgency", label: "Preferred Day", w: "110px" },
     { key: "notes",      label: "Notes",          w: "160px" },
     { key: "status",     label: "Contacted",      w: "90px"  },
   ];

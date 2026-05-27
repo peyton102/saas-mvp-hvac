@@ -405,6 +405,8 @@ def list_leads(
             "email": r.email or "",
             "message": r.message or "",
             "status": (getattr(r, "status", None) or "new"),
+            "service_urgency": getattr(r, "service_urgency", None) or "",
+            "notes": getattr(r, "notes", None) or "",
             "tenant_id": r.tenant_id,
         }
         for r in rows
