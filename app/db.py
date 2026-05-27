@@ -21,6 +21,7 @@ def run_startup_migrations() -> None:
     migrations = [
         ("sp_tenant_twilio_number", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS twilio_number TEXT DEFAULT ''"),
         ("sp_lead_service_urgency", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS service_urgency TEXT"),
+        ("sp_lead_notes", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS notes TEXT"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

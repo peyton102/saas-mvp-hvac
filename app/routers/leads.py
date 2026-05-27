@@ -193,6 +193,23 @@ def update_lead_status(
     return {"ok": True, "id": lead_id, "status": new_status}
 
 
+@router.patch("/leads/{lead_id}/notes")
+def update_lead_notes(
+    lead_id: int,
+    payload: dict,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    row = session.get(LeadModel, lead_id)
+    if not row or row.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    row.notes = payload.get("notes") or ""
+    session.add(row)
+    session.commit()
+    return {"ok": True, "id": lead_id}
+
+
 @router.get("/debug/leads")
 def debug_leads(
     request: Request,
