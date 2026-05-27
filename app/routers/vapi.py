@@ -1,5 +1,6 @@
 # app/routers/vapi.py
 import json as _json
+import os
 import re
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
@@ -315,6 +316,10 @@ def _extract_from_vapi_body(body: dict) -> dict:
 def _resolve_tenant(phone_number_id: Optional[str], session: Session) -> Optional[str]:
     """Identify the tenant by matching call.phoneNumberId against Tenant.twilio_number."""
     if not phone_number_id:
+        fallback = (os.getenv("VAPI_DEFAULT_TENANT") or "").strip()
+        if fallback:
+            print(f"[VAPI] phone_number_id empty - using VAPI_DEFAULT_TENANT={fallback!r}", flush=True)
+            return fallback
         print("[VAPI] ERROR: phone_number_id empty - cannot resolve tenant.", flush=True)
         return None
 
