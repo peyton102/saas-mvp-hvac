@@ -23,6 +23,7 @@ class VapiIntakePayload(BaseModel):
     language: Optional[str] = None
     summary: Optional[str] = None
     zip: Optional[str] = None
+    service_urgency: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
 
@@ -288,6 +289,12 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or structured.get("postal_code")
         or ""
     )
+    service_urgency = _clean_text(
+        structured.get("service_urgency")
+        or structured.get("serviceUrgency")
+        or structured.get("urgency")
+        or ""
+    )
     phone = _extract_phone_from_text(issue, summary) or _normalize_phone(phone)
     issue = _compact_reason(issue)
     zip_code = _extract_zip(zip_code or summary)
@@ -299,6 +306,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "issue": issue,
         "summary": summary,
         "zip": zip_code,
+        "service_urgency": service_urgency,
         "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
     }
@@ -399,6 +407,7 @@ async def vapi_intake(
         message=message,
         tenant_id=tenant_id,
         source="vapi",
+        service_urgency=(payload.service_urgency or "").strip() or None,
     )
     try:
         session.add(lead)
@@ -414,6 +423,7 @@ async def vapi_intake(
             "phone": payload.phone,
             "issue": payload.issue,
             "zip": payload.zip,
+            "service_urgency": payload.service_urgency,
         })
         print(f"[VAPI] office SMS sent for tenant={tenant_id!r}", flush=True)
     except Exception as e:

@@ -524,12 +524,14 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
     phone = _normalize_phone(phone_raw) or phone_raw or "Unknown"
     issue = (payload.get("issue") or "").strip() or "—"
     zip_code = (payload.get("zip") or "").strip() or "—"
+    service_urgency = (payload.get("service_urgency") or "").strip()
 
     body = (
         f"🚨 New Lead — {business_name}\n"
         f"Name: {name}\n"
         f"Phone: {phone}\n"
         f"Issue: {issue}\n"
+        f"When: {service_urgency or '—'}\n"
         f"ZIP: {zip_code}"
     )
 
