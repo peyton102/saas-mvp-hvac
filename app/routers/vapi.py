@@ -195,6 +195,8 @@ def _extract_timing(*values: Optional[str]) -> str:
         text = _clean_text(value)
         if not text:
             continue
+        if re.search(r"\b(asap|urgent|immediately|right away|as soon as possible)\b", text, re.IGNORECASE):
+            return "ASAP"
         match = re.search(patterns[0], text, re.IGNORECASE)
         if match:
             day = (match.group(1) or "").lower()
