@@ -368,7 +368,7 @@ async def _handle_tool_call(body: dict, session: Session):
     Saves the lead and returns the response format VAPI expects.
     """
     msg = body.get("message") or {}
-    tool_calls = msg.get("toolCalls") or []
+    tool_calls = msg.get("toolCalls") or msg.get("toolCallList") or []
     call = msg.get("call") or {}
     phone_number_id = call.get("phoneNumberId") or ""
     call_id = call.get("id") or ""
@@ -470,7 +470,15 @@ async def vapi_intake(
 
     msg_type = _message_type(body)
     if msg_type == "tool-calls":
-        return await _handle_tool_call(body, session)
+        print(f"[VAPI TOOL-CALL RAW] {raw_text[:3000]}", flush=True)
+        try:
+            return await _handle_tool_call(body, session)
+        except Exception as e:
+            print(f"[VAPI TOOL-CALL ERROR] {e}", flush=True)
+            msg = body.get("message") or {}
+            tool_calls = msg.get("toolCalls") or msg.get("toolCallList") or []
+            results = [{"toolCallId": tc.get("id") or "", "result": "Received."} for tc in tool_calls]
+            return {"results": results}
     if msg_type and msg_type != "end-of-call-report":
         print(f"[VAPI] ignoring non-final event type={msg_type!r}", flush=True)
         return {"status": "ok", "ignored_event_type": msg_type}
