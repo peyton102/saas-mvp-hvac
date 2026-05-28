@@ -239,7 +239,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
     call = msg.get("call") or {}
     analysis = msg.get("analysis") or {}
     structured = analysis.get("structuredData") or {}
-    summary = msg.get("summary") or ""
+    summary = msg.get("summary") or analysis.get("summary") or ""
 
     customer = call.get("customer") or {}
     phone = (
@@ -362,6 +362,98 @@ def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
         return False
 
 
+async def _handle_tool_call(body: dict, session: Session):
+    """
+    Handle VAPI tool-call events mid-conversation.
+    Saves the lead and returns the response format VAPI expects.
+    """
+    msg = body.get("message") or {}
+    tool_calls = msg.get("toolCalls") or []
+    call = msg.get("call") or {}
+    phone_number_id = call.get("phoneNumberId") or ""
+    call_id = call.get("id") or ""
+
+    print(f"[VAPI TOOL-CALL] call_id={call_id!r} phone_number_id={phone_number_id!r} tools={[tc.get('function', {}).get('name') for tc in tool_calls]}", flush=True)
+
+    results = []
+    for tc in tool_calls:
+        tc_id = tc.get("id") or ""
+        fn = tc.get("function") or {}
+        fn_name = fn.get("name") or ""
+        args = fn.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = _json.loads(args)
+            except Exception:
+                args = {}
+
+        if fn_name != "hvac_intake":
+            results.append({"toolCallId": tc_id, "result": "ok"})
+            continue
+
+        tenant_id = _resolve_tenant(phone_number_id, session)
+        if not tenant_id:
+            results.append({"toolCallId": tc_id, "result": "Received. We'll follow up shortly."})
+            continue
+
+        name = _clean_text(args.get("name") or args.get("caller_name") or "")
+        phone = _normalize_phone(
+            args.get("phone") or args.get("callback_phone") or args.get("phone_number") or ""
+        )
+        issue = _compact_reason(args.get("issue") or args.get("reason") or "")
+        zip_code = _extract_zip(args.get("zip") or args.get("zip_code") or "")
+        service_urgency = _clean_text(
+            args.get("service_urgency")
+            or args.get("timing")
+            or args.get("service_timing")
+            or args.get("preferred_day")
+            or ""
+        )
+        if not service_urgency:
+            service_urgency = _extract_timing(
+                args.get("timing") or args.get("service_timing") or args.get("preferred_day") or issue
+            )
+
+        print(f"[VAPI TOOL-CALL] name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} zip={zip_code!r}", flush=True)
+
+        if call_id and not _dedupe_insert(session, source=f"vapi_tool:{tenant_id}", event_id=call_id):
+            print(f"[VAPI TOOL-CALL] duplicate ignored call_id={call_id!r}", flush=True)
+            results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
+            continue
+
+        lead = LeadModel(
+            name=name,
+            phone=phone or "",
+            email=None,
+            message=issue or "Inbound call via Vapi",
+            tenant_id=tenant_id,
+            source="vapi",
+            service_urgency=service_urgency or None,
+        )
+        try:
+            session.add(lead)
+            session.commit()
+            session.refresh(lead)
+        except Exception as e:
+            session.rollback()
+            print(f"[VAPI TOOL-CALL] lead insert error: {e}", flush=True)
+
+        try:
+            vapi_lead_office_sms(tenant_id, {
+                "name": name,
+                "phone": phone,
+                "issue": issue,
+                "zip": zip_code,
+                "service_urgency": service_urgency,
+            })
+        except Exception as e:
+            print(f"[VAPI TOOL-CALL] office SMS error: {e}", flush=True)
+
+        results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
+
+    return {"results": results}
+
+
 @router.post("/vapi/intake")
 async def vapi_intake(
     request: Request,
@@ -377,6 +469,8 @@ async def vapi_intake(
         body = {}
 
     msg_type = _message_type(body)
+    if msg_type == "tool-calls":
+        return await _handle_tool_call(body, session)
     if msg_type and msg_type != "end-of-call-report":
         print(f"[VAPI] ignoring non-final event type={msg_type!r}", flush=True)
         return {"status": "ok", "ignored_event_type": msg_type}
