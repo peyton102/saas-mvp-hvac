@@ -296,6 +296,8 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or structured.get("urgency")
         or ""
     )
+    if not service_urgency:
+        service_urgency = _extract_timing(summary) or ""
     phone = _extract_phone_from_text(issue, summary) or _normalize_phone(phone)
     issue = _compact_reason(issue)
     zip_code = _extract_zip(zip_code or summary)
