@@ -2,7 +2,7 @@
 import json as _json
 import os
 import re
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -364,10 +364,52 @@ def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
         return False
 
 
-async def _handle_tool_call(body: dict, session: Session):
+def _process_tool_call_background(tenant_id: str, call_id: str, name: str, phone: str, issue: str, zip_code: str, service_urgency: str):
+    """DB + SMS work done after VAPI already got its response."""
+    try:
+        gen = get_session()
+        session = next(gen)
+        try:
+            if call_id and not _dedupe_insert(session, source=f"vapi_tool:{tenant_id}", event_id=call_id):
+                print(f"[VAPI TOOL-CALL] duplicate ignored call_id={call_id!r}", flush=True)
+                return
+
+            lead = LeadModel(
+                name=name,
+                phone=phone or "",
+                email=None,
+                message=issue or "Inbound call via Vapi",
+                tenant_id=tenant_id,
+                source="vapi",
+                service_urgency=service_urgency or None,
+            )
+            session.add(lead)
+            session.commit()
+            print(f"[VAPI TOOL-CALL] lead saved for tenant={tenant_id!r}", flush=True)
+        except Exception as e:
+            session.rollback()
+            print(f"[VAPI TOOL-CALL] lead insert error: {e}", flush=True)
+        finally:
+            session.close()
+    except Exception as e:
+        print(f"[VAPI TOOL-CALL] background session error: {e}", flush=True)
+
+    try:
+        vapi_lead_office_sms(tenant_id, {
+            "name": name,
+            "phone": phone,
+            "issue": issue,
+            "zip": zip_code,
+            "service_urgency": service_urgency,
+        })
+    except Exception as e:
+        print(f"[VAPI TOOL-CALL] office SMS error: {e}", flush=True)
+
+
+async def _handle_tool_call(body: dict, background_tasks: BackgroundTasks):
     """
     Handle VAPI tool-call events mid-conversation.
-    Saves the lead and returns the response format VAPI expects.
+    Returns immediately to VAPI, saves lead + sends SMS in background.
     """
     msg = body.get("message") or {}
     tool_calls = msg.get("toolCalls") or msg.get("toolCallList") or []
@@ -376,6 +418,14 @@ async def _handle_tool_call(body: dict, session: Session):
     call_id = call.get("id") or ""
 
     print(f"[VAPI TOOL-CALL] call_id={call_id!r} phone_number_id={phone_number_id!r} tools={[tc.get('function', {}).get('name') for tc in tool_calls]}", flush=True)
+
+    # Resolve tenant synchronously (fast, just a env var or small DB lookup)
+    gen = get_session()
+    session = next(gen)
+    try:
+        tenant_id = _resolve_tenant(phone_number_id, session)
+    finally:
+        session.close()
 
     results = []
     for tc in tool_calls:
@@ -393,9 +443,8 @@ async def _handle_tool_call(body: dict, session: Session):
             results.append({"toolCallId": tc_id, "result": "ok"})
             continue
 
-        tenant_id = _resolve_tenant(phone_number_id, session)
         if not tenant_id:
-            results.append({"toolCallId": tc_id, "result": "Received. We'll follow up shortly."})
+            results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
             continue
 
         name = _clean_text(args.get("name") or args.get("caller_name") or "")
@@ -416,40 +465,12 @@ async def _handle_tool_call(body: dict, session: Session):
                 args.get("timing") or args.get("service_timing") or args.get("preferred_day") or issue
             )
 
-        print(f"[VAPI TOOL-CALL] name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} zip={zip_code!r}", flush=True)
+        print(f"[VAPI TOOL-CALL] queuing background save: name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} zip={zip_code!r}", flush=True)
 
-        if call_id and not _dedupe_insert(session, source=f"vapi_tool:{tenant_id}", event_id=call_id):
-            print(f"[VAPI TOOL-CALL] duplicate ignored call_id={call_id!r}", flush=True)
-            results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
-            continue
-
-        lead = LeadModel(
-            name=name,
-            phone=phone or "",
-            email=None,
-            message=issue or "Inbound call via Vapi",
-            tenant_id=tenant_id,
-            source="vapi",
-            service_urgency=service_urgency or None,
+        background_tasks.add_task(
+            _process_tool_call_background,
+            tenant_id, call_id, name, phone, issue, zip_code, service_urgency,
         )
-        try:
-            session.add(lead)
-            session.commit()
-            session.refresh(lead)
-        except Exception as e:
-            session.rollback()
-            print(f"[VAPI TOOL-CALL] lead insert error: {e}", flush=True)
-
-        try:
-            vapi_lead_office_sms(tenant_id, {
-                "name": name,
-                "phone": phone,
-                "issue": issue,
-                "zip": zip_code,
-                "service_urgency": service_urgency,
-            })
-        except Exception as e:
-            print(f"[VAPI TOOL-CALL] office SMS error: {e}", flush=True)
 
         results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
 
@@ -459,6 +480,7 @@ async def _handle_tool_call(body: dict, session: Session):
 @router.post("/vapi/intake")
 async def vapi_intake(
     request: Request,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
     try:
@@ -474,7 +496,7 @@ async def vapi_intake(
     if msg_type == "tool-calls":
         print(f"[VAPI TOOL-CALL RAW] {raw_text[:3000]}", flush=True)
         try:
-            return await _handle_tool_call(body, session)
+            return await _handle_tool_call(body, background_tasks)
         except Exception as e:
             print(f"[VAPI TOOL-CALL ERROR] {e}", flush=True)
             msg = body.get("message") or {}
