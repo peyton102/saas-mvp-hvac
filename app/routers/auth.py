@@ -439,6 +439,33 @@ def me(
     )
 
 
+# ----------------- Admin Bootstrap -----------------
+
+
+@router.post("/admin/bootstrap")
+def admin_bootstrap(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    One-time bootstrap: promotes the calling user to admin.
+    Only works when zero admin accounts exist in the DB — auto-locks after first use.
+    """
+    existing_admin = session.exec(select(Tenant).where(Tenant.is_admin == True)).first()
+    if existing_admin:
+        raise HTTPException(status_code=403, detail="An admin account already exists")
+
+    tenant_slug = current_user["tenant_slug"]
+    tenant = session.exec(select(Tenant).where(Tenant.slug == tenant_slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    tenant.is_admin = True
+    session.add(tenant)
+    session.commit()
+    return {"ok": True, "slug": tenant_slug, "is_admin": True}
+
+
 # ----------------- Forgot Password -----------------
 
 

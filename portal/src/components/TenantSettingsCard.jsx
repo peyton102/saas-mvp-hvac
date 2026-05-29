@@ -15,7 +15,6 @@ export default function TenantSettingsCard({
     review_google_url: "",
     email: "",
     phone: "",
-    twilio_number: "",
   });
 
   const isSettingsComplete = useMemo(() => {
@@ -79,7 +78,6 @@ export default function TenantSettingsCard({
           review_google_url: data.review_google_url ?? "",
           email: data.email ?? "",
           phone: data.phone ?? "",
-          twilio_number: data.twilio_number ?? "",
         };
 
         // If booking_link is empty in DB, auto-fill it using tenantSlug + portal base
@@ -314,19 +312,6 @@ if ((!raw || looksLikePrefixOnly) && computedBookingLink) {
             style={{ width: "100%", marginTop: 4 }}
             {...bind("phone")}
           />
-        </label>
-
-        <label style={{ fontSize: 13 }}>
-          Vapi Phone Number ID
-          <input
-            type="text"
-            style={{ width: "100%", marginTop: 4 }}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            {...bind("twilio_number")}
-          />
-          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-            Found in Vapi dashboard → Phone Numbers → your number → ID field
-          </div>
         </label>
 
         <div style={{ marginTop: 8 }}>
