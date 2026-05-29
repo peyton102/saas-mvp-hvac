@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 from sqlmodel import Session
@@ -137,6 +137,7 @@ class InviteOut(BaseModel):
 @router.post("/send", response_model=InviteOut)
 def send_invite(
     payload: SendInviteRequest,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -160,7 +161,7 @@ def send_invite(
     ))
     session.commit()
 
-    _send_invite_email(str(payload.email), code)
+    background_tasks.add_task(_send_invite_email, str(payload.email), code)
 
     return InviteOut(
         code=code,
@@ -206,6 +207,7 @@ def list_invites(
 @router.post("/{code}/resend")
 def resend_invite(
     code: str,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -235,6 +237,6 @@ def resend_invite(
     """).bindparams(sent_at=now_iso, code=code))
     session.commit()
 
-    _send_invite_email(email, code)
+    background_tasks.add_task(_send_invite_email, email, code)
 
     return {"ok": True, "code": code, "email": email}
