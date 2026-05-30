@@ -342,14 +342,10 @@ def _resolve_tenant(phone_number_id: Optional[str], session: Session) -> Optiona
             return t.slug
 
     print(
-        f"[VAPI] phone_number_id={phone_number_id!r} unmatched against Tenant.twilio_number",
+        f"[VAPI] ERROR: phone_number_id={phone_number_id!r} unmatched against "
+        f"Tenant.twilio_number - lead will NOT be saved.",
         flush=True,
     )
-    fallback = (os.getenv("VAPI_DEFAULT_TENANT") or "").strip()
-    if fallback:
-        print(f"[VAPI] falling back to VAPI_DEFAULT_TENANT={fallback!r}", flush=True)
-        return fallback
-    print("[VAPI] ERROR: no VAPI_DEFAULT_TENANT set - lead will NOT be saved.", flush=True)
     return None
 
 
