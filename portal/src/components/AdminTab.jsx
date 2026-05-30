@@ -274,12 +274,6 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   const [tenantsErr, setTenantsErr]   = useState("");
   const [removingTenant, setRemovingTenant] = useState(null); // tenant object for modal
 
-  // ---- VAPI number assignment ----
-  const [editingVapiSlug, setEditingVapiSlug] = useState(null);
-  const [vapiInput, setVapiInput]             = useState("");
-  const [vapiSaving, setVapiSaving]           = useState(false);
-  const [vapiErr, setVapiErr]                 = useState("");
-
   const loadInvites = useCallback(async () => {
     setLoading(true);
     setListErr("");
@@ -341,29 +335,6 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       setSendErr(String(e.message || e));
     } finally {
       setSending(false);
-    }
-  }
-
-  async function saveVapiNumber(slug, value) {
-    setVapiSaving(true);
-    setVapiErr("");
-    try {
-      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${slug}/vapi-number`, {
-        method: "PATCH",
-        headers: { ...commonHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ vapi_phone_number_id: value }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-      setTenants((prev) =>
-        prev.map((t) => t.slug === slug ? { ...t, twilio_number: data.twilio_number } : t)
-      );
-      setEditingVapiSlug(null);
-      setVapiInput("");
-    } catch (e) {
-      setVapiErr(String(e.message || e));
-    } finally {
-      setVapiSaving(false);
     }
   }
 
@@ -590,16 +561,12 @@ export default function AdminTab({ apiBase, commonHeaders }) {
           </div>
         )}
 
-        {vapiErr && (
-          <div style={{ fontSize: 13, color: "#fca5a5", marginBottom: 10 }}>{vapiErr}</div>
-        )}
-
         {tenants.length > 0 && (
           <div style={{ display: "grid", gap: 6 }}>
             {/* Header */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 110px 80px 1fr auto",
+              gridTemplateColumns: "1fr 1fr 120px 90px auto",
               gap: 12,
               padding: "6px 14px",
               fontSize: 11,
@@ -612,7 +579,6 @@ export default function AdminTab({ apiBase, commonHeaders }) {
               <span>Email</span>
               <span>Slug</span>
               <span>Joined</span>
-              <span>VAPI Number</span>
               <span></span>
             </div>
 
@@ -621,7 +587,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                 key={t.slug}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 110px 80px 1fr auto",
+                  gridTemplateColumns: "1fr 1fr 120px 90px auto",
                   gap: 12,
                   alignItems: "center",
                   padding: "12px 14px",
@@ -662,65 +628,12 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                   {fmtDate(t.created_at)}
                 </span>
 
-                {/* VAPI number cell */}
-                <div>
-                  {editingVapiSlug === t.slug ? (
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input
-                        type="text"
-                        value={vapiInput}
-                        onChange={(e) => setVapiInput(e.target.value)}
-                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                        style={{ ...inputStyle, fontSize: 12, padding: "6px 10px" }}
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => saveVapiNumber(t.slug, vapiInput)}
-                        disabled={vapiSaving}
-                        style={{ ...btnGhost, fontSize: 12 }}
-                      >
-                        {vapiSaving ? "…" : "Save"}
-                      </button>
-                      <button
-                        onClick={() => { setEditingVapiSlug(null); setVapiInput(""); setVapiErr(""); }}
-                        style={{ ...btnGhost, fontSize: 12 }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      {t.twilio_number ? (
-                        <span style={{ fontSize: 11, color: "#6ee7b7", fontFamily: "monospace" }}>
-                          {t.twilio_number.slice(0, 8)}…
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 11, color: "rgba(229,231,235,0.25)" }}>Not assigned</span>
-                      )}
-                      <button
-                        onClick={() => { setEditingVapiSlug(t.slug); setVapiInput(t.twilio_number || ""); setVapiErr(""); }}
-                        style={{ ...btnGhost, fontSize: 11, padding: "4px 10px" }}
-                      >
-                        {t.twilio_number ? "Edit" : "Assign"}
-                      </button>
-                      {t.twilio_number && (
-                        <button
-                          onClick={() => saveVapiNumber(t.slug, "")}
-                          style={{ ...btnRed, fontSize: 11, padding: "4px 10px" }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <button
                     onClick={() => setRemovingTenant(t)}
                     style={btnRed}
                   >
-                    Remove
+                    Remove Tenant
                   </button>
                 </div>
               </div>

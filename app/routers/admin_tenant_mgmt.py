@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import csv
 import io
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlmodel import Session, select
 from sqlalchemy import delete
 
@@ -43,32 +42,9 @@ def list_tenants(
             "is_active": t.is_active,
             "is_admin": t.is_admin,
             "created_at": t.created_at.isoformat() if t.created_at else None,
-            "twilio_number": t.twilio_number or "",
         }
         for t in tenants
     ]
-
-
-class VapiNumberIn(BaseModel):
-    vapi_phone_number_id: Optional[str] = ""
-
-
-@router.patch("/tenants/{slug}/vapi-number")
-def assign_vapi_number(
-    slug: str,
-    body: VapiNumberIn,
-    session: Session = Depends(get_session),
-    current_user: Dict[str, Any] = Depends(get_current_user),
-):
-    _require_admin(current_user, session)
-    tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    tenant.twilio_number = (body.vapi_phone_number_id or "").strip()
-    session.add(tenant)
-    session.commit()
-    session.refresh(tenant)
-    return {"ok": True, "slug": slug, "twilio_number": tenant.twilio_number}
 
 
 @router.get("/tenants/{slug}/export")
