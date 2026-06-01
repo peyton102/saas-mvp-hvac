@@ -26,6 +26,9 @@ def run_startup_migrations() -> None:
         ("sp_tenant_gcal_access_token", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_access_token TEXT"),
         ("sp_tenant_gcal_token_expires_at", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_token_expires_at BIGINT"),
         ("sp_tenant_gcal_calendar_id", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_calendar_id TEXT DEFAULT 'primary'"),
+        ("sp_tenant_gcal_sync_token", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_sync_token TEXT"),
+        ("sp_tenant_gcal_last_synced_at", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_last_synced_at TIMESTAMP"),
+        ("sp_booking_gcal_event_id", "ALTER TABLE booking ADD COLUMN IF NOT EXISTS gcal_event_id TEXT"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

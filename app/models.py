@@ -38,9 +38,10 @@ class Booking(SQLModel, table=True):
     start: datetime
     end: datetime
     notes: Optional[str] = None
-    source: Optional[str] = None  # e.g., "calendly", "direct"
+    source: Optional[str] = None  # e.g., "calendly", "direct", "google_calendar"
     tenant_id: str = Field(default="public", index=True)  # <-- keep "public"
     completed_at: Optional[datetime] = Field(default=None, index=True)
+    gcal_event_id: Optional[str] = Field(default=None, index=True)  # dedup key for GCal imports
 
 class Review(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -100,6 +101,8 @@ class Tenant(SQLModel, table=True):
     gcal_access_token: Optional[str] = None
     gcal_token_expires_at: Optional[int] = None  # Unix timestamp
     gcal_calendar_id: Optional[str] = Field(default="primary", max_length=255)
+    gcal_sync_token: Optional[str] = None        # incremental sync token from Google
+    gcal_last_synced_at: Optional[datetime] = None  # last successful sync timestamp
 
     api_keys: List["ApiKey"] = Relationship(back_populates="tenant")
 
