@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import Tenant
-from app.services.google_calendar import build_flow, save_creds
+from app.services.google_calendar import build_flow, establish_sync_token, save_creds
 
 router = APIRouter()
 
@@ -114,11 +114,20 @@ def oauth_google_callback(
             session.add(tenant_row)
             session.commit()
 
+            # Establish sync baseline — pages through existing events to capture
+            # nextSyncToken without importing them. Cron will only see events
+            # created AFTER this point.
+            try:
+                establish_sync_token(tenant_row, session)
+            except Exception as e:
+                print(f"[GCAL] establish_sync_token failed after OAuth for '{tenant_slug}': {e!r}")
+
             return {
                 "ok": True,
                 "tenant": tenant_slug,
-                "msg": "Google Calendar connected. New bookings will now sync to this tenant's calendar.",
+                "msg": "Google Calendar connected. New bookings will now sync to Torevez.",
                 "calendar_id": tenant_row.gcal_calendar_id or "primary",
+                "sync_token_set": bool(tenant_row.gcal_sync_token),
             }
 
         # Legacy fallback: no tenant slug → save to file (single-user dev mode)

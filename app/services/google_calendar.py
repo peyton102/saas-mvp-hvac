@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, json
+import os, json, re
 from pathlib import Path
 from typing import List, Tuple
 from datetime import datetime, timedelta, time as dtime, timezone
@@ -216,3 +216,274 @@ def get_service_for_tenant(tenant, session):
             return None
 
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+
+# ---------------------------------------------------------------------------
+# Inbound sync: Google Calendar → Torevez
+# ---------------------------------------------------------------------------
+
+# Matches most common US phone formats: 555-123-4567 / (555) 123-4567 / 5551234567 / +15551234567
+_PHONE_RE = re.compile(
+    r'(?<!\d)'
+    r'(?:\+?1[\s.\-]?)?'
+    r'(?:\(?\d{3}\)?[\s.\-]?)'
+    r'\d{3}[\s.\-]?\d{4}'
+    r'(?!\d)',
+)
+
+
+def _parse_phone(text: str) -> str:
+    """Return first US phone number found in text, or ''."""
+    m = _PHONE_RE.search(text or "")
+    return m.group(0).strip() if m else ""
+
+
+def _parse_event_dt(dt_obj: dict) -> datetime | None:
+    """
+    Parse a Google Calendar start/end object to a UTC-naive datetime.
+    Returns None for all-day events (date-only) or unparseable values.
+    """
+    dt_str = (dt_obj or {}).get("dateTime")
+    if not dt_str:
+        return None  # all-day event — no time, skip
+    try:
+        dt = dateparser.isoparse(dt_str)
+        if dt.tzinfo:
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return None
+
+
+def _parse_event(event: dict) -> dict:
+    """
+    Extract name, phone, email, notes from a manually-entered Google Calendar event.
+    Phone is found via regex anywhere in description or summary.
+    Name comes from first non-organizer attendee, or the event summary.
+    """
+    name = ""
+    email = ""
+
+    attendees = event.get("attendees") or []
+    organizer_email = (event.get("organizer") or {}).get("email", "")
+
+    customer = next(
+        (a for a in attendees if a.get("email") != organizer_email and not a.get("self")),
+        attendees[0] if attendees else None,
+    )
+
+    if customer:
+        name = (customer.get("displayName") or "").strip()
+        if not name:
+            raw = customer.get("email", "")
+            name = raw.split("@")[0] if raw else ""
+        email = customer.get("email", "")
+
+    if not name:
+        summary = (event.get("summary") or "").strip()
+        for prefix in ("Appointment with", "Appointment:", "Booking:", "Meeting:", "Estimate:", "Service:"):
+            if summary.lower().startswith(prefix.lower()):
+                summary = summary[len(prefix):].strip()
+        name = summary or "Unknown"
+
+    description = (event.get("description") or "").strip()
+    phone = _parse_phone(description) or _parse_phone(event.get("summary") or "")
+
+    return {"name": name, "email": email, "phone": phone, "notes": description}
+
+
+def establish_sync_token(tenant, session) -> bool:
+    """
+    Page through the tenant's calendar from now onwards to get a nextSyncToken
+    without importing any events. Call once right after OAuth so the cron job
+    only picks up events created AFTER the connection was made.
+    Returns True on success.
+    """
+    svc = get_service_for_tenant(tenant, session)
+    if not svc:
+        return False
+
+    calendar_id = (tenant.gcal_calendar_id or "primary").strip()
+
+    try:
+        resp = svc.events().list(
+            calendarId=calendar_id,
+            timeMin=datetime.now(timezone.utc).isoformat(),
+            singleEvents=True,
+            maxResults=2500,
+        ).execute()
+
+        # nextSyncToken only appears on the last page — paginate to exhaust
+        while resp.get("nextPageToken"):
+            resp = svc.events().list(
+                calendarId=calendar_id,
+                pageToken=resp["nextPageToken"],
+                singleEvents=True,
+                maxResults=2500,
+            ).execute()
+
+        sync_token = resp.get("nextSyncToken")
+        if sync_token:
+            tenant.gcal_sync_token = sync_token
+            tenant.gcal_last_synced_at = datetime.utcnow()
+            session.add(tenant)
+            session.commit()
+            return True
+        return False
+    except Exception as e:
+        print(f"[GCAL] establish_sync_token failed for '{getattr(tenant, 'slug', '?')}': {e!r}")
+        return False
+
+
+def sync_new_bookings(tenant, session) -> dict:
+    """
+    Fetch new/changed Google Calendar events for one tenant and import them as Booking rows.
+    Fires confirmation SMS + office SMS + email for each import, exactly like a direct booking.
+    Returns {"imported": N, "skipped": N, "errors": [...]}.
+    """
+    from app.models import Booking as BookingModel
+    from sqlmodel import select as _select
+    from app.services.sms import booking_confirmation_sms, booking_office_notify_sms
+    from app.services.email import send_booking_confirmation
+    from app.utils.phone import normalize_us_phone
+    from app.routers.tenant import get_tenant_tz
+
+    result: dict = {"imported": 0, "skipped": 0, "errors": []}
+
+    # No sync token yet — establish baseline now, import nothing this run
+    if not tenant.gcal_sync_token:
+        establish_sync_token(tenant, session)
+        return result
+
+    svc = get_service_for_tenant(tenant, session)
+    if svc is None:
+        return result
+
+    calendar_id = (tenant.gcal_calendar_id or "primary").strip()
+
+    try:
+        resp = svc.events().list(
+            calendarId=calendar_id,
+            syncToken=tenant.gcal_sync_token,
+            singleEvents=True,
+            maxResults=2500,
+        ).execute()
+    except Exception as e:
+        err = str(e)
+        if "410" in err or "Gone" in err or "fullSyncRequired" in err:
+            # Sync token expired — reset baseline, pick up new events next run
+            print(f"[GCAL SYNC] Sync token expired for '{tenant.slug}', resetting baseline")
+            tenant.gcal_sync_token = None
+            session.add(tenant)
+            session.commit()
+            establish_sync_token(tenant, session)
+            return result
+        result["errors"].append(err)
+        return result
+
+    tenant_tz = get_tenant_tz(tenant.slug, session)
+
+    for event in (resp.get("items") or []):
+        try:
+            if event.get("status") == "cancelled":
+                result["skipped"] += 1
+                continue
+
+            gcal_event_id = event.get("id", "")
+            if not gcal_event_id:
+                result["skipped"] += 1
+                continue
+
+            # Dedup — skip if already imported
+            if session.exec(
+                _select(BookingModel)
+                .where(BookingModel.tenant_id == tenant.slug)
+                .where(BookingModel.gcal_event_id == gcal_event_id)
+            ).first():
+                result["skipped"] += 1
+                continue
+
+            start_dt = _parse_event_dt(event.get("start") or {})
+            end_dt = _parse_event_dt(event.get("end") or {})
+            if start_dt is None:
+                result["skipped"] += 1  # all-day event
+                continue
+            if end_dt is None:
+                end_dt = start_dt + timedelta(hours=1)
+
+            parsed = _parse_event(event)
+            name = parsed["name"]
+            email = parsed["email"] or None
+            e164 = normalize_us_phone(parsed["phone"]) if parsed["phone"] else ""
+            notes = parsed["notes"] or None
+
+            session.add(BookingModel(
+                tenant_id=tenant.slug,
+                name=name,
+                phone=e164 or "",
+                email=email,
+                start=start_dt,
+                end=end_dt,
+                notes=notes,
+                source="google_calendar",
+                gcal_event_id=gcal_event_id,
+            ))
+            session.commit()
+
+            # Localize start time for SMS/email display
+            start_local_iso = (
+                start_dt.replace(tzinfo=timezone.utc)
+                .astimezone(tenant_tz)
+                .isoformat(timespec="seconds")
+            )
+            sms_payload = {
+                "name": name,
+                "phone": e164 or "",
+                "service": "appointment",
+                "starts_at_iso": start_local_iso,
+            }
+
+            if e164:
+                try:
+                    booking_confirmation_sms(tenant.slug, sms_payload)
+                except Exception as ex:
+                    print(f"[GCAL SYNC] Customer SMS error (event {gcal_event_id}): {ex!r}")
+
+            try:
+                booking_office_notify_sms(tenant.slug, sms_payload)
+            except Exception as ex:
+                print(f"[GCAL SYNC] Office SMS error (event {gcal_event_id}): {ex!r}")
+
+            if email:
+                try:
+                    send_booking_confirmation(tenant.slug, {
+                        "name": name,
+                        "email": email,
+                        "phone": e164 or "",
+                        "address": "",
+                        "service": "appointment",
+                        "starts_at_iso": start_local_iso,
+                        "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
+                    })
+                except Exception as ex:
+                    print(f"[GCAL SYNC] Email error (event {gcal_event_id}): {ex!r}")
+
+            result["imported"] += 1
+
+        except Exception as ex:
+            print(f"[GCAL SYNC] Error on event {event.get('id', '?')}: {ex!r}")
+            result["errors"].append(str(ex))
+            try:
+                session.rollback()
+            except Exception:
+                pass
+
+    # Persist new sync token and last-synced timestamp
+    new_token = resp.get("nextSyncToken")
+    if new_token:
+        tenant.gcal_sync_token = new_token
+    tenant.gcal_last_synced_at = datetime.utcnow()
+    session.add(tenant)
+    session.commit()
+
+    return result
