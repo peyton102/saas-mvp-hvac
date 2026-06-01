@@ -183,7 +183,8 @@ OPEN_PREFIXES = (
     "/webhooks/calendly",
     "/backup/",
     "/cron/",
-      ) + (("/debug/",) if IS_DEV else tuple())
+    "/oauth/google/",  # Google OAuth — callback arrives from Google with no auth headers
+) + (("/debug/",) if IS_DEV else tuple())
 
 
 

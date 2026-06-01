@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo  # 👈 add this
 from app import config, storage
 from app.db import get_session
 from app.deps import get_tenant_id
-from app.models import Booking as BookingModel, ReminderSent
+from app.models import Booking as BookingModel, ReminderSent, Tenant
 from app.routers.tenant import get_tenant_tz
 
 from app.services import google_calendar as gcal
@@ -74,39 +74,27 @@ def _gcal_create_event(
     email: Optional[str],
     phone: Optional[str],
     notes: Optional[str],
+    tenant_id: str,
+    session,
 ) -> str:
-    """
-    Call google_calendar.create_event(svc, calendar_id=..., summary=..., description=..., start_dt=..., end_dt=..., tz_str=...)
-    """
+    """Push a booking to the tenant's connected Google Calendar. Returns the event id or ''."""
+    tenant = session.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
+    if not tenant:
+        print(f"[GCAL] Tenant '{tenant_id}' not found – skipping calendar event.")
+        return ""
+
+    svc = gcal.get_service_for_tenant(tenant, session)
+    if svc is None:
+        print(f"[GCAL] Tenant '{tenant_id}' has no calendar connected – skipping.")
+        return ""
+
+    calendar_id = (tenant.gcal_calendar_id or "primary").strip()
+    tz_str = (tenant.timezone or getattr(config, "TZ", "America/New_York")).strip()
+
     summary = f"Estimate: {name}"
     description = (
         f"Name: {name}\nPhone: {phone or ''}\nEmail: {email or ''}\nNotes: {notes or ''}"
     ).strip()
-
-    # calendar + tz from env
-    try:
-        cal_ids = getattr(config, "GOOGLE_CALENDAR_IDS", "primary")
-        calendar_id = (cal_ids.split(",")[0] or "primary").strip()
-    except Exception:
-        calendar_id = "primary"
-    tz_str = getattr(config, "TZ", "America/New_York")
-
-    # --- acquire Google service (try common builder names) ---
-    svc = None
-    for attr in ("get_service", "get_calendar_service", "build_service", "service"):
-        obj = getattr(gcal, attr, None)
-        try:
-            if callable(obj):
-                svc = obj()
-            elif obj is not None:
-                svc = obj
-        except Exception as e:
-            print(f"[GCAL SERVICE {attr} ERROR] {e!r}")
-        if svc:
-            break
-    if svc is None:
-        print("[GCAL] No calendar service configured – skipping calendar event.")
-        return ""
 
     try:
         ev = gcal.create_event(
@@ -272,7 +260,8 @@ def book(
         raise HTTPException(status_code=409, detail="Time slot is not available")
 
     event_id = _gcal_create_event(
-        start_local, end_local, payload.name, payload.email, payload.phone, payload.notes
+        start_local, end_local, payload.name, payload.email, payload.phone, payload.notes,
+        tenant_id=tenant_id, session=session,
     )
 
     e164 = normalize_us_phone(payload.phone) if payload.phone else ""

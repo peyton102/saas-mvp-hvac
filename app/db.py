@@ -22,6 +22,10 @@ def run_startup_migrations() -> None:
         ("sp_tenant_twilio_number", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS twilio_number TEXT DEFAULT ''"),
         ("sp_lead_service_urgency", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS service_urgency TEXT"),
         ("sp_lead_notes", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS notes TEXT"),
+        ("sp_tenant_gcal_refresh_token", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_refresh_token TEXT"),
+        ("sp_tenant_gcal_access_token", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_access_token TEXT"),
+        ("sp_tenant_gcal_token_expires_at", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_token_expires_at BIGINT"),
+        ("sp_tenant_gcal_calendar_id", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_calendar_id TEXT DEFAULT 'primary'"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

@@ -9,6 +9,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from app import config
 
 # --- scopes & OAuth flow
 def _scopes() -> List[str]:
@@ -111,79 +112,6 @@ def create_event(
     svc,
     *,
     calendar_id: str,
-    tz_str: str,
-    start: datetime,
-    end: datetime,
-    summary: str,
-    description: str | None = None,
-    attendees: list[str] | None = None,
-):
-    body = {
-        "summary": summary,
-        "description": description or "",
-        "start": {"dateTime": start.isoformat(), "timeZone": tz_str},
-        "end": {"dateTime": end.isoformat(), "timeZone": tz_str},
-    }
-    if attendees:
-        body["attendees"] = [{"email": e} for e in attendees if e]
-    ev = svc.events().insert(calendarId=calendar_id, body=body).execute()
-    return {"id": ev.get("id"), "htmlLink": ev.get("htmlLink")}
-# --- create event helper (simple MVP)
-def create_event(
-    svc,
-    *,
-    calendar_id: str,
-    summary: str,
-    description: str | None,
-    start_dt,   # datetime (aware or naive)
-    end_dt,     # datetime (aware or naive)
-    tz_str: str,
-    attendee_email: str | None = None,
-    attendee_name: str | None = None,
-) -> dict:
-    """
-    Inserts a timed event into Google Calendar.
-    Returns {'id': ..., 'htmlLink': ..., 'start': ..., 'end': ...}
-    """
-    from datetime import timezone
-    from zoneinfo import ZoneInfo
-
-    z = ZoneInfo(tz_str)
-    # normalize to desired timezone and ISO8601
-    if start_dt.tzinfo is None:
-        start_dt = start_dt.replace(tzinfo=timezone.utc)
-    if end_dt.tzinfo is None:
-        end_dt = end_dt.replace(tzinfo=timezone.utc)
-    start_iso = start_dt.astimezone(z).isoformat()
-    end_iso = end_dt.astimezone(z).isoformat()
-
-    attendees = []
-    if attendee_email:
-        att = {"email": attendee_email}
-        if attendee_name:
-            att["displayName"] = attendee_name
-        attendees.append(att)
-
-    body = {
-        "summary": summary,
-        "description": description or "",
-        "start": {"dateTime": start_iso, "timeZone": tz_str},
-        "end": {"dateTime": end_iso, "timeZone": tz_str},
-        "attendees": attendees,
-    }
-
-    ev = svc.events().insert(calendarId=calendar_id, body=body).execute()
-    return {
-        "id": ev.get("id"),
-        "htmlLink": ev.get("htmlLink"),
-        "start": ev.get("start", {}).get("dateTime"),
-        "end": ev.get("end", {}).get("dateTime"),
-    }
-# --- create event (write) ---
-def create_event(
-    svc,
-    *,
-    calendar_id: str,
     summary: str,
     description: str,
     start_dt,
@@ -196,9 +124,6 @@ def create_event(
     Inserts a timed event. Datetimes can be naive or tz-aware; we coerce to tz_str.
     Returns the created event dict (includes 'id' and 'htmlLink').
     """
-    from zoneinfo import ZoneInfo
-    from datetime import timezone
-
     def _to_local_iso(dt):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -220,22 +145,14 @@ def create_event(
     if attendees:
         body["attendees"] = attendees
 
-    # You can add reminders policy later if desired (email/sms/popup)
-    # body["reminders"] = {"useDefault": True}
-
     ev = svc.events().insert(calendarId=calendar_id, body=body).execute()
     return ev
-# --- minimal service getter for routers/bookings.py ---
 
-from pathlib import Path
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from app import config
 
 def get_service():
     """
-    Return an authorized Google Calendar API service using the saved OAuth token.
-    Token path comes from GOOGLE_TOKEN_DIR (default data/google_tokens)/default.json.
+    Return an authorized Google Calendar API service using the saved OAuth token file.
+    Legacy single-user mode. Use get_service_for_tenant() for per-tenant calendar sync.
     """
     token_dir = getattr(config, "GOOGLE_TOKEN_DIR", "data/google_tokens")
     token_path = Path(token_dir) / "default.json"
@@ -245,5 +162,54 @@ def get_service():
     if not scopes:
         scopes = ["https://www.googleapis.com/auth/calendar"]
     creds = Credentials.from_authorized_user_file(str(token_path), scopes=scopes)
-    # cache_discovery=False avoids filesystem cache issues on Windows/Render
+    return build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+
+def get_service_for_tenant(tenant, session):
+    """
+    Return an authorized Google Calendar API service for the given Tenant row.
+    Reads tokens from the tenant DB row; auto-refreshes if expired and saves back.
+    Returns None if the tenant has not connected Google Calendar (no refresh token).
+    On refresh failure (revoked access), nulls out the tokens and returns None.
+    """
+    if not tenant.gcal_refresh_token:
+        return None
+
+    cid = os.getenv("GOOGLE_CLIENT_ID")
+    csec = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not (cid and csec):
+        print("[GCAL] Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET env vars")
+        return None
+
+    expiry_dt = None
+    if tenant.gcal_token_expires_at:
+        expiry_dt = datetime.fromtimestamp(tenant.gcal_token_expires_at, tz=timezone.utc)
+
+    creds = Credentials(
+        token=tenant.gcal_access_token,
+        refresh_token=tenant.gcal_refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=cid,
+        client_secret=csec,
+        scopes=_scopes(),
+        expiry=expiry_dt,
+    )
+
+    if not creds.valid:
+        try:
+            creds.refresh(Request())
+            tenant.gcal_access_token = creds.token
+            if creds.expiry:
+                tenant.gcal_token_expires_at = int(creds.expiry.timestamp())
+            session.add(tenant)
+            session.commit()
+        except Exception as e:
+            print(f"[GCAL] Token refresh failed for tenant '{getattr(tenant, 'slug', '?')}': {e!r}")
+            tenant.gcal_refresh_token = None
+            tenant.gcal_access_token = None
+            tenant.gcal_token_expires_at = None
+            session.add(tenant)
+            session.commit()
+            return None
+
     return build("calendar", "v3", credentials=creds, cache_discovery=False)

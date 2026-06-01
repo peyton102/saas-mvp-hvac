@@ -95,6 +95,12 @@ class Tenant(SQLModel, table=True):
     qbo_refresh_token: Optional[str] = None
     qbo_token_expires_at: Optional[int] = None
 
+    # --- Google Calendar fields ---
+    gcal_refresh_token: Optional[str] = None
+    gcal_access_token: Optional[str] = None
+    gcal_token_expires_at: Optional[int] = None  # Unix timestamp
+    gcal_calendar_id: Optional[str] = Field(default="primary", max_length=255)
+
     api_keys: List["ApiKey"] = Relationship(back_populates="tenant")
 
 
