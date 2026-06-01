@@ -183,7 +183,8 @@ def get_service_for_tenant(tenant, session):
 
     expiry_dt = None
     if tenant.gcal_token_expires_at:
-        expiry_dt = datetime.fromtimestamp(tenant.gcal_token_expires_at, tz=timezone.utc)
+        # google-auth uses naive UTC datetimes internally — must pass naive here
+        expiry_dt = datetime.utcfromtimestamp(tenant.gcal_token_expires_at)
 
     creds = Credentials(
         token=tenant.gcal_access_token,
@@ -200,7 +201,9 @@ def get_service_for_tenant(tenant, session):
             creds.refresh(Request())
             tenant.gcal_access_token = creds.token
             if creds.expiry:
-                tenant.gcal_token_expires_at = int(creds.expiry.timestamp())
+                # creds.expiry is naive UTC — use timegm to avoid server-tz assumptions
+                import calendar as _cal
+                tenant.gcal_token_expires_at = _cal.timegm(creds.expiry.timetuple())
             session.add(tenant)
             session.commit()
         except Exception as e:

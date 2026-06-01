@@ -1,4 +1,5 @@
 import base64
+import calendar
 import hashlib
 import json
 import os
@@ -108,7 +109,8 @@ def oauth_google_callback(
             tenant_row.gcal_refresh_token = creds.refresh_token
             tenant_row.gcal_access_token = creds.token
             if creds.expiry:
-                tenant_row.gcal_token_expires_at = int(creds.expiry.timestamp())
+                # creds.expiry is naive UTC — use timegm to convert without assuming server tz
+                tenant_row.gcal_token_expires_at = calendar.timegm(creds.expiry.timetuple())
             session.add(tenant_row)
             session.commit()
 
