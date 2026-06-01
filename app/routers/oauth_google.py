@@ -1,4 +1,8 @@
+import base64
+import hashlib
+import json
 import os
+import secrets
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,6 +16,39 @@ from app.services.google_calendar import build_flow, save_creds
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# PKCE helpers
+# ---------------------------------------------------------------------------
+
+def _generate_pkce() -> tuple[str, str]:
+    """Return (code_verifier, code_challenge) using S256 method."""
+    code_verifier = secrets.token_urlsafe(64)  # 86 URL-safe chars, within 43-128 spec
+    digest = hashlib.sha256(code_verifier.encode()).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    return code_verifier, code_challenge
+
+
+def _encode_state(tenant: str, code_verifier: str) -> str:
+    """Pack tenant slug + code_verifier into a base64url JSON state string."""
+    payload = json.dumps({"t": tenant, "cv": code_verifier})
+    return base64.urlsafe_b64encode(payload.encode()).decode()
+
+
+def _decode_state(state: str) -> tuple[str, str]:
+    """Unpack (tenant_slug, code_verifier) from state. Returns ('', '') on failure."""
+    try:
+        # Add padding in case it was stripped
+        padded = state + "=" * (-len(state) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+        return payload.get("t", ""), payload.get("cv", "")
+    except Exception:
+        return "", ""
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
 @router.get("/oauth/google/start")
 def oauth_google_start(
     tenant: str = Query(..., description="Tenant slug to connect Google Calendar for"),
@@ -22,12 +59,17 @@ def oauth_google_start(
     sign in to Google, and click Allow. Google then redirects to /oauth/google/callback.
     Example: /oauth/google/start?tenant=acme
     """
+    code_verifier, code_challenge = _generate_pkce()
+    state = _encode_state(tenant, code_verifier)
+
     flow = build_flow()
     url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
-        state=tenant,
+        state=state,
+        code_challenge=code_challenge,
+        code_challenge_method="S256",
     )
     return RedirectResponse(url)
 
@@ -39,17 +81,19 @@ def oauth_google_callback(
 ):
     """
     Google redirects here after the customer approves access.
-    Reads the tenant slug from the OAuth state param and saves tokens to that tenant's DB row.
+    Decodes tenant slug and code_verifier from state, exchanges the code for tokens,
+    and saves them to the tenant's DB row.
     """
     try:
         code = request.query_params.get("code")
         if not code:
             raise HTTPException(status_code=400, detail="Missing authorization code from Google")
 
-        tenant_slug = request.query_params.get("state", "").strip()
+        raw_state = request.query_params.get("state", "")
+        tenant_slug, code_verifier = _decode_state(raw_state)
 
         flow = build_flow()
-        flow.fetch_token(code=code)
+        flow.fetch_token(code=code, code_verifier=code_verifier or None)
         creds = flow.credentials
 
         if tenant_slug:
