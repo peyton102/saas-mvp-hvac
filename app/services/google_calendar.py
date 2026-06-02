@@ -257,37 +257,49 @@ def _parse_event_dt(dt_obj: dict) -> datetime | None:
 
 def _parse_event(event: dict) -> dict:
     """
-    Extract name, phone, email, notes from a manually-entered Google Calendar event.
-    Phone is found via regex anywhere in description or summary.
-    Name comes from first non-organizer attendee, or the event summary.
-    """
-    name = ""
-    email = ""
+    Extract name, phone, email, notes from a Google Calendar event with no format assumptions.
 
-    attendees = event.get("attendees") or []
+    Scans ALL text fields together (summary, description, location, attendee names/emails)
+    so phone numbers and names are found regardless of where the office manager puts them.
+
+    Name priority:  (1) first non-organizer attendee display name
+                    (2) event summary as-is (no prefix stripping)
+                    (3) "Unknown"
+    Phone:          regex scan of the full combined text blob
+    Email:          first non-organizer attendee email
+    Notes:          raw description stored verbatim
+    """
+    summary     = (event.get("summary")     or "").strip()
+    description = (event.get("description") or "").strip()
+    location    = (event.get("location")    or "").strip()
+
+    attendees      = event.get("attendees") or []
     organizer_email = (event.get("organizer") or {}).get("email", "")
 
     customer = next(
         (a for a in attendees if a.get("email") != organizer_email and not a.get("self")),
-        attendees[0] if attendees else None,
+        None,
     )
 
+    # Name
+    name = ""
     if customer:
         name = (customer.get("displayName") or "").strip()
-        if not name:
-            raw = customer.get("email", "")
-            name = raw.split("@")[0] if raw else ""
-        email = customer.get("email", "")
-
     if not name:
-        summary = (event.get("summary") or "").strip()
-        for prefix in ("Appointment with", "Appointment:", "Booking:", "Meeting:", "Estimate:", "Service:"):
-            if summary.lower().startswith(prefix.lower()):
-                summary = summary[len(prefix):].strip()
         name = summary or "Unknown"
 
-    description = (event.get("description") or "").strip()
-    phone = _parse_phone(description) or _parse_phone(event.get("summary") or "")
+    # Email
+    email = (customer.get("email") or "").strip() if customer else ""
+
+    # Phone — scan everything combined so it doesn't matter where the number lives
+    combined = " ".join(filter(None, [
+        summary,
+        description,
+        location,
+        *[a.get("displayName", "") for a in attendees],
+        *[a.get("email", "")        for a in attendees],
+    ]))
+    phone = _parse_phone(combined)
 
     return {"name": name, "email": email, "phone": phone, "notes": description}
 
@@ -412,6 +424,13 @@ def sync_new_bookings(tenant, session) -> dict:
                 end_dt = start_dt + timedelta(hours=1)
 
             parsed = _parse_event(event)
+
+            # Import criteria: must have a start time AND (phone OR non-empty title)
+            event_summary = (event.get("summary") or "").strip()
+            if not event_summary and not parsed["phone"]:
+                result["skipped"] += 1
+                continue
+
             name = parsed["name"]
             email = parsed["email"] or None
             e164 = normalize_us_phone(parsed["phone"]) if parsed["phone"] else ""

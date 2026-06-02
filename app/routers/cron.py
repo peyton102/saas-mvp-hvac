@@ -63,3 +63,48 @@ def cron_gcal_sync(
             print(f"[GCAL SYNC] Errors for '{tenant.slug}': {r['errors']}")
 
     return {"ok": True, "tenants_synced": len(results), "results": results}
+
+
+@router.post("/gcal-reset")
+def cron_gcal_reset(
+    tenant_slug: str = Query(..., description="Tenant slug to reset"),
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    session: Session = Depends(get_session),
+):
+    """
+    Reset Google Calendar sync state for one tenant:
+    - Clears gcal_sync_token and gcal_last_synced_at
+    - Deletes all bookings with source='google_calendar' for this tenant
+    Use before testing to start completely fresh. After this, re-run
+    /oauth/google/start?tenant=<slug> to establish a new sync baseline.
+    """
+    from app.models import Booking as BookingModel
+
+    _require_admin_key(x_admin_key)
+
+    tenant = session.exec(select(Tenant).where(Tenant.slug == tenant_slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant_slug}' not found")
+
+    tenant.gcal_sync_token = None
+    tenant.gcal_last_synced_at = None
+    session.add(tenant)
+
+    gcal_bookings = session.exec(
+        select(BookingModel)
+        .where(BookingModel.tenant_id == tenant_slug)
+        .where(BookingModel.source == "google_calendar")
+    ).all()
+    deleted = len(gcal_bookings)
+    for b in gcal_bookings:
+        session.delete(b)
+
+    session.commit()
+
+    return {
+        "ok": True,
+        "tenant": tenant_slug,
+        "sync_token_cleared": True,
+        "bookings_deleted": deleted,
+        "next_step": f"Re-run /oauth/google/start?tenant={tenant_slug} to set a new baseline.",
+    }
