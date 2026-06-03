@@ -60,7 +60,7 @@ const selectStyle = {
   fontSize: 14,
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.07)",
+  background: "#1f2937",
   color: "#e5e7eb",
   outline: "none",
   cursor: "pointer",

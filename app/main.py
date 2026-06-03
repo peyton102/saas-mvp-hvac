@@ -328,6 +328,7 @@ app.include_router(admin_invites_router)
 app.include_router(admin_tenant_mgmt_router)
 app.include_router(cron.router)
 app.include_router(reminders_router)
+app.include_router(tenant_router.router)
 # ---------- Startup ----------
 @app.on_event("startup")
 def on_startup():
