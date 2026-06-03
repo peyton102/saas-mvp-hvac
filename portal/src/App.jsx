@@ -9,6 +9,7 @@ import InviteSignupPage from "./InviteSignupPage.jsx";
 import ForgotPasswordPage from "./ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./ResetPasswordPage.jsx";
 import AdminInviteCard from "./components/AdminInviteCard.jsx";
+import BookingAvailabilityCard from "./components/BookingAvailabilityCard.jsx";
 import MissedCallsCard from "./components/MissedCallsCard.jsx";
 import AdminTab from "./components/AdminTab.jsx";
 
@@ -260,6 +261,11 @@ const headers = useMemo(() => {
               commonHeaders={headers}
               tenantSlug={TENANT_SLUG}
               onCompleteChange={setSettingsComplete}
+            />
+            <BookingAvailabilityCard
+              apiBase={BASE}
+              commonHeaders={headers}
+              tenantSlug={TENANT_SLUG}
             />
             <AdminInviteCard apiBase={BASE} commonHeaders={headers} />
           </>
