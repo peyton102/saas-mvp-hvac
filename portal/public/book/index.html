@@ -21,7 +21,6 @@
     .tab-panel { display:none; }
     .tab-panel.active { display:block; }
     select:disabled { background:#f3f4f6; color:#9ca3af; cursor:not-allowed; }
-    .day-warn { font-size:13px; color:#92400e; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:8px 10px; margin-top:6px; display:none; }
   </style>
 </head>
 <body>
@@ -49,8 +48,6 @@
           <input id="day" type="date"/>
         </div>
       </div>
-      <div id="dayWarn" class="day-warn"></div>
-
       <label>Available times</label>
       <select id="slot" disabled>
         <option value="">Loading availability…</option>
@@ -120,7 +117,6 @@
   const notesEl        = document.getElementById("notes");
   const okEl           = document.getElementById("ok");
   const errEl          = document.getElementById("err");
-  const dayWarnEl      = document.getElementById("dayWarn");
   const btn            = document.getElementById("bookBtn");
 
   const tabBookingBtn  = document.getElementById("tabBooking");
@@ -188,6 +184,18 @@
     }
   }
 
+  // ---- Find next available day (skips disallowed weekdays) ----
+  function getNextAvailableDay(fromDate, allowedJsDays) {
+    const d = new Date(fromDate + "T12:00:00");
+    for (let i = 0; i < 14; i++) {
+      d.setDate(d.getDate() + 1);
+      if (allowedJsDays.includes(d.getDay())) {
+        return d.toISOString().slice(0, 10);
+      }
+    }
+    return null;
+  }
+
   // ---- Render time slots for selected day ----
   function renderTimesForDay() {
     const dayValue = dayEl.value;  // "YYYY-MM-DD"
@@ -210,10 +218,14 @@
     const allowed = bookingConfig.booking_days.map(d => DAY_SLUG_TO_JS[d]);
 
     if (!allowed.includes(jsDay)) {
-      const dayName = new Date(dayValue + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" });
-      dayWarnEl.textContent = `We don't take bookings on ${dayName}s — please choose a different day.`;
-      dayWarnEl.style.display = "block";
-      slotEl.innerHTML = '<option value="">Not available</option>';
+      // Auto-advance to the next valid day
+      const next = getNextAvailableDay(dayValue, allowed);
+      if (next) {
+        dayEl.value = next;
+        renderTimesForDay();
+      } else {
+        slotEl.innerHTML = '<option value="">No available days in the next 2 weeks</option>';
+      }
       return;
     }
 

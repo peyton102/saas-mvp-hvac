@@ -271,12 +271,30 @@ def book(
     if conflict:
         raise HTTPException(status_code=409, detail="Time slot is not available")
 
+    e164 = normalize_us_phone(payload.phone) if payload.phone else ""
+
+    # DB write first — so no SMS goes out unless the booking actually saves
+    session.add(
+        BookingModel(
+            tenant_id=tenant_id,
+            name=payload.name or "",
+            phone=e164 or "",
+            email=(payload.email or None),
+            start=start_utc,
+            end=end_utc,
+            notes=(payload.notes or None),
+            source="api",
+        )
+    )
+    session.commit()
+
+    # GCal event (best-effort, after commit)
     event_id = _gcal_create_event(
         start_local, end_local, payload.name, payload.email, payload.phone, payload.notes,
         tenant_id=tenant_id, session=session,
     )
 
-    e164 = normalize_us_phone(payload.phone) if payload.phone else ""
+    # Customer confirmation SMS
     sms_ok = False
     if e164:
         try:
@@ -287,46 +305,10 @@ def book(
                     "phone": e164,
                     "service": "appointment",
                     "starts_at_iso": start_local.isoformat(),
-
                 },
             )
         except Exception as e:
             print(f"[BOOK SMS ERROR] {e}")
-
-    # CSV log (preserve existing behavior only when DB_FIRST is false)
-    try:
-        if (not getattr(config, "DB_FIRST", True)) and hasattr(storage, "save_booking"):
-            tz_str=str(start_local.tzinfo or ""),
-            storage.save_booking(
-                event_id=event_id,
-                invitee_name=payload.name,
-                invitee_email=(payload.email or ""),
-                invitee_phone=e164,
-                start_time=start_local.isoformat(),
-                end_time=end_local.isoformat(),
-                tz_str=tz_str,
-                notes=(payload.notes or ""),
-                sms_sent=bool(sms_ok),
-                source="api",
-            )
-    except Exception as e:
-        print(f"[BOOK CSV LOG ERROR] {e}")
-
-    # DB write (per-tenant)
-    session.add(
-        BookingModel(
-            tenant_id=tenant_id,
-            name=payload.name or "",
-            phone=e164 or "",
-            email=(payload.email or None),
-            start=start_utc,
-            end=end_utc,
-
-            notes=(payload.notes or None),
-            source="api",
-        )
-    )
-    session.commit()
 
     # Office SMS notify
     try:
