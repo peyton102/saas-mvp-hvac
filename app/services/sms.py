@@ -397,6 +397,37 @@ def _booking_link_for_slug(tenant_slug: str) -> str | None:
     return f"{base}?tenant={tenant_slug}"
 
 
+def lead_nudge_sms(tenant_id: str, payload: dict) -> bool:
+    """
+    Follow-up nudge sent to the customer when a lead hasn't been contacted
+    after X hours. Different tone from the auto-reply — warmer, not a repeat.
+
+    payload fields: name, phone
+    """
+    phone = (payload.get("phone") or "").strip()
+    if not phone:
+        return False
+
+    brand = get_brand_for_tenant(tenant_id)
+    business_name = brand.get("business_name") or tenant_id
+    business_phone = brand.get("business_phone") or None
+    booking_link = brand.get("booking_link") or _booking_link_for_slug(tenant_id)
+
+    name = (payload.get("name") or "").strip()
+    first = name.split(" ")[0] if name else "there"
+
+    body = (
+        f"Hi {first}, this is {business_name} following up — "
+        f"we haven't been able to reach you yet but we still want to help."
+    )
+    if business_phone:
+        body += f" Give us a call at {business_phone}"
+    if booking_link:
+        body += f" or book a time here: {booking_link}"
+
+    return send_sms(phone, body)
+
+
 def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:
     phone = (payload.get("phone") or "").strip()
     if not phone:

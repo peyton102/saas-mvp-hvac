@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Tenant
 from app.routers.reminders import send_reminders_all
+from app.services.lead_nudges import send_lead_nudges_all
 from app import config
 
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -20,6 +21,21 @@ def _require_admin_key(x_admin_key: str | None) -> None:
 def debug_admin_key():
     v = (getattr(config, "ADMIN_KEY", "") or "").strip()
     return {"has_admin_key": bool(v), "len": len(v)}
+@router.post("/lead-nudges/run")
+def cron_lead_nudges_run(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    hours_old: float = Query(2.0, ge=0.5, le=48.0, description="Nudge leads stale for this many hours"),
+    session: Session = Depends(get_session),
+):
+    """
+    Send follow-up nudge SMS to customers whose lead is still 'new' after
+    `hours_old` hours. Safe to run on a schedule — each lead is only ever
+    nudged once (nudge_sent_at stamp prevents repeats).
+    """
+    _require_admin_key(x_admin_key)
+    return send_lead_nudges_all(hours_old=hours_old, session=session)
+
+
 @router.post("/reminders/run")
 def cron_reminders_run(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
