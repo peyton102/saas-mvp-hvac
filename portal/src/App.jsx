@@ -28,6 +28,9 @@ const NGROK_HEADER = { "ngrok-skip-browser-warning": "true" };
 
 
 function PortalApp({ me }) {
+  const features = me?.features || [];
+  const has = (f) => features.includes(f);
+
   const [tab, setTab] = useState("home");
   const [apiHealth, setApiHealth] = useState("checking…");
   const [settingsComplete, setSettingsComplete] = useState(false);
@@ -192,10 +195,18 @@ const headers = useMemo(() => {
         }}
       >
         <TopTab label="Home" active={tab === "home"} onClick={() => setTab("home")} />
-        <TopTab label="Finance" active={tab === "finance"} onClick={() => setTab("finance")} />
-        <TopTab label="Leads" active={tab === "leads"} onClick={() => setTab("leads")} />
-        <TopTab label="Calls" active={tab === "calls"} onClick={() => setTab("calls")} />
-        <TopTab label="Bookings" active={tab === "bookings"} onClick={() => setTab("bookings")} />
+        {has("finance") && (
+          <TopTab label="Finance" active={tab === "finance"} onClick={() => setTab("finance")} />
+        )}
+        {has("leads") && (
+          <TopTab label="Leads" active={tab === "leads"} onClick={() => setTab("leads")} />
+        )}
+        {has("vapi") && (
+          <TopTab label="Calls" active={tab === "calls"} onClick={() => setTab("calls")} />
+        )}
+        {has("bookings") && (
+          <TopTab label="Bookings" active={tab === "bookings"} onClick={() => setTab("bookings")} />
+        )}
         <TopTab label="Settings" active={tab === "settings"} onClick={() => setTab("settings")} />
         {me?.is_admin && (
           <TopTab label="Admin" active={tab === "admin"} onClick={() => setTab("admin")} admin />

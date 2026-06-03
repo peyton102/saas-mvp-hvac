@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
@@ -35,9 +35,11 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
 def _ensure_columns(session: Session) -> None:
     """Add is_admin to tenant + invited_email/sent_at to invite_code if missing."""
     migrations = [
-        ("sp_ai_is_admin",  "ALTER TABLE tenant ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"),
-        ("sp_ai_inv_email", "ALTER TABLE invite_code ADD COLUMN invited_email TEXT"),
-        ("sp_ai_inv_sent",  "ALTER TABLE invite_code ADD COLUMN sent_at TEXT"),
+        ("sp_ai_is_admin",    "ALTER TABLE tenant ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"),
+        ("sp_ai_inv_email",   "ALTER TABLE invite_code ADD COLUMN invited_email TEXT"),
+        ("sp_ai_inv_sent",    "ALTER TABLE invite_code ADD COLUMN sent_at TEXT"),
+        ("sp_ai_inv_features","ALTER TABLE invite_code ADD COLUMN features TEXT"),
+        ("sp_ai_ten_features","ALTER TABLE tenant ADD COLUMN features TEXT"),
     ]
     for sp, ddl in migrations:
         try:
@@ -117,9 +119,13 @@ def _send_invite_email(to_email: str, code: str) -> None:
 
 # --------------- schemas ---------------
 
+ALL_FEATURES = ["vapi", "bookings", "leads", "finance", "reviews", "reminders"]
+
+
 class SendInviteRequest(BaseModel):
     email: EmailStr
     days_valid: int = 7
+    features: List[str] = []
 
 
 class InviteOut(BaseModel):
@@ -130,6 +136,7 @@ class InviteOut(BaseModel):
     used_at: Optional[str] = None
     sent_at: Optional[str] = None
     status: str
+    features: List[str] = []
 
 
 # --------------- routes ---------------
@@ -148,15 +155,20 @@ def send_invite(
     now_iso = datetime.now(timezone.utc).isoformat()
     expires_iso = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
 
+    # validate and deduplicate feature slugs
+    valid_features = [f for f in payload.features if f in ALL_FEATURES]
+    features_str = ",".join(valid_features) if valid_features else None
+
     session.exec(text("""
-        INSERT INTO invite_code (code, created_at, expires_at, used_at, note, invited_email, sent_at)
-        VALUES (:code, :created_at, :expires_at, NULL, NULL, :email, :sent_at)
+        INSERT INTO invite_code (code, created_at, expires_at, used_at, note, invited_email, sent_at, features)
+        VALUES (:code, :created_at, :expires_at, NULL, NULL, :email, :sent_at, :features)
     """).bindparams(
         code=code,
         created_at=now_iso,
         expires_at=expires_iso,
         email=str(payload.email),
         sent_at=now_iso,
+        features=features_str,
     ))
     session.commit()
 
@@ -170,6 +182,7 @@ def send_invite(
         used_at=None,
         sent_at=now_iso,
         status="pending",
+        features=valid_features,
     )
 
 
@@ -182,7 +195,7 @@ def list_invites(
     ensure_invite_table(session)
 
     rows = session.exec(text("""
-        SELECT code, invited_email, created_at, expires_at, used_at, sent_at
+        SELECT code, invited_email, created_at, expires_at, used_at, sent_at, features
         FROM invite_code
         ORDER BY created_at DESC
         LIMIT 200
@@ -191,6 +204,8 @@ def list_invites(
     result = []
     for r in rows:
         d = _row_to_dict(r)
+        features_raw = d.get("features") or ""
+        features_list = [f for f in features_raw.split(",") if f] if features_raw else []
         result.append(InviteOut(
             code=d.get("code", ""),
             invited_email=d.get("invited_email"),
@@ -199,6 +214,7 @@ def list_invites(
             used_at=d.get("used_at"),
             sent_at=d.get("sent_at"),
             status=_invite_status(d.get("used_at"), d.get("expires_at")),
+            features=features_list,
         ))
     return result
 

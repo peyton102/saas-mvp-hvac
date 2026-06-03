@@ -1,8 +1,9 @@
 # app/deps.py
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import Depends, Header, HTTPException, Request, Query
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app import config
@@ -88,4 +89,35 @@ async def get_tenant_id(
             return slug
 
     raise HTTPException(status_code=401, detail="Tenant not resolved")
+
+
+def require_feature(feature: str) -> Callable:
+    """
+    Dependency factory: ensures the resolved tenant has a specific feature enabled.
+
+    Usage in a router:
+        @router.get("/foo")
+        def foo(
+            tenant_id: str = Depends(get_tenant_id),
+            _: None = Depends(require_feature("vapi")),
+        ): ...
+    """
+    async def _check(
+        request: Request,
+        session: Session = Depends(get_session),
+        tenant_id: str = Depends(get_tenant_id),
+    ) -> None:
+        row = session.exec(
+            text("SELECT features FROM tenant WHERE slug = :slug LIMIT 1")
+            .bindparams(slug=tenant_id)
+        ).first()
+        features_raw = (row[0] if row else None) or ""
+        features = [f for f in features_raw.split(",") if f]
+        if feature not in features:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your plan does not include access to '{feature}'.",
+            )
+
+    return _check
 

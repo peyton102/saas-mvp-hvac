@@ -255,9 +255,19 @@ function RemoveTenantModal({ tenant, apiBase, commonHeaders, onClose, onDeleted 
 }
 
 export default function AdminTab({ apiBase, commonHeaders }) {
+  const ALL_FEATURES = [
+    { slug: "vapi",      label: "Calls / VAPI" },
+    { slug: "bookings",  label: "Bookings" },
+    { slug: "leads",     label: "Leads" },
+    { slug: "finance",   label: "Finance" },
+    { slug: "reviews",   label: "Reviews" },
+    { slug: "reminders", label: "Reminders" },
+  ];
+
   // ---- Invite state ----
   const [email, setEmail]         = useState("");
   const [daysValid, setDaysValid] = useState(7);
+  const [selectedFeatures, setSelectedFeatures] = useState([]);
   const [sending, setSending]     = useState(false);
   const [sendErr, setSendErr]     = useState("");
   const [sendOk, setSendOk]       = useState("");
@@ -324,12 +334,13 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       const res = await fetch(`${apiBase}/admin/invites/send`, {
         method: "POST",
         headers: commonHeaders,
-        body: JSON.stringify({ email: email.trim(), days_valid: daysValid }),
+        body: JSON.stringify({ email: email.trim(), days_valid: daysValid, features: selectedFeatures }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setSendOk(`Invite sent to ${email.trim()}`);
       setEmail("");
+      setSelectedFeatures([]);
       loadInvites();
     } catch (e) {
       setSendErr(String(e.message || e));
@@ -394,40 +405,100 @@ export default function AdminTab({ apiBase, commonHeaders }) {
         background: "rgba(255,255,255,0.03)",
       }}>
         <h3 style={{ margin: "0 0 14px", fontSize: 15, color: "#e5e7eb" }}>Send Invite</h3>
-        <form onSubmit={sendInvite} style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 260px" }}>
-            <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
-              Customer Email
-            </label>
-            <input
-              type="email"
-              placeholder="customer@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-              autoComplete="off"
-            />
+        <form onSubmit={sendInvite} style={{ display: "grid", gap: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 260px" }}>
+              <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
+                Customer Email
+              </label>
+              <input
+                type="email"
+                placeholder="customer@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={inputStyle}
+                autoComplete="off"
+              />
+            </div>
+            <div style={{ width: 110 }}>
+              <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
+                Expires (days)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={daysValid}
+                onChange={(e) => setDaysValid(Number(e.target.value))}
+                style={{ ...inputStyle, width: "100%" }}
+              />
+            </div>
           </div>
-          <div style={{ width: 110 }}>
-            <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
-              Expires (days)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={60}
-              value={daysValid}
-              onChange={(e) => setDaysValid(Number(e.target.value))}
-              style={{ ...inputStyle, width: "100%" }}
-            />
+
+          <div>
+            <div style={{ fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 8 }}>
+              Features included in this plan
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {ALL_FEATURES.map(({ slug, label }) => {
+                const checked = selectedFeatures.includes(slug);
+                return (
+                  <label
+                    key={slug}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: checked
+                        ? "1px solid rgba(249,115,22,0.6)"
+                        : "1px solid rgba(255,255,255,0.10)",
+                      background: checked
+                        ? "rgba(249,115,22,0.12)"
+                        : "rgba(255,255,255,0.04)",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      color: checked ? "#f97316" : "rgba(229,231,235,0.75)",
+                      fontWeight: checked ? 700 : 400,
+                      userSelect: "none",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setSelectedFeatures((prev) =>
+                          checked ? prev.filter((f) => f !== slug) : [...prev, slug]
+                        )
+                      }
+                      style={{ accentColor: "#f97316" }}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
           </div>
-          <button
-            type="submit"
-            disabled={sending}
-            style={{ ...btnOrange, opacity: sending ? 0.7 : 1 }}
-          >
-            {sending ? "Sending…" : "Send Invite"}
-          </button>
+
+          <div>
+            <button
+              type="submit"
+              disabled={sending || selectedFeatures.length === 0}
+              style={{
+                ...btnOrange,
+                opacity: sending || selectedFeatures.length === 0 ? 0.5 : 1,
+                cursor: sending || selectedFeatures.length === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              {sending ? "Sending…" : "Send Invite"}
+            </button>
+            {selectedFeatures.length === 0 && (
+              <span style={{ marginLeft: 12, fontSize: 12, color: "rgba(229,231,235,0.4)" }}>
+                Select at least one feature
+              </span>
+            )}
+          </div>
         </form>
 
         {sendErr && (
@@ -471,7 +542,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
             {/* Header row */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "1fr 90px 100px 100px auto",
+              gridTemplateColumns: "1fr 90px 100px 100px 1fr auto",
               gap: 12,
               padding: "6px 14px",
               fontSize: 11,
@@ -484,6 +555,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
               <span>Status</span>
               <span>Sent</span>
               <span>Expires</span>
+              <span>Features</span>
               <span></span>
             </div>
 
@@ -492,7 +564,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                 key={inv.code}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 90px 100px 100px auto",
+                  gridTemplateColumns: "1fr 90px 100px 100px 1fr auto",
                   gap: 12,
                   alignItems: "center",
                   padding: "12px 14px",
@@ -519,6 +591,24 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                 <span style={{ fontSize: 12, color: "rgba(229,231,235,0.5)" }}>
                   {fmtDate(inv.expires_at)}
                 </span>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {(inv.features || []).length === 0 ? (
+                    <span style={{ fontSize: 11, color: "rgba(229,231,235,0.25)" }}>—</span>
+                  ) : (inv.features || []).map((f) => (
+                    <span key={f} style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "2px 7px",
+                      borderRadius: 5,
+                      background: "rgba(249,115,22,0.12)",
+                      color: "#f97316",
+                      border: "1px solid rgba(249,115,22,0.3)",
+                    }}>
+                      {f}
+                    </span>
+                  ))}
+                </div>
 
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   {inv.status !== "signed_up" && (

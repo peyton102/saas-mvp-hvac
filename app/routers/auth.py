@@ -123,6 +123,7 @@ class MeResponse(BaseModel):
     tenant_slug: str
     needs_setup: bool
     is_admin: bool = False
+    features: list[str] = []
 
     business_name: Optional[str] = None
     booking_link: Optional[str] = None
@@ -180,7 +181,7 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
 
     code = (payload.invite_code or "").strip()
     row = session.exec(text("""
-        SELECT code, expires_at, used_at
+        SELECT code, expires_at, used_at, features
         FROM invite_code
         WHERE code = :code
         LIMIT 1
@@ -199,15 +200,20 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         if datetime.now(timezone.utc) > exp_dt:
             raise HTTPException(status_code=403, detail="Invite expired")
 
-    # Ensure password_hash column exists. Use a SAVEPOINT so a "column already
-    # exists" error doesn't abort the outer transaction (PostgreSQL DDL is
-    # transactional — a bare except:pass leaves the connection in a broken state).
-    try:
-        session.exec(text("SAVEPOINT sp_add_col"))
-        session.exec(text("ALTER TABLE tenant ADD COLUMN password_hash TEXT"))
-        session.exec(text("RELEASE SAVEPOINT sp_add_col"))
-    except Exception:
-        session.exec(text("ROLLBACK TO SAVEPOINT sp_add_col"))
+    # features granted by this invite (comma-separated string → keep as-is for tenant storage)
+    invite_features: str = (data.get("features") or "").strip()
+
+    # Ensure required columns exist on tenant table.
+    for sp, ddl in [
+        ("sp_add_col",      "ALTER TABLE tenant ADD COLUMN password_hash TEXT"),
+        ("sp_add_features", "ALTER TABLE tenant ADD COLUMN features TEXT"),
+    ]:
+        try:
+            session.exec(text(f"SAVEPOINT {sp}"))
+            session.exec(text(ddl))
+            session.exec(text(f"RELEASE SAVEPOINT {sp}"))
+        except Exception:
+            session.exec(text(f"ROLLBACK TO SAVEPOINT {sp}"))
 
     slug = slugify(payload.business_name)
     email_lower = payload.email.lower().strip()
@@ -237,8 +243,8 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
 
         password_hash = hash_password(payload.password)
         session.exec(
-            text("UPDATE tenant SET password_hash = :pwd WHERE id = :tid")
-            .bindparams(pwd=password_hash, tid=tenant.id)
+            text("UPDATE tenant SET password_hash = :pwd, features = :features WHERE id = :tid")
+            .bindparams(pwd=password_hash, features=invite_features or None, tid=tenant.id)
         )
 
         api_key_row = ApiKey(
@@ -403,13 +409,17 @@ def me(
     email = current_user["email"]
     tenant_slug = current_user["tenant_slug"]
 
-    # Ensure is_admin column exists (idempotent, SAVEPOINT-safe for PostgreSQL)
-    try:
-        session.exec(text("SAVEPOINT sp_me_is_admin"))
-        session.exec(text("ALTER TABLE tenant ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
-        session.exec(text("RELEASE SAVEPOINT sp_me_is_admin"))
-    except Exception:
-        session.exec(text("ROLLBACK TO SAVEPOINT sp_me_is_admin"))
+    # Ensure required columns exist (idempotent, SAVEPOINT-safe for PostgreSQL)
+    for sp, ddl in [
+        ("sp_me_is_admin",  "ALTER TABLE tenant ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"),
+        ("sp_me_features",  "ALTER TABLE tenant ADD COLUMN features TEXT"),
+    ]:
+        try:
+            session.exec(text(f"SAVEPOINT {sp}"))
+            session.exec(text(ddl))
+            session.exec(text(f"RELEASE SAVEPOINT {sp}"))
+        except Exception:
+            session.exec(text(f"ROLLBACK TO SAVEPOINT {sp}"))
 
     tenant = session.exec(
         select(Tenant).where(Tenant.slug == tenant_slug)
@@ -426,11 +436,19 @@ def me(
         and (tenant.office_email_to or "").strip()
     )
 
+    # features stored as comma-separated text on the tenant row
+    features_row = session.exec(
+        text("SELECT features FROM tenant WHERE slug = :slug LIMIT 1").bindparams(slug=tenant_slug)
+    ).first()
+    features_raw = (features_row[0] if features_row else None) or ""
+    features_list = [f for f in features_raw.split(",") if f] if features_raw else []
+
     return MeResponse(
         email=email,
         tenant_slug=tenant_slug,
         needs_setup=needs_setup,
         is_admin=bool(getattr(tenant, "is_admin", False)),
+        features=features_list,
         business_name=tenant.business_name,
         booking_link=tenant.booking_link,
         review_google_url=tenant.review_google_url,
