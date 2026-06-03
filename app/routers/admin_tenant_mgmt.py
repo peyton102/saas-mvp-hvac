@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import csv
 import io
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel import Session, select
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
 from app.db import get_session
 from app.models import Tenant, Lead, Booking, Review, ReminderSent, TenantSettings, ApiKey
@@ -16,6 +17,12 @@ from app.models_finance import FinanceRevenue, FinanceCost
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/admin/mgmt", tags=["admin-mgmt"])
+
+ALL_FEATURES = ["vapi", "bookings", "leads", "finance", "reviews", "reminders"]
+
+
+class UpdateFeaturesRequest(BaseModel):
+    features: List[str]
 
 
 def _require_admin(current_user: Dict[str, Any], session: Session) -> None:
@@ -31,20 +38,60 @@ def list_tenants(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     _require_admin(current_user, session)
-    tenants = session.exec(select(Tenant).order_by(Tenant.created_at.desc())).all()
-    return [
-        {
-            "id": t.id,
-            "slug": t.slug,
-            "name": t.name or "",
-            "business_name": t.business_name or "",
-            "email": t.email or "",
-            "is_active": t.is_active,
-            "is_admin": t.is_admin,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
-        }
-        for t in tenants
-    ]
+
+    # ensure features column exists
+    try:
+        session.exec(text("SAVEPOINT sp_mgmt_features"))
+        session.exec(text("ALTER TABLE tenant ADD COLUMN features TEXT"))
+        session.exec(text("RELEASE SAVEPOINT sp_mgmt_features"))
+    except Exception:
+        session.exec(text("ROLLBACK TO SAVEPOINT sp_mgmt_features"))
+
+    rows = session.exec(
+        text("SELECT id, slug, name, business_name, email, is_active, is_admin, created_at, features FROM tenant ORDER BY created_at DESC")
+    ).all()
+
+    result = []
+    for r in rows:
+        features_raw = (r.features if hasattr(r, "features") else None) or ""
+        features_list = [f for f in features_raw.split(",") if f] if features_raw else []
+        result.append({
+            "id": r.id,
+            "slug": r.slug,
+            "name": r.name or "",
+            "business_name": r.business_name or "",
+            "email": r.email or "",
+            "is_active": r.is_active,
+            "is_admin": r.is_admin,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "features": features_list,
+        })
+    return result
+
+
+@router.patch("/tenants/{slug}/features")
+def update_tenant_features(
+    slug: str,
+    payload: UpdateFeaturesRequest,
+    session: Session = Depends(get_session),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    _require_admin(current_user, session)
+
+    tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    valid = [f for f in payload.features if f in ALL_FEATURES]
+    features_str = ",".join(valid) if valid else None
+
+    session.exec(
+        text("UPDATE tenant SET features = :features WHERE slug = :slug")
+        .bindparams(features=features_str, slug=slug)
+    )
+    session.commit()
+
+    return {"ok": True, "slug": slug, "features": valid}
 
 
 @router.get("/tenants/{slug}/export")

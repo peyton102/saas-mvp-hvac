@@ -282,7 +282,8 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   const [tenants, setTenants]         = useState([]);
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [tenantsErr, setTenantsErr]   = useState("");
-  const [removingTenant, setRemovingTenant] = useState(null); // tenant object for modal
+  const [removingTenant, setRemovingTenant] = useState(null);
+  const [savingFeatures, setSavingFeatures] = useState({}); // slug → true while saving
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
@@ -363,6 +364,30 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       alert(`Resend failed: ${e.message}`);
     } finally {
       setResendingCode(null);
+    }
+  }
+
+  async function toggleFeature(tenantSlug, currentFeatures, feature) {
+    const updated = currentFeatures.includes(feature)
+      ? currentFeatures.filter((f) => f !== feature)
+      : [...currentFeatures, feature];
+
+    setSavingFeatures((prev) => ({ ...prev, [tenantSlug]: true }));
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenantSlug}/features`, {
+        method: "PATCH",
+        headers: commonHeaders,
+        body: JSON.stringify({ features: updated }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setTenants((prev) =>
+        prev.map((t) => t.slug === tenantSlug ? { ...t, features: data.features } : t)
+      );
+    } catch (e) {
+      alert(`Failed to update features: ${e.message}`);
+    } finally {
+      setSavingFeatures((prev) => ({ ...prev, [tenantSlug]: false }));
     }
   }
 
@@ -652,82 +677,93 @@ export default function AdminTab({ apiBase, commonHeaders }) {
         )}
 
         {tenants.length > 0 && (
-          <div style={{ display: "grid", gap: 6 }}>
-            {/* Header */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 120px 90px auto",
-              gap: 12,
-              padding: "6px 14px",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "rgba(229,231,235,0.4)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}>
-              <span>Business</span>
-              <span>Email</span>
-              <span>Slug</span>
-              <span>Joined</span>
-              <span></span>
-            </div>
-
-            {tenants.map((t) => (
-              <div
-                key={t.slug}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 120px 90px auto",
-                  gap: 12,
-                  alignItems: "center",
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 14, color: "#e5e7eb", fontWeight: 600 }}>
-                    {t.business_name || t.name || <span style={{ color: "rgba(229,231,235,0.35)" }}>—</span>}
-                  </div>
-                  {t.is_admin && (
-                    <span style={{
-                      fontSize: 10,
-                      fontWeight: 800,
-                      color: "#a78bfa",
-                      background: "rgba(167,139,250,0.12)",
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      display: "inline-block",
-                      marginTop: 2,
-                    }}>
-                      ADMIN
+          <div style={{ display: "grid", gap: 8 }}>
+            {tenants.map((t) => {
+              const isSaving = savingFeatures[t.slug];
+              const tenantFeatures = t.features || [];
+              return (
+                <div
+                  key={t.slug}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    background: "rgba(255,255,255,0.03)",
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  {/* Top row: name / email / slug / joined / remove */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 180px" }}>
+                      <div style={{ fontSize: 14, color: "#e5e7eb", fontWeight: 600 }}>
+                        {t.business_name || t.name || <span style={{ color: "rgba(229,231,235,0.35)" }}>—</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(229,231,235,0.4)", fontFamily: "monospace", marginTop: 2 }}>
+                        {t.slug}
+                        {t.is_admin && (
+                          <span style={{
+                            marginLeft: 6,
+                            fontSize: 9,
+                            fontWeight: 800,
+                            color: "#a78bfa",
+                            background: "rgba(167,139,250,0.12)",
+                            padding: "1px 5px",
+                            borderRadius: 4,
+                          }}>
+                            ADMIN
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span style={{ flex: "1 1 160px", fontSize: 12, color: "rgba(229,231,235,0.55)" }}>
+                      {t.email || "—"}
                     </span>
-                  )}
+                    <span style={{ fontSize: 11, color: "rgba(229,231,235,0.4)", whiteSpace: "nowrap" }}>
+                      Joined {fmtDate(t.created_at)}
+                    </span>
+                    <button onClick={() => setRemovingTenant(t)} style={btnRed}>
+                      Remove
+                    </button>
+                  </div>
+
+                  {/* Feature toggles */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", whiteSpace: "nowrap", minWidth: 56 }}>
+                      {isSaving ? "Saving…" : "Features:"}
+                    </span>
+                    {ALL_FEATURES.map(({ slug: feat, label }) => {
+                      const active = tenantFeatures.includes(feat);
+                      return (
+                        <button
+                          key={feat}
+                          disabled={isSaving}
+                          onClick={() => toggleFeature(t.slug, tenantFeatures, feat)}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 6,
+                            border: active
+                              ? "1px solid rgba(249,115,22,0.6)"
+                              : "1px solid rgba(255,255,255,0.10)",
+                            background: active
+                              ? "rgba(249,115,22,0.15)"
+                              : "rgba(255,255,255,0.04)",
+                            color: active ? "#f97316" : "rgba(229,231,235,0.35)",
+                            fontSize: 11,
+                            fontWeight: active ? 700 : 400,
+                            cursor: isSaving ? "not-allowed" : "pointer",
+                            opacity: isSaving ? 0.6 : 1,
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {active ? "✓ " : ""}{label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                <span style={{ fontSize: 13, color: "rgba(229,231,235,0.65)" }}>
-                  {t.email || <span style={{ color: "rgba(229,231,235,0.25)" }}>—</span>}
-                </span>
-
-                <span style={{ fontSize: 11, color: "rgba(229,231,235,0.4)", fontFamily: "monospace" }}>
-                  {t.slug}
-                </span>
-
-                <span style={{ fontSize: 12, color: "rgba(229,231,235,0.5)" }}>
-                  {fmtDate(t.created_at)}
-                </span>
-
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button
-                    onClick={() => setRemovingTenant(t)}
-                    style={btnRed}
-                  >
-                    Remove Tenant
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
