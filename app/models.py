@@ -87,6 +87,12 @@ class Tenant(SQLModel, table=True):
     # Vapi Phone Number ID — used to route end-of-call webhooks to this tenant
     twilio_number: Optional[str] = Field(default="", max_length=128)
 
+    # Booking availability
+    booking_days: Optional[str] = Field(default=None)   # comma-separated slugs e.g. "mon,tue,wed,thu,fri"
+    booking_start: Optional[str] = Field(default=None)  # "HH:MM"
+    booking_end: Optional[str] = Field(default=None)    # "HH:MM"
+    slot_minutes: Optional[int] = Field(default=None)   # 30 | 60 | 90 | 120
+
     # platform admin flag
     is_admin: bool = Field(default=False)
 

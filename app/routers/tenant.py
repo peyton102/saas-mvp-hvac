@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app import config
@@ -355,27 +354,18 @@ _DEFAULT_BOOKING_CONFIG = {
 
 def get_tenant_booking_config(tenant_id: str, db: Session) -> dict:
     """
-    Returns the booking config for a tenant.
-    Falls back to sensible defaults if not configured.
-    Columns are guaranteed to exist via run_startup_migrations in db.py.
+    Returns the booking config for a tenant, falling back to defaults if not configured.
     """
-    row = db.exec(
-        text("""
-            SELECT booking_days, booking_start, booking_end, slot_minutes
-            FROM tenant WHERE slug = :slug LIMIT 1
-        """).bindparams(slug=tenant_id)
-    ).first()
-
-    if not row or not row[0]:
+    t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
+    if not t or not t.booking_days:
         return dict(_DEFAULT_BOOKING_CONFIG)
 
-    days_raw = row[0] or ""
-    days = [d for d in days_raw.split(",") if d in VALID_DAYS] or _DEFAULT_BOOKING_CONFIG["booking_days"]
+    days = [d for d in t.booking_days.split(",") if d in VALID_DAYS] or _DEFAULT_BOOKING_CONFIG["booking_days"]
     return {
-        "booking_days": days,
-        "booking_start": row[1] or _DEFAULT_BOOKING_CONFIG["booking_start"],
-        "booking_end":   row[2] or _DEFAULT_BOOKING_CONFIG["booking_end"],
-        "slot_minutes":  int(row[3]) if row[3] else _DEFAULT_BOOKING_CONFIG["slot_minutes"],
+        "booking_days":  days,
+        "booking_start": t.booking_start or _DEFAULT_BOOKING_CONFIG["booking_start"],
+        "booking_end":   t.booking_end   or _DEFAULT_BOOKING_CONFIG["booking_end"],
+        "slot_minutes":  t.slot_minutes  or _DEFAULT_BOOKING_CONFIG["slot_minutes"],
     }
 
 
@@ -413,20 +403,15 @@ def save_booking_config(
     if body.slot_minutes not in (30, 60, 90, 120):
         raise HTTPException(status_code=422, detail="Slot length must be 30, 60, 90, or 120 minutes.")
 
-    db.exec(text("""
-        UPDATE tenant
-        SET booking_days  = :days,
-            booking_start = :start,
-            booking_end   = :end,
-            slot_minutes  = :slot
-        WHERE slug = :slug
-    """).bindparams(
-        days  = ",".join(valid_days),
-        start = body.booking_start,
-        end   = body.booking_end,
-        slot  = body.slot_minutes,
-        slug  = tenant_id,
-    ))
+    t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    t.booking_days  = ",".join(valid_days)
+    t.booking_start = body.booking_start
+    t.booking_end   = body.booking_end
+    t.slot_minutes  = body.slot_minutes
+    db.add(t)
     db.commit()
 
     return {
