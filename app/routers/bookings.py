@@ -192,7 +192,7 @@ def public_booking_config(
 
 @router.get("/public/availability", operation_id="public_bookings_availability_get")
 def public_availability(
-    days: int = Query(7, ge=1, le=14),
+    days: int = Query(14, ge=1, le=60),
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
