@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 
 const DAYS = [
   { slug: "mon", label: "Mon" },
@@ -85,11 +86,12 @@ export default function BookingAvailabilityCard({ apiBase, commonHeaders, tenant
   const [endTime,     setEndTime]     = useState("17:00");
   const [slotMinutes, setSlotMinutes] = useState(60);
 
-  const [loading, setLoading] = useState(true);
-  const [saving,  setSaving]  = useState(false);
-  const [msg,     setMsg]     = useState("");
-  const [err,     setErr]     = useState("");
-  const [copied,  setCopied]  = useState("");
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState(false);
+  const [msg,       setMsg]       = useState("");
+  const [err,       setErr]       = useState("");
+  const [copied,    setCopied]    = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
 
   // ---- Load current config ----
   useEffect(() => {
@@ -158,6 +160,13 @@ export default function BookingAvailabilityCard({ apiBase, commonHeaders, tenant
       setTimeout(() => setCopied(""), 2500);
     });
   }
+
+  useEffect(() => {
+    if (!bookingUrl) return;
+    QRCode.toDataURL(bookingUrl, { width: 280, margin: 2, color: { dark: "#111827", light: "#ffffff" } })
+      .then(setQrDataUrl)
+      .catch(() => {});
+  }, [bookingUrl]);
 
   const dayActive = (slug) => days.includes(slug);
 
@@ -284,16 +293,16 @@ export default function BookingAvailabilityCard({ apiBase, commonHeaders, tenant
         </button>
       </form>
 
-      {/* Embed code */}
+      {/* Share section */}
       {bookingUrl && (
-        <div style={{ marginTop: 24, display: "grid", gap: 14 }}>
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 18 }}>
-            <div style={{ ...sectionLabel, marginBottom: 14 }}>Booking Page for Your Website</div>
+        <div style={{ marginTop: 24 }}>
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 18, display: "grid", gap: 18 }}>
+            <div style={{ ...sectionLabel, marginBottom: 0 }}>Share Your Booking Page</div>
 
             {/* Direct link */}
-            <div style={{ marginBottom: 12 }}>
+            <div>
               <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", marginBottom: 6 }}>
-                Direct link — paste in emails, texts, Google Business profile
+                Direct link — paste into emails, texts, or your Google Business Profile
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{ ...codeBox, flex: 1 }}>{bookingUrl}</div>
@@ -315,12 +324,55 @@ export default function BookingAvailabilityCard({ apiBase, commonHeaders, tenant
                   {copied === "link" ? "Copied!" : "Copy"}
                 </button>
               </div>
+              <div style={{ fontSize: 11, color: "rgba(249,115,22,0.7)", marginTop: 6 }}>
+                Tip: Add this to your Google Business Profile under "Booking" → instantly get a Book Online button on Google Maps and Search.
+              </div>
             </div>
+
+            {/* QR Code */}
+            {qrDataUrl && (
+              <div>
+                <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", marginBottom: 10 }}>
+                  QR code — print on business cards, invoices, truck magnets, or door hangers
+                </div>
+                <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
+                  <img
+                    src={qrDataUrl}
+                    alt="Booking QR code"
+                    style={{ width: 110, height: 110, borderRadius: 10, border: "1px solid rgba(255,255,255,0.10)" }}
+                  />
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <a
+                      href={qrDataUrl}
+                      download="booking-qr.png"
+                      style={{
+                        display: "inline-block",
+                        padding: "10px 18px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(249,115,22,0.5)",
+                        background: "rgba(249,115,22,0.12)",
+                        color: "#f97316",
+                        fontSize: 13,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        textDecoration: "none",
+                        textAlign: "center",
+                      }}
+                    >
+                      Download PNG
+                    </a>
+                    <div style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", maxWidth: 200 }}>
+                      Customers scan with their phone camera — no app needed
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* iframe embed */}
             <div>
               <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", marginBottom: 6 }}>
-                Embed code — paste into your website (Wix, Squarespace, WordPress, etc.)
+                Website embed — paste into Wix, Squarespace, WordPress, etc.
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <div style={{ ...codeBox, flex: 1 }}>{iframeCode}</div>
