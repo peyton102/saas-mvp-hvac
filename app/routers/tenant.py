@@ -1,9 +1,11 @@
 # app/routers/tenant.py
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app import config
@@ -337,3 +339,118 @@ def debug_tenant_brand(
     db: Session = Depends(get_session),
 ):
     return brand(tenant_id, db=db)
+
+
+# ---------------- booking config ----------------
+
+VALID_DAYS = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"}
+_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+_DEFAULT_BOOKING_CONFIG = {
+    "booking_days": ["mon", "tue", "wed", "thu", "fri"],
+    "booking_start": "08:00",
+    "booking_end": "17:00",
+    "slot_minutes": 60,
+}
+
+
+def _ensure_booking_config_columns(db: Session) -> None:
+    for sp, ddl in [
+        ("sp_bk_days",  "ALTER TABLE tenant ADD COLUMN booking_days TEXT"),
+        ("sp_bk_start", "ALTER TABLE tenant ADD COLUMN booking_start TEXT"),
+        ("sp_bk_end",   "ALTER TABLE tenant ADD COLUMN booking_end TEXT"),
+        ("sp_bk_slot",  "ALTER TABLE tenant ADD COLUMN slot_minutes INTEGER"),
+    ]:
+        try:
+            db.exec(text(f"SAVEPOINT {sp}"))
+            db.exec(text(ddl))
+            db.exec(text(f"RELEASE SAVEPOINT {sp}"))
+        except Exception:
+            db.exec(text(f"ROLLBACK TO SAVEPOINT {sp}"))
+
+
+def get_tenant_booking_config(tenant_id: str, db: Session) -> dict:
+    """
+    Returns the booking config for a tenant.
+    Falls back to sensible defaults if not configured.
+    Usable from other routers (e.g. bookings.py).
+    """
+    _ensure_booking_config_columns(db)
+    row = db.exec(
+        text("""
+            SELECT booking_days, booking_start, booking_end, slot_minutes
+            FROM tenant WHERE slug = :slug LIMIT 1
+        """).bindparams(slug=tenant_id)
+    ).first()
+
+    if not row or not row[0]:
+        return dict(_DEFAULT_BOOKING_CONFIG)
+
+    days_raw = row[0] or ""
+    days = [d for d in days_raw.split(",") if d in VALID_DAYS] or _DEFAULT_BOOKING_CONFIG["booking_days"]
+    return {
+        "booking_days": days,
+        "booking_start": row[1] or _DEFAULT_BOOKING_CONFIG["booking_start"],
+        "booking_end":   row[2] or _DEFAULT_BOOKING_CONFIG["booking_end"],
+        "slot_minutes":  int(row[3]) if row[3] else _DEFAULT_BOOKING_CONFIG["slot_minutes"],
+    }
+
+
+class BookingConfigIn(BaseModel):
+    booking_days: List[str] = []
+    booking_start: str = "08:00"
+    booking_end: str = "17:00"
+    slot_minutes: int = 60
+
+
+@router.get("/booking-config")
+def get_booking_config(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_session),
+):
+    return get_tenant_booking_config(tenant_id, db)
+
+
+@router.post("/booking-config")
+def save_booking_config(
+    body: BookingConfigIn,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_session),
+):
+    _ensure_booking_config_columns(db)
+
+    valid_days = [d for d in body.booking_days if d in VALID_DAYS]
+    if not valid_days:
+        raise HTTPException(status_code=422, detail="Select at least one available day.")
+
+    if not _TIME_RE.match(body.booking_start) or not _TIME_RE.match(body.booking_end):
+        raise HTTPException(status_code=422, detail="Times must be in HH:MM format.")
+
+    if body.booking_start >= body.booking_end:
+        raise HTTPException(status_code=422, detail="End time must be after start time.")
+
+    if body.slot_minutes not in (30, 60, 90, 120):
+        raise HTTPException(status_code=422, detail="Slot length must be 30, 60, 90, or 120 minutes.")
+
+    db.exec(text("""
+        UPDATE tenant
+        SET booking_days  = :days,
+            booking_start = :start,
+            booking_end   = :end,
+            slot_minutes  = :slot
+        WHERE slug = :slug
+    """).bindparams(
+        days  = ",".join(valid_days),
+        start = body.booking_start,
+        end   = body.booking_end,
+        slot  = body.slot_minutes,
+        slug  = tenant_id,
+    ))
+    db.commit()
+
+    return {
+        "ok": True,
+        "booking_days":  valid_days,
+        "booking_start": body.booking_start,
+        "booking_end":   body.booking_end,
+        "slot_minutes":  body.slot_minutes,
+    }

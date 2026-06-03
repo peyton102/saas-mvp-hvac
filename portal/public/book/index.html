@@ -13,36 +13,21 @@
     button { width:100%; margin-top:14px; padding:12px; border:0; border-radius:8px; background:#2563eb; color:#fff; font-weight:600; cursor:pointer; }
     .hint { font-size:12px; color:#667; margin-top:8px; }
     .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    .ok { color:#065f46; background:#ecfdf5; padding:8px; border-radius:8px; margin-top:10px; display:none; }
-    .err{ color:#7f1d1d; background:#fef2f2; padding:8px; border-radius:8px; margin-top:10px; display:none; }
-
-    /* Tabs */
+    .ok  { color:#065f46; background:#ecfdf5; padding:8px; border-radius:8px; margin-top:10px; display:none; }
+    .err { color:#7f1d1d; background:#fef2f2; padding:8px; border-radius:8px; margin-top:10px; display:none; }
     .tabs { display:flex; gap:8px; margin-bottom:12px; }
-    .tab-btn {
-      flex:1;
-      padding:8px 10px;
-      border-radius:999px;
-      border:1px solid #d4d4d8;
-      background:#e4e4e7;
-      font-size:13px;
-      font-weight:500;
-      cursor:pointer;
-      color:#111111;
-    }
-    .tab-btn.active {
-      background:#2563eb;
-      border-color:#2563eb;
-      color:#ffffff;
-    }
+    .tab-btn { flex:1; padding:8px 10px; border-radius:999px; border:1px solid #d4d4d8; background:#e4e4e7; font-size:13px; font-weight:500; cursor:pointer; color:#111111; }
+    .tab-btn.active { background:#2563eb; border-color:#2563eb; color:#ffffff; }
     .tab-panel { display:none; }
     .tab-panel.active { display:block; }
+    select:disabled { background:#f3f4f6; color:#9ca3af; cursor:not-allowed; }
+    .day-warn { font-size:13px; color:#92400e; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:8px 10px; margin-top:6px; display:none; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Book an appointment</h1>
+    <h1 id="pageTitle">Book an appointment</h1>
 
-    <!-- Tabs -->
     <div class="tabs">
       <button id="tabBooking" class="tab-btn active" type="button">Book appointment</button>
       <button id="tabContact" class="tab-btn" type="button">Contact us</button>
@@ -64,10 +49,11 @@
           <input id="day" type="date"/>
         </div>
       </div>
+      <div id="dayWarn" class="day-warn"></div>
 
-      <label>Available times (local)</label>
-      <select id="slot">
-        <option value="">Select a day first</option>
+      <label>Available times</label>
+      <select id="slot" disabled>
+        <option value="">Loading availability…</option>
       </select>
 
       <label>Name</label>
@@ -110,239 +96,226 @@
       <button id="contactBtn">Send message</button>
     </div>
 
-    <div id="ok" class="ok">Booked! Check your email for a confirmation.</div>
+    <div id="ok"  class="ok"></div>
     <div id="err" class="err"></div>
-    <div class="hint">This page uses the tenant from ?tenant= and your live API.</div>
   </div>
 
 <script>
-  // --- tenant & API base ---
-  const qs = new URLSearchParams(location.search);
-  const tenant = qs.get("tenant") || "default";  // e.g. ?tenant=test-biz-99
+  const qs           = new URLSearchParams(location.search);
+  const tenant       = qs.get("tenant") || "default";
   const reschedToken = qs.get("reschedule");
   const isReschedule = !!reschedToken;
+  const API          = qs.get("api") || window.__API_BASE__ || "https://saas-mvp-hvac.onrender.com";
 
-  // API base: override via ?api=http://localhost:8000 for local dev,
-  // or set window.__API_BASE__ from a parent page/script.
-  const API = qs.get("api") || window.__API_BASE__ || "https://saas-mvp-hvac.onrender.com";
+  const HEADERS = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" };
 
+  // ---- DOM ----
+  const serviceEl      = document.getElementById("service");
+  const dayEl          = document.getElementById("day");
+  const slotEl         = document.getElementById("slot");
+  const nameEl         = document.getElementById("name");
+  const phoneEl        = document.getElementById("phone");
+  const emailEl        = document.getElementById("email");
+  const addressEl      = document.getElementById("address");
+  const notesEl        = document.getElementById("notes");
+  const okEl           = document.getElementById("ok");
+  const errEl          = document.getElementById("err");
+  const dayWarnEl      = document.getElementById("dayWarn");
+  const btn            = document.getElementById("bookBtn");
 
+  const tabBookingBtn  = document.getElementById("tabBooking");
+  const tabContactBtn  = document.getElementById("tabContact");
+  const bookingPanel   = document.getElementById("bookingPanel");
+  const contactPanel   = document.getElementById("contactPanel");
 
-  const COMMON_HEADERS = {
-    "Content-Type": "application/json",
-    "ngrok-skip-browser-warning": "true",
-  };
-
-  // ---- DOM refs ----
-  const serviceEl = document.getElementById('service');
-  const dayEl     = document.getElementById('day');
-  const slotEl    = document.getElementById('slot');
-  const nameEl    = document.getElementById('name');
-  const phoneEl   = document.getElementById('phone');
-  const emailEl   = document.getElementById('email');
-  const addressEl = document.getElementById('address');
-  const notesEl   = document.getElementById('notes');
-  const okEl      = document.getElementById('ok');
-  const errEl     = document.getElementById('err');
-  const btn       = document.getElementById('bookBtn');
-
-  const tabBookingBtn  = document.getElementById('tabBooking');
-  const tabContactBtn  = document.getElementById('tabContact');
-  const bookingPanel   = document.getElementById('bookingPanel');
-  const contactPanel   = document.getElementById('contactPanel');
-
-  const contactNameEl    = document.getElementById('contactName');
-  const contactPhoneEl   = document.getElementById('contactPhone');
-  const contactEmailEl   = document.getElementById('contactEmail');
-  const contactMessageEl = document.getElementById('contactMessage');
-  const contactBtn       = document.getElementById('contactBtn');
+  const contactNameEl    = document.getElementById("contactName");
+  const contactPhoneEl   = document.getElementById("contactPhone");
+  const contactEmailEl   = document.getElementById("contactEmail");
+  const contactMessageEl = document.getElementById("contactMessage");
+  const contactBtn       = document.getElementById("contactBtn");
 
   if (isReschedule) {
-    document.title = "Reschedule appointment";
+    document.getElementById("pageTitle").textContent = "Reschedule appointment";
     tabBookingBtn.textContent = "Reschedule";
     btn.textContent = "Reschedule";
   }
 
+  // ---- State ----
+  // bookingConfig: { booking_days, booking_start, booking_end, slot_minutes }
+  // availableSlots: array of ISO strings from /public/availability
+  let bookingConfig   = null;
+  let availableSlots  = [];  // pre-fetched, filtered by day on use
+
+  // day abbreviation → JS getDay() value (0=Sun … 6=Sat)
+  const DAY_SLUG_TO_JS = { sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6 };
+
+  // ---- Tabs ----
   function setActiveTab(which) {
-    if (which === 'booking') {
-      tabBookingBtn.classList.add('active');
-      tabContactBtn.classList.remove('active');
-      bookingPanel.classList.add('active');
-      contactPanel.classList.remove('active');
-    } else {
-      tabBookingBtn.classList.remove('active');
-      tabContactBtn.classList.add('active');
-      bookingPanel.classList.remove('active');
-      contactPanel.classList.add('active');
+    const booking = which === "booking";
+    tabBookingBtn.classList.toggle("active",  booking);
+    tabContactBtn.classList.toggle("active",  !booking);
+    bookingPanel.classList.toggle("active",   booking);
+    contactPanel.classList.toggle("active",   !booking);
+    okEl.style.display = errEl.style.display = "none";
+  }
+  tabBookingBtn.addEventListener("click", () => setActiveTab("booking"));
+  tabContactBtn.addEventListener("click", () => setActiveTab("contact"));
+
+  // ---- Load config + availability on page load ----
+  async function init() {
+    try {
+      const [cfgRes, avaRes] = await Promise.all([
+        fetch(`${API}/public/booking-config?tenant=${encodeURIComponent(tenant)}`, { headers: HEADERS }),
+        fetch(`${API}/public/availability?tenant=${encodeURIComponent(tenant)}&days=14`, { headers: HEADERS }),
+      ]);
+
+      bookingConfig = cfgRes.ok
+        ? await cfgRes.json()
+        : { booking_days: ["mon","tue","wed","thu","fri"], booking_start: "08:00", booking_end: "17:00", slot_minutes: 60 };
+
+      const avaData = avaRes.ok ? await avaRes.json() : {};
+      availableSlots = avaData.slots || [];
+
+      // Set date min to today
+      const today = new Date().toISOString().slice(0, 10);
+      dayEl.min = today;
+
+      slotEl.disabled = false;
+      slotEl.innerHTML = '<option value="">Pick a day first</option>';
+    } catch (e) {
+      console.error("[BOOKING INIT]", e);
+      slotEl.innerHTML = '<option value="">Could not load availability</option>';
     }
-    okEl.style.display = 'none';
-    errEl.style.display = 'none';
   }
 
-  tabBookingBtn.addEventListener('click', () => setActiveTab('booking'));
-  tabContactBtn.addEventListener('click', () => setActiveTab('contact'));
+  // ---- Render time slots for selected day ----
+  function renderTimesForDay() {
+    const dayValue = dayEl.value;  // "YYYY-MM-DD"
+    dayWarnEl.style.display = "none";
+    dayWarnEl.textContent = "";
+    okEl.style.display = errEl.style.display = "none";
 
-  function formatTimeLabel(dateString) {
-    const d = new Date(dateString);
-    return d.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  }
-
-  // ✅ SIMPLE AVAILABILITY: always 7–18, don’t try to hide already-booked slots (for now)
-  async function renderTimesForDay() {
-    const dayValue = dayEl.value; // "YYYY-MM-DD"
-    console.log("[renderTimesForDay] day =", dayValue);
     if (!dayValue) {
-      slotEl.innerHTML = '<option value="">Select a day first</option>';
+      slotEl.innerHTML = '<option value="">Pick a day first</option>';
       return;
     }
 
-    const startHour = 7;
-    const endHour   = 18;
-
-    const options = [];
-    for (let hour = startHour; hour <= endHour; hour++) {
-      const hh = hour.toString().padStart(2, "0");
-      const localWall = `${dayValue}T${hh}:00:00`;  // local wall time
-      const label = formatTimeLabel(localWall);
-      options.push(`<option value="${localWall}">${label}</option>`);
+    if (!bookingConfig) {
+      slotEl.innerHTML = '<option value="">Loading…</option>';
+      return;
     }
 
-    slotEl.innerHTML = options.join('');
+    // Check day of week — use noon to avoid DST edge cases
+    const jsDay  = new Date(dayValue + "T12:00:00").getDay();  // 0=Sun,1=Mon…
+    const allowed = bookingConfig.booking_days.map(d => DAY_SLUG_TO_JS[d]);
+
+    if (!allowed.includes(jsDay)) {
+      const dayName = new Date(dayValue + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" });
+      dayWarnEl.textContent = `We don't take bookings on ${dayName}s — please choose a different day.`;
+      dayWarnEl.style.display = "block";
+      slotEl.innerHTML = '<option value="">Not available</option>';
+      return;
+    }
+
+    // Filter pre-fetched slots to this date
+    const slotsForDay = availableSlots.filter(s => s.slice(0, 10) === dayValue);
+
+    if (slotsForDay.length === 0) {
+      slotEl.innerHTML = '<option value="">No times available — try another day</option>';
+      return;
+    }
+
+    slotEl.innerHTML = slotsForDay.map(iso => {
+      const label = new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      return `<option value="${iso}">${label}</option>`;
+    }).join("");
   }
 
-  dayEl.addEventListener('change', () => { renderTimesForDay(); });
-  serviceEl.addEventListener('change', () => {
-    if (dayEl.value) renderTimesForDay();
-  });
-function localWallToZonedIso(localWall) {
-  // localWall: "YYYY-MM-DDTHH:mm:ss" (NO offset)
-  const d = new Date(localWall);
+  dayEl.addEventListener("change", renderTimesForDay);
+  serviceEl.addEventListener("change", () => { if (dayEl.value) renderTimesForDay(); });
 
-  // getTimezoneOffset() = minutes behind UTC (NY winter = 300)
-  const offMin = d.getTimezoneOffset();
-  const sign = offMin > 0 ? "-" : "+";
-  const abs = Math.abs(offMin);
-  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
-  const mm = String(abs % 60).padStart(2, "0");
-
-  return `${localWall}${sign}${hh}:${mm}`;
-}
-
+  // ---- Helpers ----
+  function addMinutes(isoStr, minutes) {
+    return new Date(new Date(isoStr).getTime() + minutes * 60000).toISOString();
+  }
 
   // ---- BOOKING submit ----
-  btn.addEventListener('click', async () => {
-    okEl.style.display = 'none';
-    errEl.style.display = 'none';
+  btn.addEventListener("click", async () => {
+    okEl.style.display = errEl.style.display = "none";
 
-    const startsLocal = slotEl.value;    // "YYYY-MM-DDTHH:00:00"
-    const name        = nameEl.value.trim();
+    const startIso = slotEl.value;
+    const name     = nameEl.value.trim();
 
-    if (!startsLocal || (!isReschedule && !name)) {
-      errEl.textContent = !startsLocal ? 'Please select a time.' : 'Please enter your name.';
-      errEl.style.display = 'block';
+    if (!startIso) {
+      errEl.textContent = "Please select a time slot.";
+      errEl.style.display = "block";
+      return;
+    }
+    if (!isReschedule && !name) {
+      errEl.textContent = "Please enter your name.";
+      errEl.style.display = "block";
       return;
     }
 
-    const service = serviceEl.value || 'tuneup';
+    const slotMins = bookingConfig?.slot_minutes || 60;
+    const endIso   = addMinutes(startIso, slotMins);
+
+    const service = serviceEl.value || "service";
     const phone   = phoneEl.value.trim()   || null;
     const email   = emailEl.value.trim()   || null;
     const address = addressEl.value.trim() || null;
     const notes   = notesEl.value.trim()   || null;
 
-    const startsIso = localWallToZonedIso(startsLocal);
-
-
+    const fullNotes = [
+      service ? `Service: ${service}` : "",
+      address ? `Address: ${address}` : "",
+      notes   || "",
+    ].filter(Boolean).join("\n") || null;
 
     try {
-      // Compute end = start + 1 hour (local wall time)
-      const startDate = new Date(startsLocal);
-      const endDate   = new Date(startDate.getTime() + 60 * 60 * 1000);
-      const endLocalWall = [
-        endDate.getFullYear(),
-        String(endDate.getMonth() + 1).padStart(2, "0"),
-        String(endDate.getDate()).padStart(2, "0"),
-      ].join("-") + "T" + [
-        String(endDate.getHours()).padStart(2, "0"),
-        String(endDate.getMinutes()).padStart(2, "0"),
-        "00",
-      ].join(":");
-      const endIso = localWallToZonedIso(endLocalWall);
-
-      // Fold service + address into notes so nothing is lost
-      const fullNotes = [
-        service ? `Service: ${service}` : "",
-        address ? `Address: ${address}` : "",
-        notes   ? notes : "",
-      ].filter(Boolean).join("\n") || null;
-
       const endpoint = isReschedule
         ? `${API}/public/bookings/reschedule?tenant=${encodeURIComponent(tenant)}`
         : `${API}/book?tenant=${encodeURIComponent(tenant)}`;
 
       const payload = isReschedule
-        ? { token: reschedToken, starts_at_iso: startsIso }
-        : {
-            start: startsIso,
-            end:   endIso,
-            name,
-            phone,
-            email,
-            notes: fullNotes,
-          };
+        ? { token: reschedToken, starts_at_iso: startIso }
+        : { start: startIso, end: endIso, name, phone, email, notes: fullNotes };
 
-      console.log("[BOOK POST] endpoint =", endpoint, "payload =", payload);
-
-      const r = await fetch(endpoint, {
-        method: 'POST',
-        headers: COMMON_HEADERS,
-        body: JSON.stringify(payload)
-      });
-
+      const r = await fetch(endpoint, { method: "POST", headers: HEADERS, body: JSON.stringify(payload) });
       const respText = await r.text();
       let resp; try { resp = JSON.parse(respText); } catch { resp = respText; }
-      console.log("[BOOK RESP]", r.status, resp);
 
       if (!r.ok) {
-        const msg = (resp && resp.detail) ? resp.detail : (typeof resp === 'string' ? resp : `HTTP ${r.status}`);
+        const msg = resp?.detail || (typeof resp === "string" ? resp : `HTTP ${r.status}`);
+        // If conflict (409), refresh availability so the taken slot disappears
+        if (r.status === 409) {
+          const avaRes = await fetch(`${API}/public/availability?tenant=${encodeURIComponent(tenant)}&days=14`, { headers: HEADERS });
+          if (avaRes.ok) { const d = await avaRes.json(); availableSlots = d.slots || []; }
+          renderTimesForDay();
+        }
         throw new Error(msg);
       }
 
       okEl.textContent = isReschedule
-        ? "Rescheduled! Check your email for an update."
-        : "Booked! Check your email for a confirmation.";
-      okEl.style.display = 'block';
+        ? "Rescheduled! You'll receive a confirmation shortly."
+        : "Booked! You'll receive a confirmation text shortly.";
+      okEl.style.display = "block";
 
       if (!isReschedule) {
-        const savedDay = dayEl.value;  // keep same day
-
-        nameEl.value = '';
-        phoneEl.value = '';
-        emailEl.value = '';
-        addressEl.value = '';
-        notesEl.value = '';
-
-        if (savedDay) {
-          dayEl.value = savedDay;
-          await renderTimesForDay();
-        } else {
-          dayEl.value = '';
-          slotEl.innerHTML = '<option value="">Select a day first</option>';
-        }
+        // Remove the booked slot from local list so it disappears immediately
+        availableSlots = availableSlots.filter(s => s !== startIso);
+        nameEl.value = phoneEl.value = emailEl.value = addressEl.value = notesEl.value = "";
+        renderTimesForDay();
       }
     } catch (e) {
       errEl.textContent = `Booking failed: ${e.message || e}`;
-      errEl.style.display = 'block';
-      console.error(e);
+      errEl.style.display = "block";
     }
   });
 
-  // ---- CONTACT submit (copies working lead logic) ----
-  contactBtn.addEventListener('click', async () => {
-    okEl.style.display = 'none';
-    errEl.style.display = 'none';
+  // ---- CONTACT submit ----
+  contactBtn.addEventListener("click", async () => {
+    okEl.style.display = errEl.style.display = "none";
 
     const name    = contactNameEl.value.trim();
     const phone   = contactPhoneEl.value.trim();
@@ -350,53 +323,33 @@ function localWallToZonedIso(localWall) {
     const message = contactMessageEl.value.trim();
 
     if (!phone) {
-      errEl.textContent = 'Please enter your phone number.';
-      errEl.style.display = 'block';
+      errEl.textContent = "Please enter your phone number.";
+      errEl.style.display = "block";
       return;
     }
 
     try {
-      // Use the same pattern as your working lead form: /lead?tenant_key=...
-      const url = `${API}/lead?tenant_key=${encodeURIComponent(tenant)}`;
-
-      const payload = {
-        name: name || null,
-        phone,
-        email: email || null,
-        message: message || null
-      };
-
-      console.log("[LEAD POST] url =", url, "payload =", payload);
-
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: COMMON_HEADERS,
-        body: JSON.stringify(payload),
+      const r = await fetch(`${API}/lead?tenant_key=${encodeURIComponent(tenant)}`, {
+        method: "POST",
+        headers: HEADERS,
+        body: JSON.stringify({ name: name || null, phone, email: email || null, message: message || null }),
       });
-
       const respText = await r.text();
       let resp; try { resp = JSON.parse(respText); } catch { resp = respText; }
-      console.log("[LEAD RESP]", r.status, resp);
 
-      if (!r.ok) {
-        const msg = (resp && resp.detail) ? resp.detail : (typeof resp === 'string' ? resp : `HTTP ${r.status}`);
-        throw new Error(msg);
-      }
+      if (!r.ok) throw new Error(resp?.detail || `HTTP ${r.status}`);
 
-      okEl.textContent = "Thanks, we’ve got your message. We’ll be in touch soon.";
-      okEl.style.display = 'block';
-      errEl.style.display = 'none';
-
-      contactNameEl.value = '';
-      contactPhoneEl.value = '';
-      contactEmailEl.value = '';
-      contactMessageEl.value = '';
+      okEl.textContent = "Thanks, we've got your message. We'll be in touch soon.";
+      okEl.style.display = "block";
+      contactNameEl.value = contactPhoneEl.value = contactEmailEl.value = contactMessageEl.value = "";
     } catch (e) {
       errEl.textContent = `Message failed: ${e.message || e}`;
-      errEl.style.display = 'block';
-      console.error(e);
+      errEl.style.display = "block";
     }
   });
+
+  // ---- Boot ----
+  init();
 </script>
 </body>
 </html>

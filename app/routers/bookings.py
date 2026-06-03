@@ -13,7 +13,7 @@ from app import config, storage
 from app.db import get_session
 from app.deps import get_tenant_id
 from app.models import Booking as BookingModel, ReminderSent, Tenant
-from app.routers.tenant import get_tenant_tz
+from app.routers.tenant import get_tenant_tz, get_tenant_booking_config
 
 from app.services import google_calendar as gcal
 from app.services.sms import (
@@ -117,36 +117,37 @@ def _gcal_create_event(
     return ""
 
 
+# day-name → Python weekday (Monday=0)
+_DAY_TO_WEEKDAY = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
 # ===== Availability =====
 @router.get("/availability", operation_id="bookings_availability_get")
 def availability(
-    days: int = Query(7, ge=1, le=14),
+    days: int = Query(14, ge=1, le=28),
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Return open slots based on BUSINESS_HOURS & SLOT_MINUTES, filtered by existing DB bookings."""
-    try:
-        bh = getattr(config, "BUSINESS_HOURS", "09:00-17:00")
-        slot_min = int(getattr(config, "SLOT_MINUTES", 60))
-        buf_min = int(getattr(config, "SLOT_BUFFER_MINUTES", 0))
-    except Exception:
-        bh, slot_min, buf_min = "09:00-17:00", 60, 0
+    """Return open slots based on per-tenant booking config, filtered by existing DB bookings."""
+    cfg = get_tenant_booking_config(tenant_id, session)
+    slot_min = cfg["slot_minutes"]
 
     try:
-        start_str, end_str = bh.split("-")
-        start_t = time.fromisoformat(start_str)
-        end_t = time.fromisoformat(end_str)
+        start_t = time.fromisoformat(cfg["booking_start"])
+        end_t   = time.fromisoformat(cfg["booking_end"])
     except Exception:
-        start_t = time(9, 0)
-        end_t = time(17, 0)
+        start_t, end_t = time(8, 0), time(17, 0)
+
+    allowed_weekdays = {
+        _DAY_TO_WEEKDAY[d] for d in cfg["booking_days"] if d in _DAY_TO_WEEKDAY
+    }
 
     tenant_tz = get_tenant_tz(tenant_id, session)
-    now_tz = datetime.now(tenant_tz)
+    now_tz  = datetime.now(tenant_tz)
     now_utc = datetime.now(timezone.utc)
     window_end = now_utc + timedelta(days=days)
 
-    # Bookings are stored as UTC-naive — strip tz for comparison
-    now_naive = now_utc.replace(tzinfo=None)
+    now_naive        = now_utc.replace(tzinfo=None)
     window_end_naive = window_end.replace(tzinfo=None)
     existing = session.exec(
         select(BookingModel)
@@ -156,16 +157,18 @@ def availability(
     ).all()
 
     out: List[str] = []
-    step = timedelta(minutes=slot_min + buf_min)
+    step = timedelta(minutes=slot_min)
 
     for d in range(days):
         day = (now_tz + timedelta(days=d)).date()
-        cursor = datetime.combine(day, start_t, tzinfo=tenant_tz)
-        end_of_day = datetime.combine(day, end_t, tzinfo=tenant_tz)
-        while cursor + timedelta(minutes=slot_min) <= end_of_day:
+        if day.weekday() not in allowed_weekdays:
+            continue
+        cursor      = datetime.combine(day, start_t, tzinfo=tenant_tz)
+        end_of_day  = datetime.combine(day, end_t,   tzinfo=tenant_tz)
+        while cursor + step <= end_of_day:
             slot_start = cursor
-            slot_end = cursor + timedelta(minutes=slot_min)
-            if slot_start < now_tz:
+            slot_end   = cursor + step
+            if slot_start <= now_tz:
                 cursor += step
                 continue
             s = slot_start.astimezone(timezone.utc).replace(tzinfo=None)
@@ -176,6 +179,15 @@ def availability(
             cursor += step
 
     return {"slots": out}
+
+
+@router.get("/public/booking-config")
+def public_booking_config(
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Public endpoint — returns the tenant's booking config for the booking form."""
+    return get_tenant_booking_config(tenant_id, session)
 
 
 @router.get("/public/availability", operation_id="public_bookings_availability_get")
