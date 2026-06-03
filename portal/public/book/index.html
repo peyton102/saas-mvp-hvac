@@ -5,96 +5,272 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Book an appointment</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 16px; background:#f7f7f8; }
-    .card { max-width: 520px; margin: 0 auto; background:#fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 16px; }
-    h1 { font-size: 20px; margin: 0 0 10px; }
-    label { display:block; font-size: 12px; color:#333; margin:10px 0 6px; }
-    input, textarea, select { width:100%; box-sizing:border-box; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px; }
-    button { width:100%; margin-top:14px; padding:12px; border:0; border-radius:8px; background:#2563eb; color:#fff; font-weight:600; cursor:pointer; }
-    .hint { font-size:12px; color:#667; margin-top:8px; }
-    .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    .ok  { color:#065f46; background:#ecfdf5; padding:8px; border-radius:8px; margin-top:10px; display:none; }
-    .err { color:#7f1d1d; background:#fef2f2; padding:8px; border-radius:8px; margin-top:10px; display:none; }
-    .tabs { display:flex; gap:8px; margin-bottom:12px; }
-    .tab-btn { flex:1; padding:8px 10px; border-radius:999px; border:1px solid #d4d4d8; background:#e4e4e7; font-size:13px; font-weight:500; cursor:pointer; color:#111111; }
-    .tab-btn.active { background:#2563eb; border-color:#2563eb; color:#ffffff; }
-    .tab-panel { display:none; }
-    .tab-panel.active { display:block; }
-    select:disabled { background:#f3f4f6; color:#9ca3af; cursor:not-allowed; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --brand:       #f97316;
+      --brand-dark:  #ea6c0a;
+      --text:        #111827;
+      --muted:       #6b7280;
+      --light:       #9ca3af;
+      --border:      #e5e7eb;
+      --bg:          #f3f4f6;
+      --card:        #ffffff;
+      --ok-bg:       #f0fdf4;
+      --ok-text:     #166534;
+      --ok-border:   #bbf7d0;
+      --err-bg:      #fef2f2;
+      --err-text:    #991b1b;
+      --err-border:  #fecaca;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 32px 16px 56px;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .card {
+      max-width: 540px;
+      margin: 0 auto;
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.07);
+      overflow: hidden;
+    }
+
+    /* Header stripe */
+    .card-header {
+      padding: 28px 28px 24px;
+      border-bottom: 1.5px solid var(--border);
+    }
+
+    .card-header h1 {
+      font-size: 22px;
+      font-weight: 800;
+      margin: 0 0 4px;
+      color: var(--text);
+    }
+
+    .card-header .subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .card-body { padding: 24px 28px 32px; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1.5px solid var(--border);
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 11px 10px;
+      border: none;
+      border-bottom: 2.5px solid transparent;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -1.5px;
+    }
+
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Labels */
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 18px 0 6px;
+    }
+
+    /* Inputs */
+    input, textarea, select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      background: var(--card);
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(249,115,22,.12);
+    }
+
+    input::placeholder, textarea::placeholder { color: var(--light); }
+
+    textarea { resize: vertical; min-height: 84px; }
+
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+
+    select:disabled {
+      background-color: #f9fafb;
+      color: var(--light);
+      cursor: not-allowed;
+    }
+
+    /* Grid row */
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Divider */
+    .divider { border: none; border-top: 1.5px solid var(--border); margin: 24px 0 0; }
+
+    /* Primary button */
+    .btn-primary {
+      display: block;
+      width: 100%;
+      margin-top: 22px;
+      padding: 13px;
+      border: none;
+      border-radius: 10px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      cursor: pointer;
+      transition: background .15s, transform .08s;
+    }
+
+    .btn-primary:hover  { background: var(--brand-dark); }
+    .btn-primary:active { transform: scale(.99); }
+    .btn-primary:disabled { background: #fdba8c; cursor: not-allowed; transform: none; }
+
+    /* Status messages */
+    .msg {
+      display: none;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 18px;
+      line-height: 1.5;
+    }
+
+    .ok  { background: var(--ok-bg);  color: var(--ok-text);  border: 1px solid var(--ok-border); }
+    .err { background: var(--err-bg); color: var(--err-text); border: 1px solid var(--err-border); }
+
+    @media (max-width: 480px) {
+      body { padding: 16px 12px 48px; }
+      .card-header, .card-body { padding-left: 20px; padding-right: 20px; }
+      .row { grid-template-columns: 1fr; gap: 0; }
+    }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1 id="pageTitle">Book an appointment</h1>
-
-    <div class="tabs">
-      <button id="tabBooking" class="tab-btn active" type="button">Book appointment</button>
-      <button id="tabContact" class="tab-btn" type="button">Contact us</button>
+    <div class="card-header">
+      <h1 id="pageTitle">Book an appointment</h1>
+      <p class="subtitle">Pick a time that works for you — we'll send a confirmation by text.</p>
     </div>
 
-    <!-- BOOKING PANEL -->
-    <div id="bookingPanel" class="tab-panel active">
-      <div class="row">
-        <div>
-          <label>Service</label>
-          <select id="service">
-            <option value="repair">Repair</option>
-            <option value="service">Service</option>
-            <option value="tuneup">Tune-up</option>
-          </select>
-        </div>
-        <div>
-          <label>Day</label>
-          <input id="day" type="date"/>
-        </div>
-      </div>
-      <label>Available times</label>
-      <select id="slot" disabled>
-        <option value="">Loading availability…</option>
-      </select>
-
-      <label>Name</label>
-      <input id="name" placeholder="Full name"/>
-
-      <div class="row">
-        <div>
-          <label>Phone</label>
-          <input id="phone" placeholder="+1XXXXXXXXXX"/>
-        </div>
-        <div>
-          <label>Email</label>
-          <input id="email" type="email" placeholder="you@example.com"/>
-        </div>
+    <div class="card-body">
+      <div class="tabs">
+        <button id="tabBooking" class="tab-btn active" type="button">Book appointment</button>
+        <button id="tabContact" class="tab-btn" type="button">Contact us</button>
       </div>
 
-      <label>Address</label>
-      <input id="address" placeholder="123 Main St"/>
+      <!-- BOOKING PANEL -->
+      <div id="bookingPanel" class="tab-panel active">
+        <div class="row">
+          <div>
+            <label>Service type</label>
+            <select id="service">
+              <option value="repair">Repair</option>
+              <option value="service">Maintenance / Service</option>
+              <option value="tuneup">Tune-up</option>
+              <option value="install">Installation</option>
+              <option value="estimate">Free estimate</option>
+            </select>
+          </div>
+          <div>
+            <label>Date</label>
+            <input id="day" type="date"/>
+          </div>
+        </div>
 
-      <label>Notes</label>
-      <textarea id="notes" rows="3" placeholder="Gate code, pets, etc."></textarea>
+        <label>Available time slots</label>
+        <select id="slot" disabled>
+          <option value="">Loading availability…</option>
+        </select>
 
-      <button id="bookBtn">Book</button>
+        <hr class="divider"/>
+
+        <label>Your name</label>
+        <input id="name" placeholder="Full name"/>
+
+        <div class="row">
+          <div>
+            <label>Phone</label>
+            <input id="phone" type="tel" placeholder="+1 (555) 000-0000"/>
+          </div>
+          <div>
+            <label>Email</label>
+            <input id="email" type="email" placeholder="you@example.com"/>
+          </div>
+        </div>
+
+        <label>Service address</label>
+        <input id="address" placeholder="123 Main St, City, ST"/>
+
+        <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--light)">(optional)</span></label>
+        <textarea id="notes" rows="3" placeholder="Gate code, pets, system info, etc."></textarea>
+
+        <button id="bookBtn" class="btn-primary">Request appointment</button>
+      </div>
+
+      <!-- CONTACT PANEL -->
+      <div id="contactPanel" class="tab-panel">
+        <label>Your name</label>
+        <input id="contactName" placeholder="Full name"/>
+
+        <label>Phone <span style="color:var(--brand)">*</span></label>
+        <input id="contactPhone" type="tel" placeholder="+1 (555) 000-0000"/>
+
+        <label>Email</label>
+        <input id="contactEmail" type="email" placeholder="you@example.com"/>
+
+        <label>How can we help?</label>
+        <textarea id="contactMessage" rows="4" placeholder="Describe the issue or question…"></textarea>
+
+        <button id="contactBtn" class="btn-primary">Send message</button>
+      </div>
+
+      <div id="ok"  class="msg ok"></div>
+      <div id="err" class="msg err"></div>
     </div>
-
-    <!-- CONTACT PANEL -->
-    <div id="contactPanel" class="tab-panel">
-      <label>Name</label>
-      <input id="contactName" placeholder="Full name"/>
-
-      <label>Phone *</label>
-      <input id="contactPhone" placeholder="+1XXXXXXXXXX"/>
-
-      <label>Email</label>
-      <input id="contactEmail" type="email" placeholder="you@example.com"/>
-
-      <label>How can we help?</label>
-      <textarea id="contactMessage" rows="3" placeholder="Describe the issue or question"></textarea>
-
-      <button id="contactBtn">Send message</button>
-    </div>
-
-    <div id="ok"  class="ok"></div>
-    <div id="err" class="err"></div>
   </div>
 
 <script>
@@ -199,8 +375,6 @@
   // ---- Render time slots for selected day ----
   function renderTimesForDay() {
     const dayValue = dayEl.value;  // "YYYY-MM-DD"
-    dayWarnEl.style.display = "none";
-    dayWarnEl.textContent = "";
     okEl.style.display = errEl.style.display = "none";
 
     if (!dayValue) {
@@ -284,6 +458,8 @@
       notes   || "",
     ].filter(Boolean).join("\n") || null;
 
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
     try {
       const endpoint = isReschedule
         ? `${API}/public/bookings/reschedule?tenant=${encodeURIComponent(tenant)}`
@@ -299,29 +475,34 @@
 
       if (!r.ok) {
         const msg = resp?.detail || (typeof resp === "string" ? resp : `HTTP ${r.status}`);
-        // If conflict (409), refresh availability so the taken slot disappears
         if (r.status === 409) {
           const avaRes = await fetch(`${API}/public/availability?tenant=${encodeURIComponent(tenant)}&days=14`, { headers: HEADERS });
           if (avaRes.ok) { const d = await avaRes.json(); availableSlots = d.slots || []; }
           renderTimesForDay();
+          errEl.textContent = "That time was just taken — please pick another slot.";
+        } else {
+          errEl.textContent = msg || "Something went wrong. Please try again.";
         }
-        throw new Error(msg);
+        errEl.style.display = "block";
+        return;
       }
 
       okEl.textContent = isReschedule
         ? "Rescheduled! You'll receive a confirmation shortly."
-        : "Booked! You'll receive a confirmation text shortly.";
+        : "You're booked! We'll send a confirmation text shortly.";
       okEl.style.display = "block";
 
       if (!isReschedule) {
-        // Remove the booked slot from local list so it disappears immediately
         availableSlots = availableSlots.filter(s => s !== startIso);
         nameEl.value = phoneEl.value = emailEl.value = addressEl.value = notesEl.value = "";
         renderTimesForDay();
       }
     } catch (e) {
-      errEl.textContent = `Booking failed: ${e.message || e}`;
+      errEl.textContent = "Something went wrong. Please try again.";
       errEl.style.display = "block";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = isReschedule ? "Reschedule" : "Request appointment";
     }
   });
 
