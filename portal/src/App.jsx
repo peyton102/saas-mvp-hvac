@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import LeadsCard from "./components/LeadsCard.jsx";
-import NumbersCallsCard from "./components/NumbersCallsCard.jsx";
 import BookingBlank from "./components/BookingsCard.jsx";
+import FinanceCard from "./components/FinanceCard.jsx";
 import LoginPage from "./LoginPage";
 import TenantSettingsCard from "./components/TenantSettingsCard.jsx";
 import { getToken, setToken, clearToken } from "./auth";
@@ -26,26 +26,12 @@ const NGROK_HEADER = { "ngrok-skip-browser-warning": "true" };
 
 
 
-// ====== HELPERS ======
-function fmtMoney(n) {
-  if (n === null || n === undefined) return "0";
-  const num = Number(n);
-  return isNaN(num) ? n : num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtNum(n) {
-  const num = Number(n ?? 0);
-  return isNaN(num) ? "0.00" : num.toFixed(2);
-}
-function todayISO() { return new Date().toISOString().slice(0, 10); }
-function startOfMonthISO() { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); }
 
 function PortalApp({ me }) {
   const [tab, setTab] = useState("home");
   const [apiHealth, setApiHealth] = useState("checking…");
   const [settingsComplete, setSettingsComplete] = useState(false);
 
-  const [includeRevenue, setIncludeRevenue] = useState(true);
-  const [includeCost, setIncludeCost] = useState(true);
   const needsSetup = me?.needs_setup;
   const TENANT_SLUG =
   localStorage.getItem("TENANT_SLUG") ||
@@ -56,57 +42,6 @@ function PortalApp({ me }) {
     clearToken();
     window.location.href = "/"; // force full reload to login screen
   }
-  function computeCsvDates() {
-  if (rangeKey === "today") {
-    const d = todayISO();
-    return { start: `${d}T00:00:00Z`, end: `${d}T23:59:59Z` };
-
-  }
-  if (rangeKey === "month") {
-    return { start: startOfMonthISO(), end: todayISO() };
-  }
-  // custom
-  return { start: customStart, end: customEnd };
-}
-
-async function exportFinanceCsv() {
-  const { start, end } = computeCsvDates();
-
-  const url =
-    `${BASE}/finance/export/csv` +
-    `?start=${encodeURIComponent(start)}` +
-    `&end=${encodeURIComponent(end)}` +
-    `&include_revenue=${includeRevenue}` +
-    `&include_cost=${includeCost}`;
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        ...headers,                // 👈 includes Authorization: Bearer <token>
-        Accept: "text/csv",
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
-    const blob = await res.blob();
-    const downloadUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = `finance_export_${start}_${end}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(downloadUrl);
-  } catch (e) {
-    console.error("CSV export failed", e);
-    alert("Could not export CSV. Please try again.");
-  }
-}
-
-
   // ====== API health ping (hits BASE directly) ======
   useEffect(() => {
     async function ping() {
@@ -122,18 +57,6 @@ async function exportFinanceCsv() {
     ping();
   }, []);
 
-  // ====== Finance state ======
-  const [rangeKey, setRangeKey] = useState("month");
-  const [customStart, setCustomStart] = useState(todayISO());
-  const [customEnd, setCustomEnd] = useState(todayISO());
-  const [summary, setSummary] = useState(null);
-  const [partsRows, setPartsRows] = useState([]);
-  const [recent, setRecent] = useState({ revenue: [], costs: [] });
-  const [loading, setLoading] = useState(false);
-
-  // optional columns
-  const [showHours, setShowHours] = useState(false);
-  const [showLaborCost, setShowLaborCost] = useState(false);
 
 const headers = useMemo(() => {
   const h = {
@@ -157,128 +80,6 @@ const headers = useMemo(() => {
 
 
 
-  // Central API fetch that always talks to ngrok + carries headers
-  async function apiFetch(path, opts = {}) {
-    const res = await fetch(`${BASE}${path}`, { ...opts, headers: { ...headers, ...(opts.headers || {}) } });
-    if (!res.ok) {
-      const msg = `HTTP ${res.status} for ${path}`;
-      console.error(msg);
-      throw new Error(msg);
-    }
-    return res.json();
-  }
-
-  // ====== Finance data loaders ======
-  async function loadSummary() {
-    if (rangeKey === "custom") { setSummary(null); return; }
-    const data = await apiFetch(`/finance/summary?range=${rangeKey}`);
-    setSummary(data);
-  }
-
-  function computeDates() {
-    if (rangeKey === "today") {
-      const d = todayISO();
-      return { start: `${d}T00:00:00`, end: `${d}T23:59:59` };
-    }
-    if (rangeKey === "month") {
-      const s = startOfMonthISO();
-      const e = todayISO();
-      return { start: `${s}T00:00:00`, end: `${e}T23:59:59` };
-    }
-    // custom
-    return { start: `${customStart}T00:00:00+00:00`, end: `${customEnd}T23:59:59+00:00` };
-  }
-
-  async function loadParts() {
-    const { start, end } = computeDates();
-    const data = await apiFetch(`/finance/parts_summary?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
-    setPartsRows(data.rows || []);
-  }
-
-  async function loadRecent() {
-    const data = await apiFetch(`/debug/finance/recent?limit=50`);
-    setRecent({ revenue: data.revenue || [], costs: data.costs || [] });
-  }
-
-  async function refreshAll() {
-    setLoading(true);
-    try {
-      await Promise.all([loadSummary(), loadParts(), loadRecent()]);
-    } catch (e) {
-      console.error(e);
-      alert("API not reachable.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { refreshAll(); /* eslint-disable-next-line */ }, [rangeKey]);
-  useEffect(() => { if (rangeKey === "custom") refreshAll(); /* eslint-disable-next-line */ }, [customStart, customEnd]);
-
-  // ====== Finance forms ======
-  const [revForm, setRevForm] = useState({ amount: "", source: "", part_code: "", job_type: "", notes: "" });
-  const [costForm, setCostForm] = useState({
-    amount: "", category: "", vendor: "",
-    part_code: "", job_type: "", notes: "",
-    hours: "", hourly_rate: ""
-  });
-
-  async function submitRevenue(e) {
-  e.preventDefault();
-
-  console.log("SUBMIT REV PAYLOAD", revForm); // <--- ADD THIS
-
-  await apiFetch(`/finance/revenue`, {
-    method: "POST",
-    body: JSON.stringify(revForm),
-  });
-
-  setRevForm({ amount: "", source: "", part_code: "", job_type: "", notes: "" });
-  refreshAll();
-}
-
-  async function submitCost(e) {
-    e.preventDefault();
-    await apiFetch(`/finance/cost`, { method: "POST", body: JSON.stringify(costForm) });
-    setCostForm({ amount: "", category: "", vendor: "", part_code: "", job_type: "", notes: "", hours: "", hourly_rate: "" });
-    refreshAll();
-  }
-
-  async function deleteRev(id) {
-    if (!confirm(`Delete revenue #${id}?`)) return;
-    await apiFetch(`/debug/finance/revenue/${id}`, { method: "DELETE" });
-    refreshAll();
-  }
-  async function deleteCost(id) {
-    if (!confirm(`Delete cost #${id}?`)) return;
-    await apiFetch(`/debug/finance/cost/${id}`, { method: "DELETE" });
-    refreshAll();
-  }
-
-  // ====== QBO export (added) ======
-  const [qboStart, setQboStart] = useState(startOfMonthISO());
-  const [qboEnd, setQboEnd] = useState(todayISO());
-  const [qboNote, setQboNote] = useState("");
-
-  async function qboPlan() {
-    setQboNote("Planning…");
-    try {
-      const j = await apiFetch(`/finance/qbo/export/plan?start=${qboStart}&end=${qboEnd}`, { method: "POST" });
-      setQboNote(`Preview: ${j.plan.counts.revenues} revenues, ${j.plan.counts.costs} costs. Gross Profit: $${fmtMoney(j.plan.totals.gross_profit)}`);
-    } catch (e) {
-      setQboNote(`Plan error: ${String(e)}`);
-    }
-  }
-
-  async function qboCommit() {
-    setQboNote("Exporting…");
-    try {
-      const j = await apiFetch(`/finance/qbo/export/commit?start=${qboStart}&end=${qboEnd}`, { method: "POST" });
-      setQboNote(`Exported ${j.committed.revenues_exported} revenues & ${j.committed.costs_exported} costs to QBO.`);
-    } catch (e) {
-      setQboNote(`Export error: ${String(e)}`);
-    }
-  }
 
       return (
   <div
@@ -454,235 +255,9 @@ const headers = useMemo(() => {
         )}
 
 
-        {/* ✅ FINANCE: UNCHANGED — DO NOT EDIT THIS BLOCK */}
+        {/* FINANCE */}
         {tab === "finance" && (
-          <>
-            {/* Totals range */}
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
-              <label>Totals View:</label>
-              <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value)}>
-                <option value="today">Today</option>
-                <option value="month">Month</option>
-                <option value="custom">Custom</option>
-              </select>
-              {rangeKey === "custom" && (
-                <>
-                  <label>Start</label>
-                  <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-                  <label>End</label>
-                  <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-                </>
-              )}
-            </div>
-
-            {/* Summary cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 }}>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                <div style={{ color: "#6b7280", fontSize: 12 }}>Revenue</div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>${fmtMoney(summary?.revenue_total || "0")}</div>
-              </div>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                <div style={{ color: "#6b7280", fontSize: 12 }}>Costs</div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>${fmtMoney(summary?.cost_total || "0")}</div>
-              </div>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                <div style={{ color: "#6b7280", fontSize: 12 }}>Profit / Margin</div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>
-                  ${fmtMoney(summary?.gross_profit || "0")} • {summary?.margin_pct ?? "0"}%
-                </div>
-              </div>
-            </div>
-
-            {/* labor totals */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16 }}>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                <div style={{ color: "#6b7280", fontSize: 12 }}>Labor (This View)</div>
-                <div style={{ fontSize: 18, fontWeight: 600 }}>
-                  Hours: {fmtNum(summary?.labor_hours)} &nbsp;•&nbsp; Cost: ${fmtMoney(summary?.labor_total)}
-                </div>
-              </div>
-            </div>
-
-            {/* CSV Export controls */}
-            <div style={{ display: "flex", gap: 12, alignItems: "center", margin: "8px 0 12px" }}>
-              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input type="checkbox" checked={includeRevenue} onChange={(e) => setIncludeRevenue(e.target.checked)} />
-                Include Revenue
-              </label>
-              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input type="checkbox" checked={includeCost} onChange={(e) => setIncludeCost(e.target.checked)} />
-                Include Costs
-              </label>
-
-              <button onClick={exportFinanceCsv}>Export CSV</button>
-            </div>
-
-            {/* add revenue / cost */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                <h2 style={{ margin: 0 }}>Add Revenue</h2>
-                <form onSubmit={submitRevenue} style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                  <input placeholder="Amount" value={revForm.amount} onChange={(e) => setRevForm((f) => ({ ...f, amount: e.target.value }))} />
-                  <input placeholder="Source" value={revForm.source} onChange={(e) => setRevForm((f) => ({ ...f, source: e.target.value }))} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <input placeholder="Part Code" value={revForm.part_code} onChange={(e) => setRevForm((f) => ({ ...f, part_code: e.target.value }))} />
-                    <input placeholder="Job Type" value={revForm.job_type} onChange={(e) => setRevForm((f) => ({ ...f, job_type: e.target.value }))} />
-                  </div>
-                  <input placeholder="Notes" value={revForm.notes} onChange={(e) => setRevForm((f) => ({ ...f, notes: e.target.value }))} />
-                  <button type="submit">Save Revenue</button>
-                </form>
-              </div>
-
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                <h2 style={{ margin: 0 }}>Add Cost</h2>
-                <form onSubmit={submitCost} style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                  <input placeholder="Amount" value={costForm.amount} onChange={(e) => setCostForm((f) => ({ ...f, amount: e.target.value }))} />
-                  <input placeholder="Category" value={costForm.category} onChange={(e) => setCostForm((f) => ({ ...f, category: e.target.value }))} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <input placeholder="Hours (e.g. 3.5)" value={costForm.hours} onChange={(e) => setCostForm((f) => ({ ...f, hours: e.target.value }))} />
-                    <input placeholder="Hourly Rate (e.g. 45)" value={costForm.hourly_rate} onChange={(e) => setCostForm((f) => ({ ...f, hourly_rate: e.target.value }))} />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <input placeholder="Part Code" value={costForm.part_code} onChange={(e) => setCostForm((f) => ({ ...f, part_code: e.target.value }))} />
-                    <input placeholder="Job Type" value={costForm.job_type} onChange={(e) => setCostForm((f) => ({ ...f, job_type: e.target.value }))} />
-                  </div>
-                  <input placeholder="Vendor (optional)" value={costForm.vendor} onChange={(e) => setCostForm((f) => ({ ...f, vendor: e.target.value }))} />
-                  <input placeholder="Notes" value={costForm.notes} onChange={(e) => setCostForm((f) => ({ ...f, notes: e.target.value }))} />
-                  <button type="submit">Save Cost</button>
-                </form>
-              </div>
-            </div>
-
-            {/* recent entries */}
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-              <h2 style={{ margin: "0 0 8px" }}>Recent Entries</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>Revenue</h3>
-                  <div style={{ maxHeight: 240, overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
-                    <table
-  style={{
-    width: "100%",
-    fontSize: 14,
-    borderCollapse: "collapse",
-    textAlign: "center",
-  }}
->
-
-                      <thead>
-                        <tr><th>ID</th><th>Amt</th><th>Source</th><th>Part</th><th>Job</th><th></th></tr>
-
-                      </thead>
-                      <tbody>
-                        {recent.revenue.map((r) => (
-                          <tr key={r.id}>
-                            <td>{r.id}</td><td>${fmtMoney(r.amount)}</td><td>{r.source}</td>
-                            <td>{String(r.part_code ?? r.partCode ?? "").trim() || "—"}</td>
-<td>{String(r.job_type ?? r.jobType ?? "").trim() || "—"}</td>
-
-
-
-                            <td><button onClick={() => deleteRev(r.id)}>Delete</button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>Costs</h3>
-                  <div style={{ maxHeight: 240, overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
-                    <table
-  style={{
-    width: "100%",
-    fontSize: 14,
-    borderCollapse: "collapse",
-    textAlign: "center",
-  }}
->
-
-                      <thead>
-                        <tr><th>ID</th><th>Amt</th><th>Source</th><th>Part</th><th>Job</th><th></th></tr>
-
-                      </thead>
-                      <tbody>
-                        {recent.costs.map((c) => (
-                          <tr key={c.id}>
-                            <td>{c.id}</td><td>${fmtMoney((Number(c.hours||0) > 0 && Number(c.hourly_rate||0) > 0) ? (Number(c.hours) * Number(c.hourly_rate)) : c.amount)}</td>
-<td>{c.category}</td>
-                            <td>{String(c.part_code ?? c.partCode ?? "").trim() || "—"}</td>
-<td>{String(c.job_type ?? c.jobType ?? "").trim() || "—"}</td>
-
-
-                            <td><button onClick={() => deleteCost(c.id)}>Delete</button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* parts summary */}
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, marginBottom: 24 }}>
-              <h2 style={{ margin: "0 0 8px" }}>Parts Performance</h2>
-
-              <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
-                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input type="checkbox" checked={showHours} onChange={(e) => setShowHours(e.target.checked)} />
-                  Show Hours
-                </label>
-                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input type="checkbox" checked={showLaborCost} onChange={(e) => setShowLaborCost(e.target.checked)} />
-                  Show Labor Cost
-                </label>
-              </div>
-
-              <div style={{ overflow: "auto", borderTop: "1px solid #f3f4f6" }}>
-                <table
-  style={{
-    width: "100%",
-    fontSize: 14,
-    borderCollapse: "collapse",
-    textAlign: "center",
-  }}
->
-
-                  <thead>
-  <tr>
-    <th>Part</th>
-    <th>Job</th>
-    {showHours && <th>Hours</th>}
-    <th>Parts Cost</th>
-    {showLaborCost && <th>Labor Cost</th>}
-    <th>Revenue</th>
-    <th>Total Cost</th>
-    <th>Profit</th>
-    <th>Margin %</th>
-  </tr>
-</thead>
-<tbody>
-  {partsRows.map((r, i) => (
-    <tr key={i}>
-      <td>{r.part_code ?? r.partCode ?? "—"}</td>
-<td>{r.job_type ?? r.jobType ?? "—"}</td>
-      {showHours && <td>{fmtNum(r.hours_total)}</td>}
-      <td>${fmtMoney(r.parts_cost_total)}</td>
-      {showLaborCost && <td>${fmtMoney(r.labor_cost_total)}</td>}
-      <td>${fmtMoney(r.revenue_total)}</td>
-      <td>${fmtMoney(r.cost_total)}</td>
-      <td>${fmtMoney(r.profit)}</td>
-      <td>{r.margin_pct}%</td>
-    </tr>
-  ))}
-</tbody>
-
-                </table>
-              </div>
-            </div>
-          </>
+          <FinanceCard apiBase={BASE} commonHeaders={headers} />
         )}
 
         {tab === "leads" && (
