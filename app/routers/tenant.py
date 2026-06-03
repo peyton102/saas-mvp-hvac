@@ -353,28 +353,12 @@ _DEFAULT_BOOKING_CONFIG = {
 }
 
 
-def _ensure_booking_config_columns(db: Session) -> None:
-    for sp, ddl in [
-        ("sp_bk_days",  "ALTER TABLE tenant ADD COLUMN booking_days TEXT"),
-        ("sp_bk_start", "ALTER TABLE tenant ADD COLUMN booking_start TEXT"),
-        ("sp_bk_end",   "ALTER TABLE tenant ADD COLUMN booking_end TEXT"),
-        ("sp_bk_slot",  "ALTER TABLE tenant ADD COLUMN slot_minutes INTEGER"),
-    ]:
-        try:
-            db.exec(text(f"SAVEPOINT {sp}"))
-            db.exec(text(ddl))
-            db.exec(text(f"RELEASE SAVEPOINT {sp}"))
-        except Exception:
-            db.exec(text(f"ROLLBACK TO SAVEPOINT {sp}"))
-
-
 def get_tenant_booking_config(tenant_id: str, db: Session) -> dict:
     """
     Returns the booking config for a tenant.
     Falls back to sensible defaults if not configured.
-    Usable from other routers (e.g. bookings.py).
+    Columns are guaranteed to exist via run_startup_migrations in db.py.
     """
-    _ensure_booking_config_columns(db)
     row = db.exec(
         text("""
             SELECT booking_days, booking_start, booking_end, slot_minutes
@@ -416,8 +400,6 @@ def save_booking_config(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_session),
 ):
-    _ensure_booking_config_columns(db)
-
     valid_days = [d for d in body.booking_days if d in VALID_DAYS]
     if not valid_days:
         raise HTTPException(status_code=422, detail="Select at least one available day.")
