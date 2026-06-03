@@ -148,7 +148,7 @@ export default function BookingAvailabilityCard({ apiBase, commonHeaders, tenant
   const frontendBase =
     import.meta?.env?.VITE_APP_BASE_URL || "https://saas-mvp-hvac-1.onrender.com";
   const bookingUrl = tenantSlug
-    ? `${frontendBase}/book/index.html?tenant=${encodeURIComponent(tenantSlug)}`
+    ? `${frontendBase}/book/index.html?tenant=${encodeURIComponent(tenantSlug)}&api=${encodeURIComponent(apiBase)}`
     : "";
   const iframeCode = bookingUrl
     ? `<iframe src="${bookingUrl}" width="100%" height="620" style="border:none;border-radius:12px;" title="Book an appointment"></iframe>`

@@ -53,7 +53,7 @@ function Field({ label, hint, children }) {
 }
 
 export default function TenantSettingsCard({
-  apiBase,
+  apiBase = "",
   commonHeaders,
   tenantSlug,
   onCompleteChange,
@@ -92,8 +92,8 @@ export default function TenantSettingsCard({
 
   const computedBookingLink = useMemo(() => {
     if (!tenantSlug) return "";
-    return `${frontendBase}/book/index.html?tenant=${encodeURIComponent(tenantSlug)}`;
-  }, [tenantSlug, frontendBase]);
+    return `${frontendBase}/book/index.html?tenant=${encodeURIComponent(tenantSlug)}&api=${encodeURIComponent(apiBase)}`;
+  }, [tenantSlug, frontendBase, apiBase]);
 
   // ---- load ----
   useEffect(() => {
