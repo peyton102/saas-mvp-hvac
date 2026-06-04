@@ -169,6 +169,69 @@ function WonCell({ lead, onSave }) {
   );
 }
 
+function AddLeadForm({ onSave, onCancel }) {
+  const [name, setName]       = useState("");
+  const [phone, setPhone]     = useState("");
+  const [message, setMessage] = useState("");
+  const [autoReply, setAutoReply] = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [err, setErr]         = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!phone.trim()) { setErr("Phone is required."); return; }
+    setSaving(true);
+    setErr("");
+    try {
+      await onSave({ name: name.trim(), phone: phone.trim(), message: message.trim(), send_auto_reply: autoReply, manual_entry: true });
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const field = {
+    padding: "9px 12px", fontSize: 14, borderRadius: 8,
+    border: "1px solid rgba(255,255,255,0.12)", background: C.inputBg,
+    color: C.text, outline: "none", width: "100%",
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{
+      padding: "16px", marginBottom: 16, borderRadius: 12,
+      border: "1px solid rgba(249,115,22,0.25)", background: "rgba(249,115,22,0.04)",
+      display: "grid", gap: 10,
+    }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 2 }}>Add Lead</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <input placeholder="Name (optional)" value={name} onChange={e => setName(e.target.value)} style={field} />
+        <input placeholder="Phone *" value={phone} onChange={e => setPhone(e.target.value)} style={field} required />
+      </div>
+      <input placeholder="Issue / message (optional)" value={message} onChange={e => setMessage(e.target.value)} style={field} />
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.muted, cursor: "pointer" }}>
+        <input type="checkbox" checked={autoReply} onChange={e => setAutoReply(e.target.checked)} style={{ accentColor: C.accent }} />
+        Send auto-reply SMS to customer
+      </label>
+      {err && <div style={{ fontSize: 12, color: "#fca5a5" }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button type="submit" disabled={saving} style={{
+          padding: "9px 20px", borderRadius: 8, border: "none", fontWeight: 800, fontSize: 13,
+          background: C.accent, color: "#111", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1,
+        }}>
+          {saving ? "Saving…" : "Add Lead"}
+        </button>
+        <button type="button" onClick={onCancel} style={{
+          padding: "9px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13,
+          border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: C.muted, cursor: "pointer",
+        }}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const BASE = (typeof apiBase === "string" && apiBase.trim()) ? apiBase : BASE_FALLBACK;
 
@@ -176,6 +239,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ col: "created_at", dir: "desc" });
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -220,6 +284,12 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
       await apiFetch(`/leads/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: next }) });
       setRows(prev => prev.map(r => r.id === id ? { ...r, status: next } : r));
     } catch (e) { console.error(e); }
+  }
+
+  async function addLead(payload) {
+    await apiFetch("/lead", { method: "POST", body: JSON.stringify(payload) });
+    setShowAddForm(false);
+    loadLeads();
   }
 
   async function saveWon(id, won, value) {
@@ -298,18 +368,33 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           <div style={{ fontSize: 20, fontWeight: 800 }}>Leads</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{visible.length} lead{visible.length !== 1 ? "s" : ""}</div>
         </div>
-        <input
-          type="text"
-          placeholder="Search name, phone, issue, notes…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{
-            padding: "9px 14px", borderRadius: 10, fontSize: 13,
-            background: C.inputBg, border: C.border, color: C.text,
-            outline: "none", width: "min(280px, 100%)",
-          }}
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="Search name, phone, issue, notes…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              padding: "9px 14px", borderRadius: 10, fontSize: 13,
+              background: C.inputBg, border: C.border, color: C.text,
+              outline: "none", width: "min(240px, 100%)",
+            }}
+          />
+          <button
+            onClick={() => setShowAddForm(v => !v)}
+            style={{
+              padding: "9px 16px", borderRadius: 10, fontWeight: 800, fontSize: 13,
+              border: "none", background: C.accent, color: "#111", cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            + Add Lead
+          </button>
+        </div>
       </div>
+
+      {showAddForm && (
+        <AddLeadForm onSave={addLead} onCancel={() => setShowAddForm(false)} />
+      )}
 
       {/* Table — horizontal scroll on mobile */}
       <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>

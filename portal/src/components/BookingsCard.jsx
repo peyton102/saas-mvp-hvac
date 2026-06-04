@@ -142,6 +142,103 @@ function StatusBadge({ row }) {
   );
 }
 
+// ── Add Booking form ─────────────────────────────────────────────────────────
+
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function AddBookingForm({ onSave, onCancel }) {
+  const [name,     setName]     = useState("");
+  const [phone,    setPhone]    = useState("");
+  const [email,    setEmail]    = useState("");
+  const [date,     setDate]     = useState(todayLocal());
+  const [time,     setTime]     = useState("09:00");
+  const [duration, setDuration] = useState("60");
+  const [notes,    setNotes]    = useState("");
+  const [saving,   setSaving]   = useState(false);
+  const [err,      setErr]      = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!name.trim()) { setErr("Name is required."); return; }
+    if (!date || !time) { setErr("Date and time are required."); return; }
+
+    // Build start/end ISO strings (naive — backend applies tenant TZ)
+    const start = `${date}T${time}:00`;
+    const startMs = new Date(`${date}T${time}:00`).getTime();
+    const endMs = startMs + parseInt(duration, 10) * 60 * 1000;
+    const endDate = new Date(endMs);
+    const pad = n => String(n).padStart(2, "0");
+    const end = `${endDate.getFullYear()}-${pad(endDate.getMonth()+1)}-${pad(endDate.getDate())}T${pad(endDate.getHours())}:${pad(endDate.getMinutes())}:00`;
+
+    setSaving(true);
+    setErr("");
+    try {
+      await onSave({ name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, notes: notes.trim() || null, start, end });
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const field = {
+    padding: "9px 12px", fontSize: 14, borderRadius: 8,
+    border: `1px solid rgba(255,255,255,0.12)`, background: C.inputBg,
+    color: C.text, outline: "none", width: "100%",
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{
+      padding: "16px", marginBottom: 16, borderRadius: 12,
+      border: "1px solid rgba(249,115,22,0.25)", background: "rgba(249,115,22,0.04)",
+      display: "grid", gap: 10,
+    }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 2 }}>Add Booking</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <input placeholder="Name *" value={name} onChange={e => setName(e.target.value)} style={field} required />
+        <input placeholder="Phone (optional)" value={phone} onChange={e => setPhone(e.target.value)} style={field} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <input placeholder="Email (optional)" type="email" value={email} onChange={e => setEmail(e.target.value)} style={field} />
+        <select value={duration} onChange={e => setDuration(e.target.value)} style={{ ...field, cursor: "pointer" }}>
+          <option value="30">30 min</option>
+          <option value="60">1 hour</option>
+          <option value="90">1.5 hours</option>
+          <option value="120">2 hours</option>
+        </select>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...field, colorScheme: "dark" }} required />
+        <input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ ...field, colorScheme: "dark" }} required />
+      </div>
+
+      <input placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} style={field} />
+
+      {err && <div style={{ fontSize: 12, color: "#fca5a5" }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button type="submit" disabled={saving} style={{
+          padding: "9px 20px", borderRadius: 8, border: "none", fontWeight: 800, fontSize: 13,
+          background: C.accent, color: "#111", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1,
+        }}>
+          {saving ? "Saving…" : "Add Booking"}
+        </button>
+        <button type="button" onClick={onCancel} style={{
+          padding: "9px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13,
+          border: `1px solid rgba(255,255,255,0.12)`, background: "transparent", color: C.muted, cursor: "pointer",
+        }}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ── main component ───────────────────────────────────────────────────────────
 
 export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
@@ -149,11 +246,12 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
     ? apiBase
     : (import.meta?.env?.VITE_API_BASE || "");
 
-  const [rows,    setRows]    = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [search,  setSearch]  = useState("");
-  const [sort,    setSort]    = useState({ col: "starts_at", dir: "asc" });
-  const [showAll, setShowAll] = useState(false); // false = upcoming only (default)
+  const [rows,        setRows]        = useState([]);
+  const [loading,     setLoading]     = useState(false);
+  const [search,      setSearch]      = useState("");
+  const [sort,        setSort]        = useState({ col: "starts_at", dir: "asc" });
+  const [showAll,     setShowAll]     = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -196,6 +294,12 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
         ? { col, dir: s.dir === "asc" ? "desc" : "asc" }
         : { col, dir: "asc" }
     );
+  }
+
+  async function addBooking(payload) {
+    await apiFetch("/book", { method: "POST", body: JSON.stringify(payload) });
+    setShowAddForm(false);
+    loadBookings();
   }
 
   async function markDone(id) {
@@ -342,11 +446,26 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
             style={{
               padding: "7px 14px", borderRadius: 10, fontSize: 13,
               background: C.inputBg, border: C.border, color: C.text,
-              outline: "none", width: "min(220px, 100%)",
+              outline: "none", width: "min(200px, 100%)",
             }}
           />
+
+          {/* add booking */}
+          <button
+            onClick={() => setShowAddForm(v => !v)}
+            style={{
+              padding: "7px 14px", borderRadius: 8, fontWeight: 800, fontSize: 13,
+              border: "none", background: C.accent, color: "#111", cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            + Add Booking
+          </button>
         </div>
       </div>
+
+      {showAddForm && (
+        <AddBookingForm onSave={addBooking} onCancel={() => setShowAddForm(false)} />
+      )}
 
       {/* ── table ── */}
       <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
