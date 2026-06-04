@@ -193,6 +193,26 @@ def update_lead_status(
     return {"ok": True, "id": lead_id, "status": new_status}
 
 
+@router.patch("/leads/{lead_id}/won")
+def update_lead_won(
+    lead_id: int,
+    payload: dict,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    row = session.get(LeadModel, lead_id)
+    if not row or row.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    won = bool(payload.get("job_won", False))
+    value = payload.get("job_value")
+    row.job_won = won
+    row.job_value = float(value) if (won and value is not None) else None
+    session.add(row)
+    session.commit()
+    return {"ok": True, "id": lead_id, "job_won": row.job_won, "job_value": row.job_value}
+
+
 @router.patch("/leads/{lead_id}/notes")
 def update_lead_notes(
     lead_id: int,
@@ -407,6 +427,8 @@ def list_leads(
             "status": (getattr(r, "status", None) or "new"),
             "service_urgency": getattr(r, "service_urgency", None) or "",
             "notes": getattr(r, "notes", None) or "",
+            "job_won": bool(getattr(r, "job_won", False)),
+            "job_value": getattr(r, "job_value", None),
             "tenant_id": r.tenant_id,
         }
         for r in rows

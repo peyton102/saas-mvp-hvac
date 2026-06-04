@@ -91,6 +91,84 @@ function NotesCell({ lead, onSave }) {
   );
 }
 
+function WonCell({ lead, onSave }) {
+  const [entering, setEntering] = useState(false);
+  const [val, setVal] = useState("");
+  const inputRef = useRef();
+
+  useEffect(() => { if (entering && inputRef.current) inputRef.current.focus(); }, [entering]);
+
+  if (lead.job_won) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: C.green }}>
+          Won {lead.job_value != null ? `$${Number(lead.job_value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : ""}
+        </span>
+        <button
+          onClick={() => onSave(lead.id, false, null)}
+          style={{ fontSize: 10, color: C.muted, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
+        >
+          undo
+        </button>
+      </div>
+    );
+  }
+
+  if (entering) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ fontSize: 12, color: C.muted }}>$</span>
+        <input
+          ref={inputRef}
+          type="number"
+          min="0"
+          step="any"
+          placeholder="0"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") { onSave(lead.id, true, val); setEntering(false); setVal(""); }
+            if (e.key === "Escape") { setEntering(false); setVal(""); }
+          }}
+          style={{
+            width: 70, padding: "4px 6px", fontSize: 12,
+            background: C.inputBg, border: `1px solid ${C.green}`,
+            borderRadius: 6, color: C.text, outline: "none",
+          }}
+        />
+        <button
+          onClick={() => { onSave(lead.id, true, val); setEntering(false); setVal(""); }}
+          style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 6, border: "none", background: C.greenBg, color: C.green, cursor: "pointer" }}
+        >
+          Save
+        </button>
+        <button
+          onClick={() => { setEntering(false); setVal(""); }}
+          style={{ fontSize: 11, padding: "4px 6px", borderRadius: 6, border: "none", background: "transparent", color: C.muted, cursor: "pointer" }}
+        >
+          ✕
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEntering(true)}
+      style={{
+        padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+        cursor: "pointer", border: "none", whiteSpace: "nowrap",
+        background: "rgba(74,222,128,0.08)", color: "rgba(74,222,128,0.55)",
+        transition: "all 0.15s",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = C.greenBg; e.currentTarget.style.color = C.green; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "rgba(74,222,128,0.08)"; e.currentTarget.style.color = "rgba(74,222,128,0.55)"; }}
+    >
+      Mark Won
+    </button>
+  );
+}
+
 export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const BASE = (typeof apiBase === "string" && apiBase.trim()) ? apiBase : BASE_FALLBACK;
 
@@ -144,6 +222,14 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     } catch (e) { console.error(e); }
   }
 
+  async function saveWon(id, won, value) {
+    try {
+      const body = { job_won: won, job_value: won && value !== "" && value != null ? parseFloat(value) : null };
+      await apiFetch(`/leads/${id}/won`, { method: "PATCH", body: JSON.stringify(body) });
+      setRows(prev => prev.map(r => r.id === id ? { ...r, job_won: won, job_value: body.job_value } : r));
+    } catch (e) { console.error(e); }
+  }
+
   async function saveNotes(id, notes) {
     try {
       await apiFetch(`/leads/${id}/notes`, { method: "PATCH", body: JSON.stringify({ notes }) });
@@ -186,6 +272,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     { key: "service_urgency", label: "Preferred Day", w: "110px" },
     { key: "notes",      label: "Notes",          w: "160px" },
     { key: "status",     label: "Contacted",      w: "90px"  },
+    { key: "job_won",    label: "Won",            w: "120px" },
   ];
 
   const thStyle = (key) => ({
@@ -243,10 +330,10 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
             )}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
             )}
             {!loading && visible.map((r, i) => {
               const contacted = (r.status || "").toLowerCase() === "contacted";
@@ -310,6 +397,11 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                     >
                       {contacted ? "✓ Done" : "Mark Done"}
                     </button>
+                  </td>
+
+                  {/* Won toggle */}
+                  <td style={{ padding: "10px 10px" }}>
+                    <WonCell lead={r} onSave={saveWon} />
                   </td>
                 </tr>
               );

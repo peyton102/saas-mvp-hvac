@@ -25,6 +25,10 @@ class UpdateFeaturesRequest(BaseModel):
     features: List[str]
 
 
+class AssignVapiNumberRequest(BaseModel):
+    vapi_phone_number_id: str  # Vapi phoneNumberId, e.g. "phn_xxxx" — empty string to clear
+
+
 def _require_admin(current_user: Dict[str, Any], session: Session) -> None:
     slug = current_user.get("tenant_slug") or current_user.get("tenant")
     tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
@@ -48,7 +52,7 @@ def list_tenants(
         session.exec(text("ROLLBACK TO SAVEPOINT sp_mgmt_features"))
 
     rows = session.exec(
-        text("SELECT id, slug, name, business_name, email, is_active, is_admin, created_at, features FROM tenant ORDER BY created_at DESC")
+        text("SELECT id, slug, name, business_name, email, is_active, is_admin, created_at, features, twilio_number FROM tenant ORDER BY created_at DESC")
     ).all()
 
     result = []
@@ -65,6 +69,7 @@ def list_tenants(
             "is_admin": r.is_admin,
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "features": features_list,
+            "vapi_phone_number_id": (r.twilio_number if hasattr(r, "twilio_number") else None) or "",
         })
     return result
 
@@ -92,6 +97,43 @@ def update_tenant_features(
     session.commit()
 
     return {"ok": True, "slug": slug, "features": valid}
+
+
+@router.patch("/tenants/{slug}/vapi-number")
+def assign_vapi_number(
+    slug: str,
+    payload: AssignVapiNumberRequest,
+    session: Session = Depends(get_session),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Assign (or clear) a Vapi Phone Number ID for a tenant."""
+    _require_admin(current_user, session)
+
+    tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    new_value = payload.vapi_phone_number_id.strip()
+
+    # Prevent two tenants sharing the same number
+    if new_value:
+        conflict = session.exec(
+            select(Tenant).where(
+                Tenant.twilio_number == new_value,
+                Tenant.slug != slug,
+            )
+        ).first()
+        if conflict:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Phone number ID already assigned to tenant '{conflict.slug}'",
+            )
+
+    tenant.twilio_number = new_value or None
+    session.add(tenant)
+    session.commit()
+
+    return {"ok": True, "slug": slug, "vapi_phone_number_id": new_value}
 
 
 @router.get("/tenants/{slug}/export")

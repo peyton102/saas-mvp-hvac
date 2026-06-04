@@ -254,6 +254,182 @@ function RemoveTenantModal({ tenant, apiBase, commonHeaders, onClose, onDeleted 
   );
 }
 
+// ---- Tenant Value / Usage section ----
+function TenantUsageSection({ apiBase, commonHeaders }) {
+  const [rows, setRows]     = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]       = useState("");
+  const [sortKey, setSortKey] = useState("missed_call_leads_30d");
+
+  async function load() {
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch(`${apiBase}/admin/usage`, { headers: commonHeaders });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${res.status}`);
+      }
+      setRows(await res.json());
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  const COLS = [
+    { key: "missed_call_leads_30d",   label: "Calls Captured (30d)", tip: "Missed calls the AI answered and turned into leads" },
+    { key: "missed_call_leads_total", label: "Calls Total",           tip: "All-time missed call leads" },
+    { key: "jobs_won_30d",            label: "Jobs Won (30d)",        tip: "Leads marked Won by the owner in last 30 days", isMoney: false },
+    { key: "revenue_attributed_30d",  label: "Revenue (30d)",         tip: "Sum of job values marked Won in last 30 days", isMoney: true },
+    { key: "bookings_30d",            label: "Bookings (30d)",        tip: "Online bookings made in last 30 days" },
+    { key: "review_requests_30d",     label: "Review Reqs (30d)",     tip: "Review request SMS sent in last 30 days" },
+  ];
+
+  const sorted = [...rows].sort((a, b) => {
+    const diff = (b[sortKey] ?? 0) - (a[sortKey] ?? 0);
+    return diff !== 0 ? diff : (a.business_name || "").localeCompare(b.business_name || "");
+  });
+
+  function fmtAge(iso) {
+    if (!iso) return "—";
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    if (days < 1) return "today";
+    if (days === 1) return "1 day";
+    if (days < 30) return `${days}d`;
+    const months = Math.floor(days / 30);
+    return `${months}mo`;
+  }
+
+  function fmtLast(iso) {
+    if (!iso) return "—";
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    if (days === 0) return "today";
+    if (days === 1) return "yesterday";
+    if (days < 30) return `${days}d ago`;
+    return fmtDate(iso);
+  }
+
+  // color for a count cell: green if > 0, dim if 0
+  function countStyle(n) {
+    return {
+      fontSize: 14,
+      fontWeight: n > 0 ? 800 : 400,
+      color: n > 0 ? "#6ee7b7" : "rgba(229,231,235,0.25)",
+      textAlign: "right",
+    };
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 22, color: "#e5e7eb" }}>Value Overview</h2>
+          <p style={{ margin: 0, fontSize: 14, color: "rgba(229,231,235,0.55)" }}>
+            What each tenant is getting from the platform — no customer data, counts only.
+          </p>
+        </div>
+        <button onClick={load} disabled={loading} style={btnGhost}>
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      {err && <div style={{ fontSize: 13, color: "#fca5a5", marginBottom: 10 }}>{err}</div>}
+
+      {!loading && rows.length === 0 && !err && (
+        <div style={{ padding: "24px 0", textAlign: "center", color: "rgba(229,231,235,0.35)", fontSize: 14 }}>
+          No tenants yet.
+        </div>
+      )}
+
+      {sorted.length > 0 && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <th style={{ padding: "6px 10px 10px 0", textAlign: "left", fontWeight: 700, fontSize: 11, color: "rgba(229,231,235,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  Tenant
+                </th>
+                <th style={{ padding: "6px 10px 10px", textAlign: "right", fontWeight: 700, fontSize: 11, color: "rgba(229,231,235,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  Age
+                </th>
+                {COLS.map(({ key, label }) => (
+                  <th
+                    key={key}
+                    onClick={() => setSortKey(key)}
+                    title={`Sort by ${label}`}
+                    style={{
+                      padding: "6px 10px 10px",
+                      textAlign: "right",
+                      fontWeight: sortKey === key ? 900 : 700,
+                      fontSize: 11,
+                      color: sortKey === key ? "#f97316" : "rgba(229,231,235,0.4)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      userSelect: "none",
+                    }}
+                  >
+                    {label}{sortKey === key ? " ▼" : ""}
+                  </th>
+                ))}
+                <th style={{ padding: "6px 0 10px 10px", textAlign: "right", fontWeight: 700, fontSize: 11, color: "rgba(229,231,235,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  Last Active
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((r) => (
+                <tr
+                  key={r.slug}
+                  style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                >
+                  <td style={{ padding: "10px 10px 10px 0", verticalAlign: "middle" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e7eb" }}>
+                      {r.business_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", fontFamily: "monospace" }}>
+                      {r.slug}
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px", textAlign: "right", fontSize: 12, color: "rgba(229,231,235,0.45)", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                    {fmtAge(r.joined)}
+                  </td>
+                  {COLS.map(({ key, isMoney }) => {
+                    const raw = r[key] ?? 0;
+                    const display = isMoney
+                      ? (raw > 0 ? `$${Number(raw).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—")
+                      : raw;
+                    return (
+                      <td key={key} style={{ padding: "10px", verticalAlign: "middle" }}>
+                        <div style={countStyle(raw)}>
+                          {display}
+                          {key === "missed_call_leads_30d" && r.missed_call_leads_total > 0 && (
+                            <span style={{ fontSize: 10, fontWeight: 400, color: "rgba(110,231,183,0.5)", marginLeft: 4 }}>
+                              /{r.missed_call_leads_total}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td style={{ padding: "10px 0 10px 10px", textAlign: "right", fontSize: 12, color: "rgba(229,231,235,0.45)", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                    {fmtLast(r.last_active)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminTab({ apiBase, commonHeaders }) {
   const ALL_FEATURES = [
     { slug: "vapi",      label: "Calls / VAPI" },
@@ -284,6 +460,9 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   const [tenantsErr, setTenantsErr]   = useState("");
   const [removingTenant, setRemovingTenant] = useState(null);
   const [savingFeatures, setSavingFeatures] = useState({}); // slug → true while saving
+  const [vapiInputs, setVapiInputs]   = useState({}); // slug → current input value
+  const [savingVapi, setSavingVapi]   = useState({}); // slug → true while saving
+  const [vapiErr, setVapiErr]         = useState({}); // slug → error string
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
@@ -311,7 +490,12 @@ export default function AdminTab({ apiBase, commonHeaders }) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.detail || `HTTP ${res.status}`);
       }
-      setTenants(await res.json());
+      const data = await res.json();
+      setTenants(data);
+      // seed vapi inputs with current values so fields show what's assigned
+      const inputs = {};
+      data.forEach((t) => { inputs[t.slug] = t.vapi_phone_number_id || ""; });
+      setVapiInputs(inputs);
     } catch (e) {
       setTenantsErr(String(e.message || e));
     } finally {
@@ -391,6 +575,27 @@ export default function AdminTab({ apiBase, commonHeaders }) {
     }
   }
 
+  async function assignVapiNumber(tenantSlug, value) {
+    setSavingVapi((prev) => ({ ...prev, [tenantSlug]: true }));
+    setVapiErr((prev) => ({ ...prev, [tenantSlug]: "" }));
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenantSlug}/vapi-number`, {
+        method: "PATCH",
+        headers: commonHeaders,
+        body: JSON.stringify({ vapi_phone_number_id: value.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setTenants((prev) =>
+        prev.map((t) => t.slug === tenantSlug ? { ...t, vapi_phone_number_id: data.vapi_phone_number_id } : t)
+      );
+    } catch (e) {
+      setVapiErr((prev) => ({ ...prev, [tenantSlug]: String(e.message || e) }));
+    } finally {
+      setSavingVapi((prev) => ({ ...prev, [tenantSlug]: false }));
+    }
+  }
+
   // counts
   const counts = invites.reduce((acc, inv) => {
     acc[inv.status] = (acc[inv.status] || 0) + 1;
@@ -413,6 +618,12 @@ export default function AdminTab({ apiBase, commonHeaders }) {
           }}
         />
       )}
+
+      {/* Value / Usage Overview */}
+      <TenantUsageSection apiBase={apiBase} commonHeaders={commonHeaders} />
+
+      {/* Divider */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} />
 
       {/* Header */}
       <div>
@@ -761,6 +972,83 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                       );
                     })}
                   </div>
+
+                  {/* Vapi phone number assignment */}
+                  {(() => {
+                    const currentInput = vapiInputs[t.slug] ?? (t.vapi_phone_number_id || "");
+                    const saved = t.vapi_phone_number_id || "";
+                    const isDirty = currentInput.trim() !== saved;
+                    const isSavingVapi = savingVapi[t.slug];
+                    const errMsg = vapiErr[t.slug];
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", whiteSpace: "nowrap", minWidth: 56 }}>
+                          Vapi #:
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 260px" }}>
+                          <input
+                            type="text"
+                            placeholder="phn_xxxx  (Vapi Phone Number ID)"
+                            value={currentInput}
+                            onChange={(e) =>
+                              setVapiInputs((prev) => ({ ...prev, [t.slug]: e.target.value }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && isDirty && !isSavingVapi) {
+                                assignVapiNumber(t.slug, currentInput);
+                              }
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: "5px 10px",
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              borderRadius: 7,
+                              border: saved
+                                ? "1px solid rgba(110,231,183,0.4)"
+                                : "1px solid rgba(255,255,255,0.10)",
+                              background: "rgba(255,255,255,0.04)",
+                              color: saved ? "#6ee7b7" : "#e5e7eb",
+                              outline: "none",
+                            }}
+                          />
+                          {isDirty && (
+                            <button
+                              disabled={isSavingVapi}
+                              onClick={() => assignVapiNumber(t.slug, currentInput)}
+                              style={{
+                                ...btnGhost,
+                                padding: "5px 12px",
+                                fontSize: 11,
+                                opacity: isSavingVapi ? 0.5 : 1,
+                                cursor: isSavingVapi ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              {isSavingVapi ? "Saving…" : "Save"}
+                            </button>
+                          )}
+                          {!isDirty && saved && (
+                            <button
+                              onClick={() => {
+                                setVapiInputs((prev) => ({ ...prev, [t.slug]: "" }));
+                                assignVapiNumber(t.slug, "");
+                              }}
+                              style={{
+                                ...btnRed,
+                                padding: "5px 10px",
+                                fontSize: 11,
+                              }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        {errMsg && (
+                          <span style={{ fontSize: 11, color: "#fca5a5", fontWeight: 700 }}>{errMsg}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}

@@ -33,6 +33,8 @@ def run_startup_migrations() -> None:
         ("sp_tenant_booking_start", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS booking_start TEXT"),
         ("sp_tenant_booking_end",   "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS booking_end TEXT"),
         ("sp_tenant_slot_minutes",  "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS slot_minutes INTEGER"),
+        ("sp_lead_job_won",   "ALTER TABLE lead ADD COLUMN IF NOT EXISTS job_won BOOLEAN DEFAULT FALSE"),
+        ("sp_lead_job_value", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS job_value NUMERIC"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

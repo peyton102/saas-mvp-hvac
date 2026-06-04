@@ -27,6 +27,8 @@ class Lead(SQLModel, table=True):
     source: Optional[str] = Field(default=None, max_length=50)  # e.g. "missed_call", "web_form"
     service_urgency: Optional[str] = Field(default=None, max_length=200)
     notes: Optional[str] = Field(default=None)
+    job_won: Optional[bool] = Field(default=False)
+    job_value: Optional[float] = Field(default=None)
 
 
 class Booking(SQLModel, table=True):
