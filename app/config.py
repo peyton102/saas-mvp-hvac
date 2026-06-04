@@ -54,7 +54,7 @@ class Settings:
 
     # Branding / links
     FROM_NAME: str = os.getenv("FROM_NAME", "HVAC Bot")
-    _booking_link_raw = os.getenv("BOOKING_LINK", "http://localhost:5173/book/index.html?")
+    _booking_link_raw = os.getenv("BOOKING_LINK", "https://saas-mvp-hvac-staging.onrender.com/book/index.html")
     BOOKING_LINK = _booking_link_raw[len("BOOKING_LINK="):] if _booking_link_raw.startswith("BOOKING_LINK=") else _booking_link_raw
 
     # Reminders

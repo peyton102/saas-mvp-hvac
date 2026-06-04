@@ -228,7 +228,8 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         if existing_email:
             raise HTTPException(status_code=400, detail="Email already registered")
 
-        booking_link_default = getattr(config, "BOOKING_LINK", "") or ""
+        _bl_base = (getattr(config, "BOOKING_LINK", "") or "").strip().split("?")[0]
+        booking_link_default = f"{_bl_base}?tenant={slug}" if _bl_base else ""
         tenant = Tenant(
             slug=slug,
             business_name=payload.business_name.strip(),
