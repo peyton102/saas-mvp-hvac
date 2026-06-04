@@ -4,7 +4,7 @@ from typing import Optional, List
 
 from dateutil import parser as dtparse
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 from zoneinfo import ZoneInfo  # 👈 add this
@@ -244,10 +244,53 @@ def list_upcoming_bookings(
 
 
 # ===== Direct Booking (per-tenant) =====
+
+def _post_booking_tasks(
+    tenant_id: str,
+    start_local: datetime,
+    end_local: datetime,
+    name: str,
+    email: Optional[str],
+    phone: Optional[str],
+    e164: str,
+    notes: Optional[str],
+):
+    """GCal + email run in background so the HTTP response returns immediately after DB commit."""
+    # GCal (best-effort)
+    try:
+        gen = get_session()
+        session = next(gen)
+        try:
+            _gcal_create_event(
+                start_local, end_local, name, email, phone, notes,
+                tenant_id=tenant_id, session=session,
+            )
+        finally:
+            session.close()
+    except Exception as exc:
+        print(f"[BOOK BG GCAL ERROR] {exc}")
+
+    # Email confirmation
+    try:
+        email_payload = {
+            "name": name,
+            "email": (email or "").strip(),
+            "phone": e164 or (phone or ""),
+            "address": "",
+            "service": "appointment",
+            "starts_at_iso": start_local.isoformat(),
+            "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
+        }
+        send_booking_confirmation(tenant_id, email_payload)
+    except Exception as exc:
+        print(f"[BOOK BG EMAIL ERROR] {exc}")
+
+
 @router.post("/book", response_model=BookOut)
 def book(
     request: Request,
     payload: BookIn,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
@@ -273,7 +316,7 @@ def book(
 
     e164 = normalize_us_phone(payload.phone) if payload.phone else ""
 
-    # DB write first — so no SMS goes out unless the booking actually saves
+    # DB write first
     session.add(
         BookingModel(
             tenant_id=tenant_id,
@@ -288,62 +331,33 @@ def book(
     )
     session.commit()
 
-    # GCal event (best-effort, after commit)
-    event_id = _gcal_create_event(
-        start_local, end_local, payload.name, payload.email, payload.phone, payload.notes,
-        tenant_id=tenant_id, session=session,
-    )
-
-    # Customer confirmation SMS
+    # SMS — fast (Twilio), keep synchronous so we know it fired
     sms_ok = False
     if e164:
         try:
             sms_ok = booking_confirmation_sms(
                 tenant_id,
-                {
-                    "name": payload.name,
-                    "phone": e164,
-                    "service": "appointment",
-                    "starts_at_iso": start_local.isoformat(),
-                },
+                {"name": payload.name, "phone": e164, "service": "appointment", "starts_at_iso": start_local.isoformat()},
             )
-        except Exception as e:
-            print(f"[BOOK SMS ERROR] {e}")
+        except Exception as exc:
+            print(f"[BOOK SMS ERROR] {exc}")
 
-    # Office SMS notify
     try:
-        office_payload = {
-            "name": payload.name,
-            "phone": e164 or (payload.phone or ""),
-            "service": "appointment",
-            "starts_at_iso": start_local.isoformat(),
-        }
-        booking_office_notify_sms(tenant_id, office_payload)
-    except Exception as e:
-        print(f"[BOOK OFFICE SMS ERROR] {e}")
+        booking_office_notify_sms(
+            tenant_id,
+            {"name": payload.name, "phone": e164 or (payload.phone or ""), "service": "appointment", "starts_at_iso": start_local.isoformat()},
+        )
+    except Exception as exc:
+        print(f"[BOOK OFFICE SMS ERROR] {exc}")
 
-    # ===== Booking confirmation EMAIL (office + customer) =====
-    email_ok = False
-    try:
-        email_payload = {
-            "name": payload.name,
-            "email": (payload.email or "").strip(),
-            "phone": e164 or (payload.phone or ""),
-            "address": "",
-            "service": "appointment",
-            "starts_at_iso": start_local.isoformat(),
-            "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
-        }
-        email_ok = send_booking_confirmation(tenant_id, email_payload)
-    except Exception as e:
-        print(f"[BOOK EMAIL ERROR] {e}")
-
-    return BookOut(
-        ok=True,
-        event_id=event_id,
-        sms_sent=bool(sms_ok),
-        email_sent=bool(email_ok),
+    # GCal + email deferred — run after response is returned
+    background_tasks.add_task(
+        _post_booking_tasks,
+        tenant_id, start_local, end_local,
+        payload.name, payload.email, payload.phone, e164, payload.notes,
     )
+
+    return BookOut(ok=True, sms_sent=bool(sms_ok), email_sent=None)
 
 
 # ===== Debug endpoint: tenant-aware =====

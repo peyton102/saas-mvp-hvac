@@ -149,12 +149,19 @@ function todayLocal() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function nextHourTime() {
+  const d = new Date();
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1);
+  return `${String(d.getHours()).padStart(2, "0")}:00`;
+}
+
 function AddBookingForm({ onSave, onCancel }) {
   const [name,     setName]     = useState("");
   const [phone,    setPhone]    = useState("");
   const [email,    setEmail]    = useState("");
   const [date,     setDate]     = useState(todayLocal());
-  const [time,     setTime]     = useState("09:00");
+  const [time,     setTime]     = useState(nextHourTime());
   const [duration, setDuration] = useState("60");
   const [notes,    setNotes]    = useState("");
   const [saving,   setSaving]   = useState(false);
@@ -299,6 +306,7 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
   async function addBooking(payload) {
     await apiFetch("/book", { method: "POST", body: JSON.stringify(payload) });
     setShowAddForm(false);
+    setShowAll(true); // ensure the new booking is visible regardless of date
     loadBookings();
   }
 
