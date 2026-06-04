@@ -410,7 +410,7 @@
   const tenant       = qs.get("tenant") || "default";
   const reschedToken = qs.get("reschedule");
   const isReschedule = !!reschedToken;
-  const API          = qs.get("api") || window.__API_BASE__ || "https://saas-mvp-hvac.onrender.com";
+  const API          = qs.get("api") || window.__API_BASE__ || "https://saas-mvp-hvac-staging.onrender.com";
   const HEADERS      = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" };
 
   // ---- DOM ----
