@@ -730,7 +730,7 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
               </div>
 
               {/* Preview table */}
-              <div style={{ overflowX: "auto", borderRadius: 10, border: C.border }}>
+              <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 10, border: C.border }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: "rgba(255,255,255,0.03)" }}>
@@ -828,7 +828,7 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
       )}
 
       {/* ── Entries table ── */}
-      <div style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
+      <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 620 }}>
           <thead>
             <tr style={{ background: "rgba(255,255,255,0.03)" }}>

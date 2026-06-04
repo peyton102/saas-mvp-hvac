@@ -1,3 +1,47 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Stop any element from blowing out the page width */
+body {
+  overflow-x: hidden;
+}
+
+/* Tab bar: horizontally scrollable on small screens, hidden scrollbar */
+.portal-tabs-bar {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-wrap: nowrap !important;
+}
+.portal-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Calls card: collapse 4-col row to stacked on phones */
+@media (max-width: 640px) {
+  .calls-card-row {
+    grid-template-columns: 1fr auto !important;
+  }
+  .calls-card-time {
+    display: none !important;
+  }
+  .calls-card-status {
+    display: none !important;
+  }
+  .calls-card-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start !important;
+  }
+}
+
+/* Finance / Leads / Bookings: ensure table wrappers never overflow the card */
+.table-scroll-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+}
+
 :root {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   line-height: 1.5;

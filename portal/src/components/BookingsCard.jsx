@@ -349,7 +349,7 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
       </div>
 
       {/* ── table ── */}
-      <div style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
+      <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 700 }}>
           <thead>
             <tr style={{ background: "rgba(255,255,255,0.03)" }}>

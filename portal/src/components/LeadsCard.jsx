@@ -293,7 +293,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     <div style={{ color: C.text, fontFamily: "system-ui, -apple-system, sans-serif" }}>
 
       {/* Header row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Leads</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{visible.length} lead{visible.length !== 1 ? "s" : ""}</div>
@@ -312,7 +312,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
       </div>
 
       {/* Table — horizontal scroll on mobile */}
-      <div style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
+      <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
           <thead>
             <tr style={{ background: "rgba(255,255,255,0.03)" }}>

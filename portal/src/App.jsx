@@ -91,7 +91,7 @@ const headers = useMemo(() => {
       minHeight: "100vh",
       width: "100%",
       boxSizing: "border-box",
-      padding: "24px 0",
+      padding: "16px",
       background:
         "radial-gradient(900px 520px at 50% 0%, rgba(249,115,22,0.14), rgba(0,0,0,0) 65%), linear-gradient(180deg, #0b1220 0%, #05070d 100%)",
       color: "#e5e7eb",
@@ -99,7 +99,7 @@ const headers = useMemo(() => {
     }}
   >
     {/* centered page container */}
-    <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto" }}>
+    <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto", minWidth: 0 }}>
       {/* top bar */}
       <div
         style={{
@@ -107,6 +107,8 @@ const headers = useMemo(() => {
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 18,
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -184,10 +186,11 @@ const headers = useMemo(() => {
 
       {/* tabs */}
       <div
+        className="portal-tabs-bar"
         style={{
           display: "flex",
-          gap: 10,
-          padding: 10,
+          gap: 8,
+          padding: 8,
           borderRadius: 16,
           border: "1px solid rgba(255,255,255,0.10)",
           background: "rgba(255,255,255,0.04)",
@@ -221,7 +224,8 @@ const headers = useMemo(() => {
           border: "1px solid rgba(255,255,255,0.10)",
           background: "rgba(255,255,255,0.03)",
           backdropFilter: "blur(10px)",
-          padding: 18,
+          padding: "16px 12px",
+          minWidth: 0,
         }}
       >
         {/* Settings card mount */}
@@ -300,8 +304,10 @@ function TopTab({ label, active, onClick, admin = false }) {
       onClick={onClick}
       disabled={active}
       style={{
-        padding: "10px 12px",
+        padding: "9px 11px",
         borderRadius: 12,
+        flexShrink: 0,
+        fontSize: 13,
         border: admin
           ? (active ? "1px solid rgba(167,139,250,0.5)" : "1px solid rgba(167,139,250,0.25)")
           : "1px solid rgba(255,255,255,0.10)",
