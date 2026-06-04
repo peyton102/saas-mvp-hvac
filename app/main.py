@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 from app.routers import public
 from collections import defaultdict
 from typing import Optional
@@ -84,6 +85,10 @@ app.add_middleware(
 )
 
 PORT = int(os.getenv("PORT", "8799"))
+
+# ---------- STATIC FILES ----------
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/book", StaticFiles(directory=os.path.join(_static_dir, "book"), html=True), name="book")
 
 # ---------- GLOBAL ERROR HANDLER ----------
 @app.exception_handler(Exception)

@@ -87,13 +87,10 @@ export default function TenantSettingsCard({
   const [error, setError]           = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
-  const frontendBase =
-    import.meta?.env?.VITE_APP_BASE_URL || "https://saas-mvp-hvac-1.onrender.com";
-
   const computedBookingLink = useMemo(() => {
-    if (!tenantSlug) return "";
-    return `${frontendBase}/book/index.html?tenant=${encodeURIComponent(tenantSlug)}&api=${encodeURIComponent(apiBase)}`;
-  }, [tenantSlug, frontendBase, apiBase]);
+    if (!tenantSlug || !apiBase) return "";
+    return `${apiBase}/book/index.html?tenant=${encodeURIComponent(tenantSlug)}`;
+  }, [tenantSlug, apiBase]);
 
   // ---- load ----
   useEffect(() => {

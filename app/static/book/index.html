@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Book an appointment</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --brand:        #f97316;
+      --brand-dark:   #ea6c0a;
+      --brand-light:  rgba(249,115,22,.10);
+      --text:         #111827;
+      --muted:        #6b7280;
+      --light:        #9ca3af;
+      --border:       #e5e7eb;
+      --bg:           #f3f4f6;
+      --card:         #ffffff;
+      --ok-bg:        #f0fdf4;
+      --ok-text:      #166534;
+      --ok-border:    #bbf7d0;
+      --err-bg:       #fef2f2;
+      --err-text:     #991b1b;
+      --err-border:   #fecaca;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 32px 16px 56px;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .card {
+      max-width: 560px;
+      margin: 0 auto;
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.07);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 28px 28px 22px;
+      border-bottom: 1.5px solid var(--border);
+    }
+
+    .card-header h1 { font-size: 22px; font-weight: 800; margin: 0 0 4px; }
+    .card-header .subtitle { font-size: 13px; color: var(--muted); margin: 0; }
+
+    .card-body { padding: 24px 28px 32px; }
+
+    /* TABS */
+    .tabs { display: flex; border-bottom: 1.5px solid var(--border); margin-bottom: 24px; }
+
+    .tab-btn {
+      flex: 1;
+      padding: 11px 10px;
+      border: none;
+      border-bottom: 2.5px solid transparent;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -1.5px;
+      font-family: inherit;
+    }
+
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--brand); border-bottom-color: var(--brand); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* LABELS */
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 20px 0 8px;
+    }
+
+    /* INPUTS */
+    input, textarea, select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      background: var(--card);
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(249,115,22,.12);
+    }
+
+    input::placeholder, textarea::placeholder { color: var(--light); }
+    textarea { resize: vertical; min-height: 84px; }
+
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .divider { border: none; border-top: 1.5px solid var(--border); margin: 24px 0 0; }
+
+    /* ===== CALENDAR ===== */
+    .cal-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .cal-nav-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color .12s, color .12s;
+      font-family: inherit;
+    }
+
+    .cal-nav-btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+    .cal-nav-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    .cal-month { font-size: 15px; font-weight: 700; }
+
+    .cal-dow {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      margin-bottom: 6px;
+    }
+
+    .cal-dow span {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--light);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: 4px 0;
+    }
+
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+
+    .day-cell {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      font-family: inherit;
+      cursor: default;
+      position: relative;
+    }
+
+    .day-cell.past    { color: var(--light); }
+    .day-cell.closed  { color: #d1d5db; text-decoration: line-through; }
+    .day-cell.full    { color: var(--light); background: #f9fafb; }
+
+    .day-cell.available {
+      background: #f9fafb;
+      color: var(--text);
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .1s, color .1s;
+    }
+
+    .day-cell.available:hover {
+      background: var(--brand-light);
+      color: var(--brand);
+    }
+
+    .day-cell.selected {
+      background: var(--brand) !important;
+      color: #fff !important;
+      font-weight: 700;
+    }
+
+    .day-cell.today::after {
+      content: '';
+      position: absolute;
+      bottom: 3px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--brand);
+    }
+
+    .day-cell.selected.today::after { background: rgba(255,255,255,.7); }
+
+    .cal-loading {
+      text-align: center;
+      padding: 40px 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* ===== TIME SLOTS ===== */
+    .time-section {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1.5px solid var(--border);
+    }
+
+    .time-label {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .slots-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .slot-btn {
+      padding: 11px 6px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color .1s, background .1s, color .1s;
+      font-family: inherit;
+    }
+
+    .slot-btn:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-light); }
+
+    .slot-btn.active {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+
+    .no-slots { font-size: 13px; color: var(--muted); margin: 0; }
+
+    /* ===== BUTTON ===== */
+    .btn-primary {
+      display: block;
+      width: 100%;
+      margin-top: 22px;
+      padding: 13px;
+      border: none;
+      border-radius: 10px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      cursor: pointer;
+      transition: background .15s, transform .08s;
+      font-family: inherit;
+    }
+
+    .btn-primary:hover:not(:disabled)  { background: var(--brand-dark); }
+    .btn-primary:active:not(:disabled) { transform: scale(.99); }
+    .btn-primary:disabled { background: #fdba8c; cursor: not-allowed; transform: none; }
+
+    /* ===== MESSAGES ===== */
+    .msg {
+      display: none;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 18px;
+      line-height: 1.5;
+    }
+
+    .ok  { background: var(--ok-bg);  color: var(--ok-text);  border: 1px solid var(--ok-border); }
+    .err { background: var(--err-bg); color: var(--err-text); border: 1px solid var(--err-border); }
+
+    @media (max-width: 480px) {
+      body { padding: 16px 12px 48px; }
+      .card-header, .card-body { padding-left: 20px; padding-right: 20px; }
+      .row { grid-template-columns: 1fr; gap: 0; }
+      .slots-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header">
+      <h1 id="pageTitle">Book an appointment</h1>
+      <p class="subtitle">Pick a day and time — we'll confirm by text.</p>
+    </div>
+
+    <div class="card-body">
+      <div class="tabs">
+        <button id="tabBooking" class="tab-btn active" type="button">Book appointment</button>
+        <button id="tabContact" class="tab-btn" type="button">Contact us</button>
+      </div>
+
+      <!-- BOOKING PANEL -->
+      <div id="bookingPanel" class="tab-panel active">
+
+        <label>Service type</label>
+        <select id="service">
+          <option value="repair">Repair</option>
+          <option value="service">Maintenance / Service</option>
+          <option value="tuneup">Tune-up</option>
+          <option value="install">Installation</option>
+          <option value="estimate">Free estimate</option>
+        </select>
+
+        <!-- Calendar -->
+        <label>Select a date</label>
+        <div id="calSection">
+          <div class="cal-loading">Loading availability…</div>
+        </div>
+
+        <!-- Time slots (shown after date selected) -->
+        <div id="timeSection" class="time-section" style="display:none">
+          <div id="timeLabel" class="time-label"></div>
+          <div id="slotsGrid" class="slots-grid"></div>
+        </div>
+
+        <!-- Details (shown after slot selected) -->
+        <div id="detailsSection" style="display:none">
+          <hr class="divider"/>
+
+          <label>Your name</label>
+          <input id="name" placeholder="Full name"/>
+
+          <div class="row">
+            <div>
+              <label>Phone</label>
+              <input id="phone" type="tel" placeholder="+1 (555) 000-0000"/>
+            </div>
+            <div>
+              <label>Email</label>
+              <input id="email" type="email" placeholder="you@example.com"/>
+            </div>
+          </div>
+
+          <label>Service address</label>
+          <input id="address" placeholder="123 Main St, City, ST"/>
+
+          <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--light)">(optional)</span></label>
+          <textarea id="notes" rows="3" placeholder="Gate code, pets, system info, etc."></textarea>
+
+          <button id="bookBtn" class="btn-primary">Request appointment</button>
+        </div>
+      </div>
+
+      <!-- CONTACT PANEL -->
+      <div id="contactPanel" class="tab-panel">
+        <label>Your name</label>
+        <input id="contactName" placeholder="Full name"/>
+
+        <label>Phone <span style="color:var(--brand)">*</span></label>
+        <input id="contactPhone" type="tel" placeholder="+1 (555) 000-0000"/>
+
+        <label>Email</label>
+        <input id="contactEmail" type="email" placeholder="you@example.com"/>
+
+        <label>How can we help?</label>
+        <textarea id="contactMessage" rows="4" placeholder="Describe the issue or question…"></textarea>
+
+        <button id="contactBtn" class="btn-primary">Send message</button>
+      </div>
+
+      <div id="ok"  class="msg ok"></div>
+      <div id="err" class="msg err"></div>
+    </div>
+  </div>
+
+<script>
+  const qs           = new URLSearchParams(location.search);
+  const tenant       = qs.get("tenant") || "default";
+  const reschedToken = qs.get("reschedule");
+  const isReschedule = !!reschedToken;
+  const API          = qs.get("api") || window.__API_BASE__ || "";
+  const HEADERS      = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" };
+
+  // ---- DOM ----
+  const serviceEl        = document.getElementById("service");
+  const nameEl           = document.getElementById("name");
+  const phoneEl          = document.getElementById("phone");
+  const emailEl          = document.getElementById("email");
+  const addressEl        = document.getElementById("address");
+  const notesEl          = document.getElementById("notes");
+  const okEl             = document.getElementById("ok");
+  const errEl            = document.getElementById("err");
+  const btn              = document.getElementById("bookBtn");
+  const calSectionEl     = document.getElementById("calSection");
+  const timeSectionEl    = document.getElementById("timeSection");
+  const timeLabelEl      = document.getElementById("timeLabel");
+  const slotsGridEl      = document.getElementById("slotsGrid");
+  const detailsSectionEl = document.getElementById("detailsSection");
+  const tabBookingBtn    = document.getElementById("tabBooking");
+  const tabContactBtn    = document.getElementById("tabContact");
+  const bookingPanel     = document.getElementById("bookingPanel");
+  const contactPanel     = document.getElementById("contactPanel");
+  const contactNameEl    = document.getElementById("contactName");
+  const contactPhoneEl   = document.getElementById("contactPhone");
+  const contactEmailEl   = document.getElementById("contactEmail");
+  const contactMessageEl = document.getElementById("contactMessage");
+  const contactBtn       = document.getElementById("contactBtn");
+
+  if (isReschedule) {
+    document.getElementById("pageTitle").textContent = "Reschedule appointment";
+    tabBookingBtn.textContent = "Reschedule";
+    btn.textContent = "Reschedule";
+  }
+
+  // ---- State ----
+  let bookingConfig  = null;
+  let availableSlots = [];
+  let slotsByDate    = {};  // { "2025-06-10": ["2025-06-10T09:00:00-04:00", ...] }
+  let calYear, calMonth;    // displayed month
+  let selectedDate   = null;
+  let selectedSlot   = null;
+
+  const DAY_SLUG_TO_JS = { sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6 };
+  const DOW_LABELS     = ["Mo","Tu","We","Th","Fr","Sa","Su"];
+
+  // ---- Tabs ----
+  function setActiveTab(which) {
+    const b = which === "booking";
+    tabBookingBtn.classList.toggle("active", b);
+    tabContactBtn.classList.toggle("active", !b);
+    bookingPanel.classList.toggle("active", b);
+    contactPanel.classList.toggle("active", !b);
+    okEl.style.display = errEl.style.display = "none";
+  }
+  tabBookingBtn.addEventListener("click", () => setActiveTab("booking"));
+  tabContactBtn.addEventListener("click", () => setActiveTab("contact"));
+
+  // ---- Build date → slots index ----
+  function buildSlotsByDate() {
+    slotsByDate = {};
+    for (const iso of availableSlots) {
+      const d = iso.slice(0, 10);
+      if (!slotsByDate[d]) slotsByDate[d] = [];
+      slotsByDate[d].push(iso);
+    }
+  }
+
+  // ---- Render calendar ----
+  function renderCalendar() {
+    const now      = new Date();
+    const todayStr = now.toLocaleDateString("en-CA"); // YYYY-MM-DD
+
+    const allowed = bookingConfig
+      ? new Set(bookingConfig.booking_days.map(d => DAY_SLUG_TO_JS[d]))
+      : new Set([1,2,3,4,5]);
+
+    const firstOfMonth  = new Date(calYear, calMonth, 1);
+    const daysInMonth   = new Date(calYear, calMonth + 1, 0).getDate();
+    const monthLabel    = firstOfMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    // Monday-first: Sunday=0 → index 6; Monday=1 → index 0
+    const startDow      = (firstOfMonth.getDay() + 6) % 7;
+    const isThisMonth   = calYear === now.getFullYear() && calMonth === now.getMonth();
+
+    let html = `
+      <div class="cal-nav">
+        <button class="cal-nav-btn" id="calPrev" type="button"${isThisMonth ? " disabled" : ""}>&#8249;</button>
+        <span class="cal-month">${monthLabel}</span>
+        <button class="cal-nav-btn" id="calNext" type="button">&#8250;</button>
+      </div>
+      <div class="cal-dow">${DOW_LABELS.map(l => `<span>${l}</span>`).join("")}</div>
+      <div class="cal-grid">
+    `;
+
+    for (let i = 0; i < startDow; i++) html += '<div class="day-cell"></div>';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date    = new Date(calYear, calMonth, d);
+      const dateStr = date.toLocaleDateString("en-CA");
+      const jsDay   = date.getDay();
+
+      const isPast     = dateStr < todayStr;
+      const isToday    = dateStr === todayStr;
+      const isAllowed  = allowed.has(jsDay);
+      const hasSlots   = !!(slotsByDate[dateStr]?.length);
+      const isSel      = dateStr === selectedDate;
+
+      let cls = "day-cell";
+      if (isToday) cls += " today";
+      if (isSel)   cls += " selected";
+
+      if (isPast) {
+        cls += " past";
+        html += `<div class="${cls}">${d}</div>`;
+      } else if (!isAllowed) {
+        cls += " closed";
+        html += `<div class="${cls}" title="Closed">${d}</div>`;
+      } else if (!hasSlots) {
+        cls += " full";
+        html += `<div class="${cls}" title="Fully booked">${d}</div>`;
+      } else {
+        cls += " available";
+        html += `<button class="${cls}" type="button" data-date="${dateStr}">${d}</button>`;
+      }
+    }
+
+    html += "</div>";
+    calSectionEl.innerHTML = html;
+
+    document.getElementById("calPrev").addEventListener("click", () => {
+      if (calMonth === 0) { calMonth = 11; calYear--; } else calMonth--;
+      renderCalendar();
+    });
+    document.getElementById("calNext").addEventListener("click", () => {
+      if (calMonth === 11) { calMonth = 0; calYear++; } else calMonth++;
+      renderCalendar();
+    });
+
+    calSectionEl.querySelectorAll(".day-cell.available").forEach(el =>
+      el.addEventListener("click", () => selectDate(el.dataset.date))
+    );
+  }
+
+  // ---- Select date → show time slots ----
+  function selectDate(dateStr) {
+    selectedDate = dateStr;
+    selectedSlot = null;
+    renderCalendar();
+    renderTimeSlots();
+    timeSectionEl.style.display = "block";
+    detailsSectionEl.style.display = "none";
+    okEl.style.display = errEl.style.display = "none";
+  }
+
+  // ---- Render time slot pills ----
+  function renderTimeSlots() {
+    const slots = slotsByDate[selectedDate] || [];
+    const date  = new Date(selectedDate + "T12:00:00");
+    timeLabelEl.textContent = date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+    if (!slots.length) {
+      slotsGridEl.innerHTML = '<p class="no-slots">No open times — pick another day.</p>';
+      return;
+    }
+
+    slotsGridEl.innerHTML = slots.map(iso => {
+      const label  = new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      const active = iso === selectedSlot ? " active" : "";
+      return `<button class="slot-btn${active}" type="button" data-iso="${iso}">${label}</button>`;
+    }).join("");
+
+    slotsGridEl.querySelectorAll(".slot-btn").forEach(el =>
+      el.addEventListener("click", () => selectSlot(el.dataset.iso))
+    );
+  }
+
+  // ---- Select slot → show details form ----
+  function selectSlot(isoStr) {
+    selectedSlot = isoStr;
+    renderTimeSlots();
+    detailsSectionEl.style.display = "block";
+    setTimeout(() => detailsSectionEl.scrollIntoView({ behavior: "smooth", block: "nearest" }), 40);
+  }
+
+  // ---- Load config + availability ----
+  async function init() {
+    const now = new Date();
+    calYear   = now.getFullYear();
+    calMonth  = now.getMonth();
+
+    try {
+      const [cfgRes, avaRes] = await Promise.all([
+        fetch(`${API}/public/booking-config?tenant=${encodeURIComponent(tenant)}`, { headers: HEADERS }),
+        fetch(`${API}/public/availability?tenant=${encodeURIComponent(tenant)}&days=42`, { headers: HEADERS }),
+      ]);
+
+      bookingConfig = cfgRes.ok
+        ? await cfgRes.json()
+        : { booking_days: ["mon","tue","wed","thu","fri"], booking_start: "08:00", booking_end: "17:00", slot_minutes: 60 };
+
+      const avaData  = avaRes.ok ? await avaRes.json() : {};
+      availableSlots = avaData.slots || [];
+      buildSlotsByDate();
+      renderCalendar();
+    } catch (e) {
+      console.error("[BOOKING INIT]", e);
+      calSectionEl.innerHTML = '<div class="cal-loading">Could not load availability — please refresh.</div>';
+    }
+  }
+
+  // ---- Helpers ----
+  function addMinutes(iso, mins) {
+    return new Date(new Date(iso).getTime() + mins * 60000).toISOString();
+  }
+
+  // ---- Booking submit ----
+  btn.addEventListener("click", async () => {
+    okEl.style.display = errEl.style.display = "none";
+
+    if (!selectedSlot) {
+      errEl.textContent = "Please select a time slot.";
+      errEl.style.display = "block";
+      return;
+    }
+    const name = nameEl.value.trim();
+    if (!isReschedule && !name) {
+      errEl.textContent = "Please enter your name.";
+      errEl.style.display = "block";
+      return;
+    }
+
+    const slotMins  = bookingConfig?.slot_minutes || 60;
+    const startIso  = selectedSlot;
+    const endIso    = addMinutes(startIso, slotMins);
+    const service   = serviceEl.value || "service";
+    const phone     = phoneEl.value.trim()   || null;
+    const email     = emailEl.value.trim()   || null;
+    const address   = addressEl.value.trim() || null;
+    const notes     = notesEl.value.trim()   || null;
+    const fullNotes = [
+      service ? `Service: ${service}` : "",
+      address ? `Address: ${address}` : "",
+      notes   || "",
+    ].filter(Boolean).join("\n") || null;
+
+    btn.disabled    = true;
+    btn.textContent = "Submitting…";
+    try {
+      const endpoint = isReschedule
+        ? `${API}/public/bookings/reschedule?tenant=${encodeURIComponent(tenant)}`
+        : `${API}/book?tenant=${encodeURIComponent(tenant)}`;
+      const payload = isReschedule
+        ? { token: reschedToken, starts_at_iso: startIso }
+        : { start: startIso, end: endIso, name, phone, email, notes: fullNotes };
+
+      const r        = await fetch(endpoint, { method: "POST", headers: HEADERS, body: JSON.stringify(payload) });
+      const respText = await r.text();
+      let resp; try { resp = JSON.parse(respText); } catch { resp = respText; }
+
+      if (!r.ok) {
+        if (r.status === 409) {
+          // Remove taken slot and refresh UI
+          availableSlots = availableSlots.filter(s => s !== startIso);
+          buildSlotsByDate();
+          selectedSlot = null;
+          renderCalendar();
+          renderTimeSlots();
+          detailsSectionEl.style.display = "none";
+          errEl.textContent = "That time was just taken — please pick another slot.";
+        } else {
+          errEl.textContent = resp?.detail || "Something went wrong. Please try again.";
+        }
+        errEl.style.display = "block";
+        return;
+      }
+
+      okEl.textContent  = isReschedule
+        ? "Rescheduled! You'll receive a confirmation shortly."
+        : "You're booked! We'll send a confirmation text shortly.";
+      okEl.style.display = "block";
+
+      if (!isReschedule) {
+        availableSlots = availableSlots.filter(s => s !== startIso);
+        buildSlotsByDate();
+        selectedSlot = selectedDate = null;
+        renderCalendar();
+        timeSectionEl.style.display    = "none";
+        detailsSectionEl.style.display = "none";
+        nameEl.value = phoneEl.value = emailEl.value = addressEl.value = notesEl.value = "";
+      }
+    } catch (e) {
+      errEl.textContent  = "Something went wrong. Please try again.";
+      errEl.style.display = "block";
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = isReschedule ? "Reschedule" : "Request appointment";
+    }
+  });
+
+  // ---- Contact submit ----
+  contactBtn.addEventListener("click", async () => {
+    okEl.style.display = errEl.style.display = "none";
+    const name    = contactNameEl.value.trim();
+    const phone   = contactPhoneEl.value.trim();
+    const email   = contactEmailEl.value.trim();
+    const message = contactMessageEl.value.trim();
+
+    if (!phone) {
+      errEl.textContent  = "Please enter your phone number.";
+      errEl.style.display = "block";
+      return;
+    }
+
+    contactBtn.disabled    = true;
+    contactBtn.textContent = "Sending…";
+    try {
+      const r = await fetch(`${API}/lead?tenant_key=${encodeURIComponent(tenant)}`, {
+        method: "POST",
+        headers: HEADERS,
+        body: JSON.stringify({ name: name || null, phone, email: email || null, message: message || null }),
+      });
+      const respText = await r.text();
+      let resp; try { resp = JSON.parse(respText); } catch { resp = respText; }
+      if (!r.ok) throw new Error(resp?.detail || `HTTP ${r.status}`);
+      okEl.textContent   = "Thanks! We'll be in touch soon.";
+      okEl.style.display = "block";
+      contactNameEl.value = contactPhoneEl.value = contactEmailEl.value = contactMessageEl.value = "";
+    } catch (e) {
+      errEl.textContent  = "Something went wrong. Please try again.";
+      errEl.style.display = "block";
+    } finally {
+      contactBtn.disabled    = false;
+      contactBtn.textContent = "Send message";
+    }
+  });
+
+  // ---- Boot ----
+  init();
+</script>
+</body>
+</html>
