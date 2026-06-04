@@ -43,7 +43,13 @@ def cron_reminders_run(
     session: Session = Depends(get_session),
 ):
     _require_admin_key(x_admin_key)
-    return send_reminders_all(look_back_minutes=look_back_minutes, session=session)
+    reminders_result = send_reminders_all(look_back_minutes=look_back_minutes, session=session)
+
+    # Also flush any queued review SMSes (review-queue template, sms_sent=False)
+    from app.routers.bookings import run_review_reminders
+    review_result = run_review_reminders(session=session)
+
+    return {"reminders": reminders_result, "review_queue": review_result}
 
 
 @router.post("/gcal-sync")

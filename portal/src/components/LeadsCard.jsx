@@ -169,6 +169,105 @@ function WonCell({ lead, onSave }) {
   );
 }
 
+function nextHourTime() {
+  const d = new Date();
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1);
+  return `${String(d.getHours()).padStart(2, "0")}:00`;
+}
+
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function ConvertToBookingModal({ lead, onSave, onClose }) {
+  const [date,     setDate]     = useState(todayLocal());
+  const [time,     setTime]     = useState(nextHourTime());
+  const [duration, setDuration] = useState("60");
+  const [notes,    setNotes]    = useState("");
+  const [saving,   setSaving]   = useState(false);
+  const [err,      setErr]      = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setErr("");
+    const startMs = new Date(`${date}T${time}:00`).getTime();
+    const endMs   = startMs + parseInt(duration, 10) * 60 * 1000;
+    const endDate = new Date(endMs);
+    const pad = n => String(n).padStart(2, "0");
+    const start = `${date}T${time}:00`;
+    const end   = `${endDate.getFullYear()}-${pad(endDate.getMonth()+1)}-${pad(endDate.getDate())}T${pad(endDate.getHours())}:${pad(endDate.getMinutes())}:00`;
+    try {
+      await onSave({ name: lead.name, phone: lead.phone, email: lead.email || null, notes: notes.trim() || null, start, end });
+    } catch (e) {
+      setErr(String(e.message || e));
+      setSaving(false);
+    }
+  }
+
+  const field = {
+    padding: "9px 12px", fontSize: 14, borderRadius: 8,
+    border: "1px solid rgba(255,255,255,0.12)", background: C.inputBg,
+    color: C.text, outline: "none", width: "100%",
+  };
+
+  return (
+    <div
+      onClick={e => e.target === e.currentTarget && onClose()}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
+        zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      }}
+    >
+      <div style={{
+        background: "#0f172a", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 18,
+        padding: 28, maxWidth: 480, width: "100%", display: "grid", gap: 14,
+      }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: C.text, marginBottom: 4 }}>Convert to Booking</div>
+          <div style={{ fontSize: 13, color: C.muted }}>
+            {lead.name || "—"} · {lead.phone}
+            {lead.message ? <span> · <em>{lead.message}</em></span> : null}
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...field, colorScheme: "dark" }} required />
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ ...field, colorScheme: "dark" }} required />
+          </div>
+          <select value={duration} onChange={e => setDuration(e.target.value)} style={{ ...field, cursor: "pointer" }}>
+            <option value="30">30 min</option>
+            <option value="60">1 hour</option>
+            <option value="90">1.5 hours</option>
+            <option value="120">2 hours</option>
+          </select>
+          <input placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} style={field} />
+
+          {err && <div style={{ fontSize: 12, color: "#fca5a5" }}>{err}</div>}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" onClick={onClose} style={{
+              padding: "9px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13,
+              border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: C.muted, cursor: "pointer",
+            }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} style={{
+              padding: "9px 22px", borderRadius: 8, border: "none", fontWeight: 800, fontSize: 13,
+              background: C.accent, color: "#111", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1,
+            }}>
+              {saving ? "Booking…" : "Book It"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function AddLeadForm({ onSave, onCancel }) {
   const [name, setName]       = useState("");
   const [phone, setPhone]     = useState("");
@@ -239,7 +338,8 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ col: "created_at", dir: "desc" });
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddForm, setShowAddForm]     = useState(false);
+  const [convertingLead, setConvertingLead] = useState(null);
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -284,6 +384,14 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
       await apiFetch(`/leads/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: next }) });
       setRows(prev => prev.map(r => r.id === id ? { ...r, status: next } : r));
     } catch (e) { console.error(e); }
+  }
+
+  async function convertToBooking(lead, bookingPayload) {
+    await apiFetch("/book", { method: "POST", body: JSON.stringify(bookingPayload) });
+    // mark lead as contacted so it dims in the list
+    await apiFetch(`/leads/${lead.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "contacted" }) });
+    setRows(prev => prev.map(r => r.id === lead.id ? { ...r, status: "contacted" } : r));
+    setConvertingLead(null);
   }
 
   async function addLead(payload) {
@@ -361,6 +469,14 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
 
   return (
     <div style={{ color: C.text, fontFamily: "system-ui, -apple-system, sans-serif" }}>
+
+      {convertingLead && (
+        <ConvertToBookingModal
+          lead={convertingLead}
+          onSave={(payload) => convertToBooking(convertingLead, payload)}
+          onClose={() => setConvertingLead(null)}
+        />
+      )}
 
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
@@ -468,20 +584,32 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                     <NotesCell lead={r} onSave={saveNotes} />
                   </td>
 
-                  {/* Contacted toggle */}
+                  {/* Contacted + Book */}
                   <td style={{ padding: "10px 10px", textAlign: "center" }}>
-                    <button
-                      onClick={() => toggleContacted(r.id, r.status)}
-                      style={{
-                        padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                        cursor: "pointer", border: "none", whiteSpace: "nowrap",
-                        background: contacted ? C.greenBg : "rgba(249,115,22,0.12)",
-                        color: contacted ? C.green : C.accent,
-                        transition: "all 0.15s",
-                      }}
-                    >
-                      {contacted ? "✓ Done" : "Mark Done"}
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "center" }}>
+                      <button
+                        onClick={() => toggleContacted(r.id, r.status)}
+                        style={{
+                          padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                          cursor: "pointer", border: "none", whiteSpace: "nowrap",
+                          background: contacted ? C.greenBg : "rgba(249,115,22,0.12)",
+                          color: contacted ? C.green : C.accent,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {contacted ? "✓ Done" : "Mark Done"}
+                      </button>
+                      <button
+                        onClick={() => setConvertingLead(r)}
+                        style={{
+                          padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                          cursor: "pointer", border: "none", whiteSpace: "nowrap",
+                          background: "rgba(96,165,250,0.12)", color: "#60a5fa",
+                        }}
+                      >
+                        Book
+                      </button>
+                    </div>
                   </td>
 
                   {/* Won toggle */}

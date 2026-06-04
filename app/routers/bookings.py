@@ -386,12 +386,11 @@ def list_upcoming_bookings_debug(
 @router.post("/bookings/{booking_id}/complete")
 def complete_booking(
     booking_id: int,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """
-    Mark a booking as completed and queue a review SMS to send ~2 hours later.
-    """
+    """Mark a booking as completed and send review SMS immediately in background."""
     booking = session.exec(
         select(BookingModel)
         .where(BookingModel.id == booking_id)
@@ -403,22 +402,22 @@ def complete_booking(
 
     booking.completed_at = datetime.now(timezone.utc)
     session.add(booking)
-
-    if booking.phone:
-        reminder = ReminderSent(
-            phone=booking.phone,
-            name=booking.name,
-            booking_start=booking.start,
-            booking_end=booking.end,
-            message=None,
-            template="review-queue",
-            source="booking-complete",
-            sms_sent=False,
-            tenant_id=tenant_id,
-        )
-        session.add(reminder)
-
     session.commit()
+
+    # Fire review SMS in background — no queue delay, no cron dependency
+    if booking.phone:
+        tenant_tz = get_tenant_tz(tenant_id, session)
+        starts_at = booking.start
+        if starts_at and starts_at.tzinfo is None:
+            starts_at = starts_at.replace(tzinfo=timezone.utc)
+        starts_iso = starts_at.astimezone(tenant_tz).isoformat() if starts_at else ""
+
+        background_tasks.add_task(
+            booking_reminder_sms,
+            tenant_id,
+            {"name": booking.name or "there", "phone": booking.phone, "service": "appointment", "starts_at_iso": starts_iso},
+            "review",
+        )
 
     return {"ok": True, "booking_id": booking_id, "tenant_id": tenant_id}
 
