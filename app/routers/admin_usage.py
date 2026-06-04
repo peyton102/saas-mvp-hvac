@@ -110,7 +110,7 @@ def get_usage(
             )
         ).one()
 
-        # ---- jobs won (30d) ----
+        # ---- jobs won (30d) — leads marked won ----
         jobs_won_30d = session.exec(
             select(func.count(Lead.id)).where(
                 Lead.tenant_id == slug,
@@ -119,13 +119,25 @@ def get_usage(
             )
         ).one() or 0
 
-        revenue_30d = session.exec(
+        lead_rev_30d = session.exec(
             select(func.coalesce(func.sum(Lead.job_value), 0)).where(
                 Lead.tenant_id == slug,
                 Lead.job_won == True,  # noqa: E712
                 Lead.created_at >= cutoff_30d,
             )
         ).one() or 0.0
+
+        # ---- booking revenue (30d) — completed bookings with job_value ----
+        booking_rev_30d = session.exec(
+            select(func.coalesce(func.sum(Booking.job_value), 0)).where(
+                Booking.tenant_id == slug,
+                Booking.job_value.isnot(None),
+                Booking.created_at >= cutoff_30d,
+                Booking.completed_at.isnot(None),
+            )
+        ).one() or 0.0
+
+        revenue_30d = float(lead_rev_30d) + float(booking_rev_30d)
 
         # ---- last active: latest created_at across all four tables ----
         candidates: List[Optional[datetime]] = []

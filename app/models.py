@@ -44,6 +44,7 @@ class Booking(SQLModel, table=True):
     tenant_id: str = Field(default="public", index=True)  # <-- keep "public"
     completed_at: Optional[datetime] = Field(default=None, index=True)
     gcal_event_id: Optional[str] = Field(default=None, index=True)  # dedup key for GCal imports
+    job_value: Optional[float] = Field(default=None)
 
 class Review(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

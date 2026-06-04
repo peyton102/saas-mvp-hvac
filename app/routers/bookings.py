@@ -4,7 +4,7 @@ from typing import Optional, List
 
 from dateutil import parser as dtparse
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 from zoneinfo import ZoneInfo  # 👈 add this
@@ -42,6 +42,10 @@ class BookOut(BaseModel):
     event_id: Optional[str] = None
     sms_sent: Optional[bool] = None
     email_sent: Optional[bool] = None
+
+
+class CompleteIn(BaseModel):
+    job_value: Optional[float] = None
 
 
 # ===== Helpers =====
@@ -238,6 +242,7 @@ def list_upcoming_bookings(
             "end": _to_tenant_tz(r.end),
             "created_at": _to_tenant_tz(getattr(r, "created_at", None)),
             "completed_at": _to_tenant_tz(getattr(r, "completed_at", None)),
+            "job_value": r.job_value,
         })
 
     return out
@@ -387,10 +392,11 @@ def list_upcoming_bookings_debug(
 def complete_booking(
     booking_id: int,
     background_tasks: BackgroundTasks,
+    payload: CompleteIn = Body(default=CompleteIn()),
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Mark a booking as completed and send review SMS immediately in background."""
+    """Mark a booking as completed, optionally recording job revenue, and send review SMS."""
     booking = session.exec(
         select(BookingModel)
         .where(BookingModel.id == booking_id)
@@ -401,6 +407,8 @@ def complete_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
 
     booking.completed_at = datetime.now(timezone.utc)
+    if payload.job_value is not None:
+        booking.job_value = float(payload.job_value)
     session.add(booking)
     session.commit()
 

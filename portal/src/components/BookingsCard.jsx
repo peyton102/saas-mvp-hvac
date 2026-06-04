@@ -51,6 +51,7 @@ function normalizeRow(r, i) {
     starts_at:  r.start || r.starts_at || r.starts_at_iso || null,
     created_at: r.created_at || null,
     completed:  Boolean(r.completed_at || r.completed),
+    job_value:  r.job_value ?? null,
   };
 }
 
@@ -257,8 +258,10 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
   const [loading,     setLoading]     = useState(false);
   const [search,      setSearch]      = useState("");
   const [sort,        setSort]        = useState({ col: "starts_at", dir: "asc" });
-  const [showAll,     setShowAll]     = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAll,       setShowAll]       = useState(false);
+  const [showAddForm,   setShowAddForm]   = useState(false);
+  const [confirmingId,  setConfirmingId]  = useState(null);
+  const [jobValueDraft, setJobValueDraft] = useState("");
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -310,10 +313,13 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
     loadBookings();
   }
 
-  async function markDone(id) {
+  async function markDone(id, jobValue) {
     try {
-      await apiFetch(`/bookings/${id}/complete`, { method: "POST" });
-      setRows(prev => prev.map(b => b.id === id ? { ...b, completed: true } : b));
+      const val = jobValue !== "" && jobValue != null ? parseFloat(jobValue) : null;
+      const body = val != null && !isNaN(val) ? { job_value: val } : {};
+      await apiFetch(`/bookings/${id}/complete`, { method: "POST", body: JSON.stringify(body) });
+      setRows(prev => prev.map(b => b.id === id ? { ...b, completed: true, job_value: val } : b));
+      setConfirmingId(null);
     } catch (err) {
       console.error("[BookingsCard] markDone error:", err);
     }
@@ -566,31 +572,78 @@ export default function BookingsCard({ tenantKey, apiBase, commonHeaders }) {
                 </td>
 
                 {/* Actions */}
-                <td style={{ padding: "10px 10px", whiteSpace: "nowrap" }}>
-                  {!b.completed && (
-                    <button
-                      onClick={() => markDone(b.id)}
-                      style={{
-                        padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                        cursor: "pointer", border: "none", marginRight: 6,
-                        background: "rgba(249,115,22,0.12)", color: C.accent,
-                        transition: "all 0.15s",
-                      }}
-                    >
-                      Mark Done
-                    </button>
+                <td style={{ padding: "10px 10px" }}>
+                  {!b.completed && confirmingId === b.id ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
+                      <span style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>$</span>
+                      <input
+                        autoFocus
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        value={jobValueDraft}
+                        onChange={e => setJobValueDraft(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") markDone(b.id, jobValueDraft);
+                          if (e.key === "Escape") setConfirmingId(null);
+                        }}
+                        style={{
+                          width: 68, padding: "4px 6px", borderRadius: 6, fontSize: 12,
+                          border: "1px solid rgba(255,255,255,0.15)", background: C.inputBg,
+                          color: C.text, outline: "none",
+                        }}
+                      />
+                      <button
+                        onClick={() => markDone(b.id, jobValueDraft)}
+                        style={{
+                          padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 800,
+                          border: "none", background: "rgba(74,222,128,0.15)", color: C.green,
+                          cursor: "pointer", flexShrink: 0,
+                        }}
+                      >Done</button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        style={{
+                          padding: "4px 6px", borderRadius: 6, fontSize: 11,
+                          border: "none", background: "transparent", color: C.muted,
+                          cursor: "pointer", flexShrink: 0,
+                        }}
+                      >✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                      {!b.completed && (
+                        <button
+                          onClick={() => { setConfirmingId(b.id); setJobValueDraft(""); }}
+                          style={{
+                            padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                            cursor: "pointer", border: "none",
+                            background: "rgba(249,115,22,0.12)", color: C.accent,
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          Mark Done
+                        </button>
+                      )}
+                      {b.completed && b.job_value != null && (
+                        <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>
+                          ${Number(b.job_value).toLocaleString()}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => deleteBooking(b.id)}
+                        style={{
+                          padding: "5px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                          cursor: "pointer", border: "none",
+                          background: "rgba(239,68,68,0.1)", color: "rgba(239,68,68,0.65)",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   )}
-                  <button
-                    onClick={() => deleteBooking(b.id)}
-                    style={{
-                      padding: "5px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                      cursor: "pointer", border: "none",
-                      background: "rgba(239,68,68,0.1)", color: "rgba(239,68,68,0.65)",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    ✕
-                  </button>
                 </td>
               </tr>
             ))}
