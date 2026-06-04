@@ -11,6 +11,7 @@
       --brand:        #f97316;
       --brand-dark:   #ea6c0a;
       --brand-light:  rgba(249,115,22,.10);
+      --brand-mid:    rgba(249,115,22,.18);
       --text:         #111827;
       --muted:        #6b7280;
       --light:        #9ca3af;
@@ -28,37 +29,54 @@
     body {
       font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
       margin: 0;
-      padding: 32px 16px 56px;
+      padding: 32px 16px 64px;
       background: var(--bg);
       color: var(--text);
       -webkit-font-smoothing: antialiased;
     }
 
     .card {
-      max-width: 560px;
+      max-width: 540px;
       margin: 0 auto;
       background: var(--card);
       border-radius: 20px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.07);
+      box-shadow: 0 2px 8px rgba(0,0,0,.06), 0 16px 48px rgba(0,0,0,.09);
       overflow: hidden;
     }
 
+    /* Top accent bar */
+    .card-accent {
+      height: 4px;
+      background: linear-gradient(90deg, var(--brand) 0%, #fb923c 100%);
+    }
+
     .card-header {
-      padding: 28px 28px 22px;
+      padding: 26px 28px 20px;
       border-bottom: 1.5px solid var(--border);
     }
 
-    .card-header h1 { font-size: 22px; font-weight: 800; margin: 0 0 4px; }
+    .card-header h1 {
+      font-size: 21px;
+      font-weight: 800;
+      margin: 0 0 3px;
+      color: var(--text);
+      letter-spacing: -.01em;
+    }
     .card-header .subtitle { font-size: 13px; color: var(--muted); margin: 0; }
 
-    .card-body { padding: 24px 28px 32px; }
+    .card-body { padding: 22px 28px 32px; }
 
     /* TABS */
-    .tabs { display: flex; border-bottom: 1.5px solid var(--border); margin-bottom: 24px; }
+    .tabs {
+      display: flex;
+      border-bottom: 1.5px solid var(--border);
+      margin-bottom: 22px;
+      gap: 2px;
+    }
 
     .tab-btn {
       flex: 1;
-      padding: 11px 10px;
+      padding: 10px 10px;
       border: none;
       border-bottom: 2.5px solid transparent;
       background: transparent;
@@ -83,8 +101,8 @@
       font-weight: 700;
       color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: .06em;
-      margin: 20px 0 8px;
+      letter-spacing: .07em;
+      margin: 18px 0 7px;
     }
 
     /* INPUTS */
@@ -103,11 +121,11 @@
 
     input:focus, textarea:focus, select:focus {
       border-color: var(--brand);
-      box-shadow: 0 0 0 3px rgba(249,115,22,.12);
+      box-shadow: 0 0 0 3px rgba(249,115,22,.10);
     }
 
     input::placeholder, textarea::placeholder { color: var(--light); }
-    textarea { resize: vertical; min-height: 84px; }
+    textarea { resize: vertical; min-height: 80px; }
 
     select {
       appearance: none;
@@ -120,19 +138,19 @@
     }
 
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .divider { border: none; border-top: 1.5px solid var(--border); margin: 24px 0 0; }
+    .divider { border: none; border-top: 1.5px solid var(--border); margin: 22px 0 0; }
 
     /* ===== CALENDAR ===== */
     .cal-nav {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
 
     .cal-nav-btn {
-      width: 36px;
-      height: 36px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
       border: 1.5px solid var(--border);
       background: var(--card);
@@ -143,35 +161,39 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: border-color .12s, color .12s;
+      transition: border-color .12s, color .12s, background .12s;
       font-family: inherit;
     }
 
-    .cal-nav-btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
-    .cal-nav-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .cal-nav-btn:hover:not(:disabled) {
+      border-color: var(--brand);
+      color: var(--brand);
+      background: var(--brand-light);
+    }
+    .cal-nav-btn:disabled { opacity: .3; cursor: not-allowed; }
 
-    .cal-month { font-size: 15px; font-weight: 700; }
+    .cal-month { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
 
     .cal-dow {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .cal-dow span {
       text-align: center;
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       color: var(--light);
       text-transform: uppercase;
-      letter-spacing: .05em;
-      padding: 4px 0;
+      letter-spacing: .06em;
+      padding: 3px 0;
     }
 
     .cal-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      gap: 4px;
+      gap: 3px;
     }
 
     .day-cell {
@@ -188,26 +210,32 @@
       position: relative;
     }
 
-    .day-cell.past    { color: var(--light); }
-    .day-cell.closed  { color: #d1d5db; text-decoration: line-through; }
-    .day-cell.full    { color: var(--light); background: #f9fafb; }
+    .day-cell.past    { color: #d1d5db; }
+    .day-cell.closed  { color: #e5e7eb; }
+    .day-cell.full    { color: #d1d5db; }
 
     .day-cell.available {
       background: #f9fafb;
       color: var(--text);
       font-weight: 600;
       cursor: pointer;
-      transition: background .1s, color .1s;
+      transition: background .1s, color .1s, transform .08s;
     }
 
     .day-cell.available:hover {
-      background: var(--brand-light);
+      background: var(--brand-mid);
       color: var(--brand);
+      transform: scale(1.08);
     }
 
     .day-cell.selected {
       background: var(--brand) !important;
       color: #fff !important;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(249,115,22,.35);
+    }
+
+    .day-cell.today {
       font-weight: 700;
     }
 
@@ -223,62 +251,89 @@
       background: var(--brand);
     }
 
-    .day-cell.selected.today::after { background: rgba(255,255,255,.7); }
+    .day-cell.selected.today::after { background: rgba(255,255,255,.65); }
 
     .cal-loading {
       text-align: center;
-      padding: 40px 0;
+      padding: 36px 0;
       color: var(--muted);
       font-size: 13px;
     }
 
     /* ===== TIME SLOTS ===== */
     .time-section {
-      margin-top: 22px;
-      padding-top: 20px;
+      margin-top: 20px;
+      padding-top: 18px;
       border-top: 1.5px solid var(--border);
+      animation: fadeIn .18s ease;
     }
 
     .time-label {
       font-size: 14px;
       font-weight: 700;
       margin-bottom: 12px;
+      color: var(--text);
     }
 
     .slots-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px;
     }
 
     .slot-btn {
-      padding: 11px 6px;
-      border-radius: 10px;
+      padding: 10px 4px;
+      border-radius: 9px;
       border: 1.5px solid var(--border);
       background: var(--card);
       color: var(--text);
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 600;
       cursor: pointer;
-      transition: border-color .1s, background .1s, color .1s;
+      transition: border-color .1s, background .1s, color .1s, transform .08s;
       font-family: inherit;
+      text-align: center;
     }
 
-    .slot-btn:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-light); }
+    .slot-btn:hover {
+      border-color: var(--brand);
+      color: var(--brand);
+      background: var(--brand-light);
+      transform: translateY(-1px);
+    }
 
     .slot-btn.active {
       background: var(--brand);
       border-color: var(--brand);
       color: #fff;
+      box-shadow: 0 2px 6px rgba(249,115,22,.30);
     }
 
     .no-slots { font-size: 13px; color: var(--muted); margin: 0; }
+
+    /* ===== SELECTED SLOT SUMMARY ===== */
+    .slot-summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--brand-light);
+      border: 1.5px solid rgba(249,115,22,.25);
+      border-radius: 10px;
+      padding: 11px 14px;
+      margin-top: 18px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--brand-dark);
+      animation: fadeIn .18s ease;
+    }
+
+    .slot-summary-icon { font-size: 16px; }
 
     /* ===== BUTTON ===== */
     .btn-primary {
       display: block;
       width: 100%;
-      margin-top: 22px;
+      margin-top: 20px;
       padding: 13px;
       border: none;
       border-radius: 10px;
@@ -288,13 +343,16 @@
       font-weight: 700;
       letter-spacing: .01em;
       cursor: pointer;
-      transition: background .15s, transform .08s;
+      transition: background .15s, transform .08s, box-shadow .15s;
       font-family: inherit;
     }
 
-    .btn-primary:hover:not(:disabled)  { background: var(--brand-dark); }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--brand-dark);
+      box-shadow: 0 4px 14px rgba(249,115,22,.35);
+    }
     .btn-primary:active:not(:disabled) { transform: scale(.99); }
-    .btn-primary:disabled { background: #fdba8c; cursor: not-allowed; transform: none; }
+    .btn-primary:disabled { background: #fdba8c; cursor: not-allowed; }
 
     /* ===== MESSAGES ===== */
     .msg {
@@ -303,23 +361,27 @@
       border-radius: 10px;
       font-size: 13px;
       font-weight: 600;
-      margin-top: 18px;
+      margin-top: 16px;
       line-height: 1.5;
     }
 
     .ok  { background: var(--ok-bg);  color: var(--ok-text);  border: 1px solid var(--ok-border); }
     .err { background: var(--err-bg); color: var(--err-text); border: 1px solid var(--err-border); }
 
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
     @media (max-width: 480px) {
-      body { padding: 16px 12px 48px; }
+      body { padding: 0 0 48px; }
+      .card { border-radius: 0; box-shadow: none; min-height: 100dvh; }
       .card-header, .card-body { padding-left: 20px; padding-right: 20px; }
       .row { grid-template-columns: 1fr; gap: 0; }
-      .slots-grid { grid-template-columns: repeat(2, 1fr); }
+      .slots-grid { grid-template-columns: repeat(3, 1fr); }
     }
   </style>
 </head>
 <body>
   <div class="card">
+    <div class="card-accent"></div>
     <div class="card-header">
       <h1 id="pageTitle">Book an appointment</h1>
       <p class="subtitle">Pick a day and time — we'll confirm by text.</p>
@@ -353,6 +415,12 @@
         <div id="timeSection" class="time-section" style="display:none">
           <div id="timeLabel" class="time-label"></div>
           <div id="slotsGrid" class="slots-grid"></div>
+        </div>
+
+        <!-- Selected slot summary -->
+        <div id="slotSummary" style="display:none" class="slot-summary">
+          <span class="slot-summary-icon">&#128197;</span>
+          <span id="slotSummaryText"></span>
         </div>
 
         <!-- Details (shown after slot selected) -->
@@ -427,6 +495,8 @@
   const timeSectionEl    = document.getElementById("timeSection");
   const timeLabelEl      = document.getElementById("timeLabel");
   const slotsGridEl      = document.getElementById("slotsGrid");
+  const slotSummaryEl    = document.getElementById("slotSummary");
+  const slotSummaryText  = document.getElementById("slotSummaryText");
   const detailsSectionEl = document.getElementById("detailsSection");
   const tabBookingBtn    = document.getElementById("tabBooking");
   const tabContactBtn    = document.getElementById("tabContact");
@@ -447,8 +517,8 @@
   // ---- State ----
   let bookingConfig  = null;
   let availableSlots = [];
-  let slotsByDate    = {};  // { "2025-06-10": ["2025-06-10T09:00:00-04:00", ...] }
-  let calYear, calMonth;    // displayed month
+  let slotsByDate    = {};
+  let calYear, calMonth;
   let selectedDate   = null;
   let selectedSlot   = null;
 
@@ -480,18 +550,17 @@
   // ---- Render calendar ----
   function renderCalendar() {
     const now      = new Date();
-    const todayStr = now.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const todayStr = now.toLocaleDateString("en-CA");
 
     const allowed = bookingConfig
       ? new Set(bookingConfig.booking_days.map(d => DAY_SLUG_TO_JS[d]))
       : new Set([1,2,3,4,5]);
 
-    const firstOfMonth  = new Date(calYear, calMonth, 1);
-    const daysInMonth   = new Date(calYear, calMonth + 1, 0).getDate();
-    const monthLabel    = firstOfMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    // Monday-first: Sunday=0 → index 6; Monday=1 → index 0
-    const startDow      = (firstOfMonth.getDay() + 6) % 7;
-    const isThisMonth   = calYear === now.getFullYear() && calMonth === now.getMonth();
+    const firstOfMonth = new Date(calYear, calMonth, 1);
+    const daysInMonth  = new Date(calYear, calMonth + 1, 0).getDate();
+    const monthLabel   = firstOfMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const startDow     = (firstOfMonth.getDay() + 6) % 7;
+    const isThisMonth  = calYear === now.getFullYear() && calMonth === now.getMonth();
 
     let html = `
       <div class="cal-nav">
@@ -510,11 +579,11 @@
       const dateStr = date.toLocaleDateString("en-CA");
       const jsDay   = date.getDay();
 
-      const isPast     = dateStr < todayStr;
-      const isToday    = dateStr === todayStr;
-      const isAllowed  = allowed.has(jsDay);
-      const hasSlots   = !!(slotsByDate[dateStr]?.length);
-      const isSel      = dateStr === selectedDate;
+      const isPast    = dateStr < todayStr;
+      const isToday   = dateStr === todayStr;
+      const isAllowed = allowed.has(jsDay);
+      const hasSlots  = !!(slotsByDate[dateStr]?.length);
+      const isSel     = dateStr === selectedDate;
 
       let cls = "day-cell";
       if (isToday) cls += " today";
@@ -525,7 +594,7 @@
         html += `<div class="${cls}">${d}</div>`;
       } else if (!isAllowed) {
         cls += " closed";
-        html += `<div class="${cls}" title="Closed">${d}</div>`;
+        html += `<div class="${cls}">${d}</div>`;
       } else if (!hasSlots) {
         cls += " full";
         html += `<div class="${cls}" title="Fully booked">${d}</div>`;
@@ -556,6 +625,7 @@
   function selectDate(dateStr) {
     selectedDate = dateStr;
     selectedSlot = null;
+    slotSummaryEl.style.display = "none";
     renderCalendar();
     renderTimeSlots();
     timeSectionEl.style.display = "block";
@@ -589,6 +659,14 @@
   function selectSlot(isoStr) {
     selectedSlot = isoStr;
     renderTimeSlots();
+
+    const label = new Date(isoStr).toLocaleString("en-US", {
+      weekday: "short", month: "short", day: "numeric",
+      hour: "numeric", minute: "2-digit",
+    });
+    slotSummaryText.textContent = label;
+    slotSummaryEl.style.display = "flex";
+
     detailsSectionEl.style.display = "block";
     setTimeout(() => detailsSectionEl.scrollIntoView({ behavior: "smooth", block: "nearest" }), 40);
   }
@@ -619,7 +697,6 @@
     }
   }
 
-  // ---- Helpers ----
   function addMinutes(iso, mins) {
     return new Date(new Date(iso).getTime() + mins * 60000).toISOString();
   }
@@ -670,10 +747,10 @@
 
       if (!r.ok) {
         if (r.status === 409) {
-          // Remove taken slot and refresh UI
           availableSlots = availableSlots.filter(s => s !== startIso);
           buildSlotsByDate();
           selectedSlot = null;
+          slotSummaryEl.style.display = "none";
           renderCalendar();
           renderTimeSlots();
           detailsSectionEl.style.display = "none";
@@ -685,7 +762,7 @@
         return;
       }
 
-      okEl.textContent  = isReschedule
+      okEl.textContent   = isReschedule
         ? "Rescheduled! You'll receive a confirmation shortly."
         : "You're booked! We'll send a confirmation text shortly.";
       okEl.style.display = "block";
@@ -694,13 +771,14 @@
         availableSlots = availableSlots.filter(s => s !== startIso);
         buildSlotsByDate();
         selectedSlot = selectedDate = null;
+        slotSummaryEl.style.display = "none";
         renderCalendar();
         timeSectionEl.style.display    = "none";
         detailsSectionEl.style.display = "none";
         nameEl.value = phoneEl.value = emailEl.value = addressEl.value = notesEl.value = "";
       }
     } catch (e) {
-      errEl.textContent  = "Something went wrong. Please try again.";
+      errEl.textContent   = "Something went wrong. Please try again.";
       errEl.style.display = "block";
     } finally {
       btn.disabled    = false;
@@ -717,7 +795,7 @@
     const message = contactMessageEl.value.trim();
 
     if (!phone) {
-      errEl.textContent  = "Please enter your phone number.";
+      errEl.textContent   = "Please enter your phone number.";
       errEl.style.display = "block";
       return;
     }
@@ -737,7 +815,7 @@
       okEl.style.display = "block";
       contactNameEl.value = contactPhoneEl.value = contactEmailEl.value = contactMessageEl.value = "";
     } catch (e) {
-      errEl.textContent  = "Something went wrong. Please try again.";
+      errEl.textContent   = "Something went wrong. Please try again.";
       errEl.style.display = "block";
     } finally {
       contactBtn.disabled    = false;
@@ -745,7 +823,6 @@
     }
   });
 
-  // ---- Boot ----
   init();
 </script>
 </body>

@@ -35,8 +35,8 @@ function timeOptions(startH, endH) {
   return opts;
 }
 
-const START_OPTIONS = timeOptions(5, 13);
-const END_OPTIONS   = timeOptions(10, 21);
+const START_OPTIONS = timeOptions(0, 23);
+const END_OPTIONS   = timeOptions(0, 23);
 
 const card = {
   border: "1px solid rgba(255,255,255,0.10)",
@@ -188,7 +188,35 @@ export default function BookingAvailabilityCard({ apiBase, commonHeaders, tenant
 
         {/* Days */}
         <div>
-          <div style={sectionLabel}>Available Days</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={sectionLabel}>Available Days</div>
+            <button
+              type="button"
+              onClick={() => {
+                setDays(["sun","mon","tue","wed","thu","fri","sat"]);
+                setStartTime("00:00");
+                setEndTime("23:30");
+              }}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 8,
+                border: days.length === 7 && startTime === "00:00" && endTime === "23:30"
+                  ? "1px solid rgba(249,115,22,0.6)"
+                  : "1px solid rgba(255,255,255,0.15)",
+                background: days.length === 7 && startTime === "00:00" && endTime === "23:30"
+                  ? "rgba(249,115,22,0.15)"
+                  : "rgba(255,255,255,0.06)",
+                color: days.length === 7 && startTime === "00:00" && endTime === "23:30"
+                  ? "#f97316"
+                  : "rgba(229,231,235,0.55)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              24 / 7
+            </button>
+          </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {DAYS.map(({ slug, label }) => (
               <button
