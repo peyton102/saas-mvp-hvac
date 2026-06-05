@@ -66,7 +66,6 @@ export default function TenantSettingsCard({
     review_google_url: "",
     email: "",
     phone: "",
-    twilio_number: "",
   });
 
   const isSettingsComplete = useMemo(() => {
@@ -112,7 +111,6 @@ export default function TenantSettingsCard({
           review_google_url: data.review_google_url ?? "",
           email:            data.email            ?? "",
           phone:            data.phone            ?? "",
-          twilio_number:    data.twilio_number    ?? "",
         };
 
         const raw = (loaded.booking_link || "").trim();
@@ -228,16 +226,6 @@ export default function TenantSettingsCard({
           hint={computedBookingLink ? `Auto-generated: ${computedBookingLink}` : ""}
         >
           <input type="url" style={inputStyle} {...bind("booking_link")} />
-        </Field>
-
-        <div style={divider} />
-
-        {/* Integrations */}
-        <Field
-          label="Vapi Phone Number ID"
-          hint="Found in Vapi dashboard → Phone Numbers → your number → ID"
-        >
-          <input type="text" style={inputStyle} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" {...bind("twilio_number")} />
         </Field>
 
         {/* Feedback */}
