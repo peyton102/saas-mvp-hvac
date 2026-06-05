@@ -114,6 +114,19 @@ def create_invite(
     return InviteCreateResponse(code=code, created_at=created_at, expires_at=expires_at, note=note)
 
 
+@router.post("/set-admin/{slug}")
+def set_tenant_admin(
+    slug: str,
+    session: Session = Depends(get_session),
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+):
+    """Temporary endpoint — set is_admin=true for a tenant slug."""
+    _require_admin(x_admin_key)
+    session.exec(text("UPDATE tenant SET is_admin = TRUE WHERE slug = :slug").bindparams(slug=slug))
+    session.commit()
+    return {"ok": True, "slug": slug, "is_admin": True}
+
+
 @router.get("/list")
 def list_invites(
     session: Session = Depends(get_session),
