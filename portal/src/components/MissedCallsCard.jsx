@@ -107,6 +107,7 @@ export default function MissedCallsCard({ apiBase, commonHeaders }) {
             return (
               <div
                 key={call.id}
+                className="calls-card-row"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr 1fr auto",
@@ -131,12 +132,13 @@ export default function MissedCallsCard({ apiBase, commonHeaders }) {
                 </div>
 
                 {/* Time */}
-                <div style={{ fontSize: 13, color: "rgba(229,231,235,0.6)" }}>
+                <div className="calls-card-time" style={{ fontSize: 13, color: "rgba(229,231,235,0.6)" }}>
                   {fmt(call.created_at)}
                 </div>
 
                 {/* Status badge */}
                 <div
+                  className="calls-card-status"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -153,7 +155,7 @@ export default function MissedCallsCard({ apiBase, commonHeaders }) {
                 </div>
 
                 {/* Actions */}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <div className="calls-card-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <a
                     href={`tel:${call.phone}`}
                     style={{

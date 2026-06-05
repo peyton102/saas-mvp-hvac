@@ -38,6 +38,38 @@ const backBtn = {
   cursor: "pointer",
 };
 
+const DAYS = [
+  { slug: "mon", label: "Mon" },
+  { slug: "tue", label: "Tue" },
+  { slug: "wed", label: "Wed" },
+  { slug: "thu", label: "Thu" },
+  { slug: "fri", label: "Fri" },
+  { slug: "sat", label: "Sat" },
+  { slug: "sun", label: "Sun" },
+];
+
+// Generate HH:MM options from startH to endH inclusive, every 30 min
+function timeOptions(startH = 5, endH = 21) {
+  const opts = [];
+  for (let h = startH; h <= endH; h++) {
+    for (const m of [0, 30]) {
+      if (h === endH && m > 0) break;
+      const hh = String(h).padStart(2, "0");
+      const mm = String(m).padStart(2, "0");
+      const val = `${hh}:${mm}`;
+      const label = new Date(`1970-01-01T${val}:00`).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      opts.push({ val, label });
+    }
+  }
+  return opts;
+}
+
+const START_OPTIONS = timeOptions(5, 13);
+const END_OPTIONS   = timeOptions(10, 21);
+
 function EyeIcon({ open }) {
   return open ? (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -88,19 +120,221 @@ function PasswordInput({ placeholder, value, onChange, autoComplete, show, onTog
   );
 }
 
+// ---- Step 2: availability picker ----
+function AvailabilityStep({ signupData, onDone }) {
+  const [selectedDays, setSelectedDays] = useState(["mon", "tue", "wed", "thu", "fri"]);
+  const [startTime, setStartTime]       = useState("08:00");
+  const [endTime, setEndTime]           = useState("17:00");
+  const [slotMinutes, setSlotMinutes]   = useState(60);
+  const [saving, setSaving]             = useState(false);
+  const [err, setErr]                   = useState("");
+
+  function toggleDay(slug) {
+    setSelectedDays((prev) =>
+      prev.includes(slug) ? prev.filter((d) => d !== slug) : [...prev, slug]
+    );
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    setErr("");
+    if (selectedDays.length === 0) return setErr("Select at least one day.");
+    if (startTime >= endTime) return setErr("End time must be after start time.");
+
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/tenant/booking-config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${signupData.access_token}`,
+        },
+        body: JSON.stringify({
+          booking_days: selectedDays,
+          booking_start: startTime,
+          booking_end: endTime,
+          slot_minutes: slotMinutes,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data?.detail || "Failed to save availability.");
+        return;
+      }
+      onDone();
+    } catch {
+      setErr("Network error. Your account was created — you can update availability in Settings.");
+      setTimeout(onDone, 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectStyle = {
+    ...inputStyle,
+    fontSize: 16,
+    padding: "14px 16px",
+    cursor: "pointer",
+  };
+
+  return (
+    <div style={{ width: "min(720px, 92vw)", display: "grid", gap: 14 }}>
+      <div>
+        <div style={{ fontSize: 13, color: "#f97316", fontWeight: 700, marginBottom: 6 }}>
+          STEP 2 OF 2
+        </div>
+        <h1 style={{ fontSize: 38, margin: 0, color: "#e5e7eb", fontWeight: 900 }}>
+          Set Your Availability
+        </h1>
+        <p style={{ marginTop: 8, color: "rgba(229,231,235,0.65)", fontSize: 15 }}>
+          Customers will only be able to book during these hours.
+          You can change this anytime in Settings.
+        </p>
+      </div>
+
+      <form onSubmit={save} style={{ display: "grid", gap: 20 }}>
+
+        {/* Day picker */}
+        <div>
+          <div style={{ fontSize: 13, color: "rgba(229,231,235,0.55)", marginBottom: 10, fontWeight: 600 }}>
+            Available Days
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {DAYS.map(({ slug, label }) => {
+              const active = selectedDays.includes(slug);
+              return (
+                <button
+                  key={slug}
+                  type="button"
+                  onClick={() => toggleDay(slug)}
+                  style={{
+                    padding: "12px 18px",
+                    borderRadius: 12,
+                    border: active ? "2px solid #f97316" : "2px solid rgba(255,255,255,0.15)",
+                    background: active ? "rgba(249,115,22,0.18)" : "rgba(255,255,255,0.07)",
+                    color: active ? "#f97316" : "rgba(229,231,235,0.65)",
+                    fontSize: 15,
+                    fontWeight: active ? 900 : 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Hours */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.55)", marginBottom: 8, fontWeight: 600 }}>
+              Start Time
+            </div>
+            <select
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              style={selectStyle}
+            >
+              {START_OPTIONS.map(({ val, label }) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.55)", marginBottom: 8, fontWeight: 600 }}>
+              End Time
+            </div>
+            <select
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              style={selectStyle}
+            >
+              {END_OPTIONS.map(({ val, label }) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Slot length */}
+        <div>
+          <div style={{ fontSize: 13, color: "rgba(229,231,235,0.55)", marginBottom: 8, fontWeight: 600 }}>
+            Appointment Length
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[30, 60, 90, 120].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setSlotMinutes(m)}
+                style={{
+                  flex: 1,
+                  padding: "14px 10px",
+                  borderRadius: 12,
+                  border: slotMinutes === m ? "2px solid #f97316" : "2px solid rgba(255,255,255,0.15)",
+                  background: slotMinutes === m ? "rgba(249,115,22,0.18)" : "rgba(255,255,255,0.07)",
+                  color: slotMinutes === m ? "#f97316" : "rgba(229,231,235,0.65)",
+                  fontSize: 14,
+                  fontWeight: slotMinutes === m ? 900 : 500,
+                  cursor: "pointer",
+                }}
+              >
+                {m < 60 ? `${m} min` : `${m / 60}h`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {err && (
+          <div style={{ fontSize: 14, color: "#fecaca", fontWeight: 700 }}>{err}</div>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          style={{ ...primaryBtn, opacity: saving ? 0.75 : 1, cursor: saving ? "not-allowed" : "pointer" }}
+        >
+          {saving ? "Saving…" : "Save & Enter Dashboard"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onDone}
+          style={{
+            width: "100%",
+            padding: "14px",
+            fontSize: 15,
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "transparent",
+            color: "rgba(229,231,235,0.5)",
+            cursor: "pointer",
+          }}
+        >
+          Skip for now — set this up in Settings
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ---- Main signup page ----
 export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "", initialEmail = "" }) {
-  const [inviteCode, setInviteCode] = useState(initialCode);
+  const [step, setStep]           = useState(1);
+  const [signupData, setSignupData] = useState(null);
+
+  const [inviteCode, setInviteCode]   = useState(initialCode);
   const [businessName, setBusinessName] = useState("");
-  const [email, setEmail] = useState(initialEmail);
-  const [password, setPassword] = useState("");
+  const [email, setEmail]             = useState(initialEmail);
+  const [password, setPassword]       = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
-  const [phone, setPhone] = useState("");
-  const [reviewLink, setReviewLink] = useState("");
-
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
+  const [phone, setPhone]             = useState("");
+  const [reviewLink, setReviewLink]   = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [err, setErr]                 = useState("");
 
   const toggleShow = () => setShowPassword((v) => !v);
 
@@ -136,12 +370,36 @@ export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "",
         return;
       }
 
-      onSignedUp?.(data);
+      // Account created — show availability step before entering dashboard
+      setSignupData(data);
+      setStep(2);
     } catch {
       setErr("Network error. Is the API reachable?");
     } finally {
       setLoading(false);
     }
+  }
+
+  if (step === 2 && signupData) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          width: "100%",
+          display: "grid",
+          placeItems: "center",
+          padding: 24,
+          boxSizing: "border-box",
+          background:
+            "radial-gradient(900px 520px at 50% 0%, rgba(249,115,22,0.16), rgba(0,0,0,0) 65%), linear-gradient(180deg, #0b1220 0%, #05070d 100%)",
+        }}
+      >
+        <AvailabilityStep
+          signupData={signupData}
+          onDone={() => onSignedUp?.(signupData)}
+        />
+      </div>
+    );
   }
 
   return (
@@ -166,10 +424,14 @@ export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "",
             marginBottom: 4,
           }}
         >
-          <h1 style={{ fontSize: 46, margin: 0, color: "#e5e7eb", fontWeight: 900 }}>
-            Create Account
-          </h1>
-
+          <div>
+            <div style={{ fontSize: 13, color: "#f97316", fontWeight: 700, marginBottom: 4 }}>
+              STEP 1 OF 2
+            </div>
+            <h1 style={{ fontSize: 46, margin: 0, color: "#e5e7eb", fontWeight: 900 }}>
+              Create Account
+            </h1>
+          </div>
           <button type="button" onClick={onBack} style={backBtn}>
             Back to login
           </button>
@@ -201,7 +463,6 @@ export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "",
             autoComplete="email"
             style={inputStyle}
           />
-
           <PasswordInput
             placeholder="Password"
             value={password}
@@ -218,7 +479,6 @@ export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "",
             show={showPassword}
             onToggle={toggleShow}
           />
-
           <input
             placeholder="Phone (optional)"
             value={phone}
@@ -234,11 +494,11 @@ export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "",
             style={inputStyle}
           />
 
-          {err ? (
+          {err && (
             <div style={{ textAlign: "center", fontSize: 14, color: "#fecaca", fontWeight: 800 }}>
               {err}
             </div>
-          ) : null}
+          )}
 
           <button
             disabled={loading}
@@ -248,7 +508,7 @@ export default function InviteSignupPage({ onSignedUp, onBack, initialCode = "",
               cursor: loading ? "not-allowed" : "pointer",
             }}
           >
-            {loading ? "Creating..." : "Create Account"}
+            {loading ? "Creating..." : "Next: Set Availability →"}
           </button>
         </form>
       </div>

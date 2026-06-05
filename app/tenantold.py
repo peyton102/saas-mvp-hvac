@@ -230,6 +230,7 @@ class TenantSettingsIn(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     twilio_number: Optional[str] = None
+    gcal_calendar_id: Optional[str] = None  # Google Calendar ID to push bookings to
 
 
 @router.post("/settings")
@@ -295,6 +296,8 @@ def get_tenant_settings(
         "website": t.website,
         "address": t.address,
         "twilio_number": t.twilio_number or "",
+        "gcal_connected": bool(t.gcal_refresh_token),
+        "gcal_calendar_id": t.gcal_calendar_id or "primary",
     }
 
 

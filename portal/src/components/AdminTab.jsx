@@ -43,6 +43,30 @@ const btnGhost = {
   whiteSpace: "nowrap",
 };
 
+const btnRed = {
+  padding: "7px 14px",
+  fontWeight: 700,
+  fontSize: 12,
+  borderRadius: 8,
+  border: "1px solid rgba(239,68,68,0.45)",
+  background: "rgba(239,68,68,0.10)",
+  color: "#f87171",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const btnRedSolid = {
+  padding: "12px 24px",
+  fontWeight: 900,
+  fontSize: 14,
+  borderRadius: 10,
+  border: "none",
+  background: "#dc2626",
+  color: "#fff",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 function fmtDate(iso) {
   if (!iso) return "—";
   try {
@@ -72,9 +96,354 @@ function StatusBadge({ status }) {
   );
 }
 
+// ---- Remove Tenant Modal ----
+function RemoveTenantModal({ tenant, apiBase, commonHeaders, onClose, onDeleted }) {
+  const confirmName = tenant.business_name || tenant.name || tenant.slug;
+  const [typed, setTyped]         = useState("");
+  const [deleting, setDeleting]   = useState(false);
+  const [deleteErr, setDeleteErr] = useState("");
+
+  async function handleDownload() {
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenant.slug}/export`, {
+        headers: commonHeaders,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tenant_${tenant.slug}_export.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`Export failed: ${e.message}`);
+    }
+  }
+
+  async function handleDelete() {
+    if (typed !== confirmName) return;
+    setDeleting(true);
+    setDeleteErr("");
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenant.slug}`, {
+        method: "DELETE",
+        headers: commonHeaders,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      onDeleted(tenant.slug);
+    } catch (e) {
+      setDeleteErr(String(e.message || e));
+      setDeleting(false);
+    }
+  }
+
+  // Close on backdrop click
+  function handleBackdrop(e) {
+    if (e.target === e.currentTarget) onClose();
+  }
+
+  const canDelete = typed === confirmName && !deleting;
+
+  return (
+    <div
+      onClick={handleBackdrop}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.70)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div style={{
+        background: "#0f172a",
+        border: "1px solid rgba(239,68,68,0.35)",
+        borderRadius: 18,
+        padding: 32,
+        maxWidth: 520,
+        width: "100%",
+        display: "grid",
+        gap: 20,
+      }}>
+        {/* Header */}
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: "#f87171", marginBottom: 6 }}>
+            Remove Tenant
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb" }}>
+            {confirmName}
+          </div>
+          {tenant.email && (
+            <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", marginTop: 2 }}>
+              {tenant.email}
+            </div>
+          )}
+        </div>
+
+        {/* Warning */}
+        <div style={{
+          padding: "14px 16px",
+          borderRadius: 10,
+          background: "rgba(239,68,68,0.08)",
+          border: "1px solid rgba(239,68,68,0.25)",
+          fontSize: 13,
+          color: "#fca5a5",
+          lineHeight: 1.6,
+        }}>
+          <strong style={{ color: "#f87171" }}>This action is permanent and cannot be undone.</strong>{" "}
+          All leads, bookings, calls, and finance entries belonging to this tenant will be hard deleted.
+          Download the data below before proceeding.
+        </div>
+
+        {/* Download */}
+        <div>
+          <div style={{ fontSize: 12, color: "rgba(229,231,235,0.5)", marginBottom: 8 }}>
+            Step 1 — Save a copy of all tenant data
+          </div>
+          <button onClick={handleDownload} style={btnGhost}>
+            Download All Data (CSV)
+          </button>
+        </div>
+
+        {/* Confirmation input */}
+        <div>
+          <div style={{ fontSize: 12, color: "rgba(229,231,235,0.5)", marginBottom: 8 }}>
+            Step 2 — Type the business name to confirm:{" "}
+            <span style={{ color: "#e5e7eb", fontWeight: 700 }}>{confirmName}</span>
+          </div>
+          <input
+            type="text"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Type the business name to confirm deletion"
+            style={{ ...inputStyle, borderColor: typed && typed !== confirmName ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)" }}
+            autoComplete="off"
+          />
+        </div>
+
+        {deleteErr && (
+          <div style={{ fontSize: 13, color: "#fca5a5", fontWeight: 700 }}>{deleteErr}</div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={btnGhost} disabled={deleting}>
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!canDelete}
+            style={{
+              ...btnRedSolid,
+              opacity: canDelete ? 1 : 0.35,
+              cursor: canDelete ? "pointer" : "not-allowed",
+            }}
+          >
+            {deleting ? "Deleting…" : "Permanently Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Tenant Value / Usage section ----
+function TenantUsageSection({ apiBase, commonHeaders }) {
+  const [rows, setRows]     = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]       = useState("");
+  const [sortKey, setSortKey] = useState("missed_call_leads_30d");
+
+  async function load() {
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch(`${apiBase}/admin/usage`, { headers: commonHeaders });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${res.status}`);
+      }
+      setRows(await res.json());
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  const COLS = [
+    { key: "missed_call_leads_30d",   label: "Calls Captured (30d)", tip: "Missed calls the AI answered and turned into leads" },
+    { key: "missed_call_leads_total", label: "Calls Total",           tip: "All-time missed call leads" },
+    { key: "jobs_won_30d",            label: "Jobs Won (30d)",        tip: "Leads marked Won by the owner in last 30 days", isMoney: false },
+    { key: "revenue_attributed_30d",  label: "Revenue (30d)",         tip: "Sum of job values marked Won in last 30 days", isMoney: true },
+    { key: "bookings_30d",            label: "Bookings (30d)",        tip: "Online bookings made in last 30 days" },
+    { key: "review_requests_30d",     label: "Review Reqs (30d)",     tip: "Review request SMS sent in last 30 days" },
+  ];
+
+  const sorted = [...rows].sort((a, b) => {
+    const diff = (b[sortKey] ?? 0) - (a[sortKey] ?? 0);
+    return diff !== 0 ? diff : (a.business_name || "").localeCompare(b.business_name || "");
+  });
+
+  function fmtAge(iso) {
+    if (!iso) return "—";
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    if (days < 1) return "today";
+    if (days === 1) return "1 day";
+    if (days < 30) return `${days}d`;
+    const months = Math.floor(days / 30);
+    return `${months}mo`;
+  }
+
+  function fmtLast(iso) {
+    if (!iso) return "—";
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    if (days === 0) return "today";
+    if (days === 1) return "yesterday";
+    if (days < 30) return `${days}d ago`;
+    return fmtDate(iso);
+  }
+
+  // color for a count cell: green if > 0, dim if 0
+  function countStyle(n) {
+    return {
+      fontSize: 14,
+      fontWeight: n > 0 ? 800 : 400,
+      color: n > 0 ? "#6ee7b7" : "rgba(229,231,235,0.25)",
+      textAlign: "right",
+    };
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 22, color: "#e5e7eb" }}>Value Overview</h2>
+          <p style={{ margin: 0, fontSize: 14, color: "rgba(229,231,235,0.55)" }}>
+            What each tenant is getting from the platform — no customer data, counts only.
+          </p>
+        </div>
+        <button onClick={load} disabled={loading} style={btnGhost}>
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      {err && <div style={{ fontSize: 13, color: "#fca5a5", marginBottom: 10 }}>{err}</div>}
+
+      {!loading && rows.length === 0 && !err && (
+        <div style={{ padding: "24px 0", textAlign: "center", color: "rgba(229,231,235,0.35)", fontSize: 14 }}>
+          No tenants yet.
+        </div>
+      )}
+
+      {sorted.length > 0 && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <th style={{ padding: "6px 10px 10px 0", textAlign: "left", fontWeight: 700, fontSize: 11, color: "rgba(229,231,235,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  Tenant
+                </th>
+                <th style={{ padding: "6px 10px 10px", textAlign: "right", fontWeight: 700, fontSize: 11, color: "rgba(229,231,235,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  Age
+                </th>
+                {COLS.map(({ key, label }) => (
+                  <th
+                    key={key}
+                    onClick={() => setSortKey(key)}
+                    title={`Sort by ${label}`}
+                    style={{
+                      padding: "6px 10px 10px",
+                      textAlign: "right",
+                      fontWeight: sortKey === key ? 900 : 700,
+                      fontSize: 11,
+                      color: sortKey === key ? "#f97316" : "rgba(229,231,235,0.4)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      userSelect: "none",
+                    }}
+                  >
+                    {label}{sortKey === key ? " ▼" : ""}
+                  </th>
+                ))}
+                <th style={{ padding: "6px 0 10px 10px", textAlign: "right", fontWeight: 700, fontSize: 11, color: "rgba(229,231,235,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  Last Active
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((r) => (
+                <tr
+                  key={r.slug}
+                  style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                >
+                  <td style={{ padding: "10px 10px 10px 0", verticalAlign: "middle" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e7eb" }}>
+                      {r.business_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", fontFamily: "monospace" }}>
+                      {r.slug}
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px", textAlign: "right", fontSize: 12, color: "rgba(229,231,235,0.45)", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                    {fmtAge(r.joined)}
+                  </td>
+                  {COLS.map(({ key, isMoney }) => {
+                    const raw = r[key] ?? 0;
+                    const display = isMoney
+                      ? (raw > 0 ? `$${Number(raw).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—")
+                      : raw;
+                    return (
+                      <td key={key} style={{ padding: "10px", verticalAlign: "middle" }}>
+                        <div style={countStyle(raw)}>
+                          {display}
+                          {key === "missed_call_leads_30d" && r.missed_call_leads_total > 0 && (
+                            <span style={{ fontSize: 10, fontWeight: 400, color: "rgba(110,231,183,0.5)", marginLeft: 4 }}>
+                              /{r.missed_call_leads_total}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td style={{ padding: "10px 0 10px 10px", textAlign: "right", fontSize: 12, color: "rgba(229,231,235,0.45)", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                    {fmtLast(r.last_active)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminTab({ apiBase, commonHeaders }) {
+  const ALL_FEATURES = [
+    { slug: "vapi",      label: "Calls / VAPI" },
+    { slug: "bookings",  label: "Bookings" },
+    { slug: "leads",     label: "Leads" },
+    { slug: "finance",   label: "Finance" },
+    { slug: "reviews",   label: "Reviews" },
+    { slug: "reminders", label: "Reminders" },
+  ];
+
+  // ---- Invite state ----
   const [email, setEmail]         = useState("");
   const [daysValid, setDaysValid] = useState(7);
+  const [selectedFeatures, setSelectedFeatures] = useState([]);
   const [sending, setSending]     = useState(false);
   const [sendErr, setSendErr]     = useState("");
   const [sendOk, setSendOk]       = useState("");
@@ -84,6 +453,16 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   const [listErr, setListErr]     = useState("");
 
   const [resendingCode, setResendingCode] = useState(null);
+
+  // ---- Tenant management state ----
+  const [tenants, setTenants]         = useState([]);
+  const [tenantsLoading, setTenantsLoading] = useState(false);
+  const [tenantsErr, setTenantsErr]   = useState("");
+  const [removingTenant, setRemovingTenant] = useState(null);
+  const [savingFeatures, setSavingFeatures] = useState({}); // slug → true while saving
+  const [vapiInputs, setVapiInputs]   = useState({}); // slug → current input value
+  const [savingVapi, setSavingVapi]   = useState({}); // slug → true while saving
+  const [vapiErr, setVapiErr]         = useState({}); // slug → error string
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
@@ -102,7 +481,32 @@ export default function AdminTab({ apiBase, commonHeaders }) {
     }
   }, [apiBase, commonHeaders]);
 
-  useEffect(() => { loadInvites(); }, [loadInvites]);
+  const loadTenants = useCallback(async () => {
+    setTenantsLoading(true);
+    setTenantsErr("");
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants`, { headers: commonHeaders });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setTenants(data);
+      // seed vapi inputs with current values so fields show what's assigned
+      const inputs = {};
+      data.forEach((t) => { inputs[t.slug] = t.vapi_phone_number_id || ""; });
+      setVapiInputs(inputs);
+    } catch (e) {
+      setTenantsErr(String(e.message || e));
+    } finally {
+      setTenantsLoading(false);
+    }
+  }, [apiBase, commonHeaders]);
+
+  useEffect(() => {
+    loadInvites();
+    loadTenants();
+  }, [loadInvites, loadTenants]);
 
   async function sendInvite(e) {
     e.preventDefault();
@@ -115,12 +519,13 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       const res = await fetch(`${apiBase}/admin/invites/send`, {
         method: "POST",
         headers: commonHeaders,
-        body: JSON.stringify({ email: email.trim(), days_valid: daysValid }),
+        body: JSON.stringify({ email: email.trim(), days_valid: daysValid, features: selectedFeatures }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setSendOk(`Invite sent to ${email.trim()}`);
       setEmail("");
+      setSelectedFeatures([]);
       loadInvites();
     } catch (e) {
       setSendErr(String(e.message || e));
@@ -146,6 +551,51 @@ export default function AdminTab({ apiBase, commonHeaders }) {
     }
   }
 
+  async function toggleFeature(tenantSlug, currentFeatures, feature) {
+    const updated = currentFeatures.includes(feature)
+      ? currentFeatures.filter((f) => f !== feature)
+      : [...currentFeatures, feature];
+
+    setSavingFeatures((prev) => ({ ...prev, [tenantSlug]: true }));
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenantSlug}/features`, {
+        method: "PATCH",
+        headers: commonHeaders,
+        body: JSON.stringify({ features: updated }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setTenants((prev) =>
+        prev.map((t) => t.slug === tenantSlug ? { ...t, features: data.features } : t)
+      );
+    } catch (e) {
+      alert(`Failed to update features: ${e.message}`);
+    } finally {
+      setSavingFeatures((prev) => ({ ...prev, [tenantSlug]: false }));
+    }
+  }
+
+  async function assignVapiNumber(tenantSlug, value) {
+    setSavingVapi((prev) => ({ ...prev, [tenantSlug]: true }));
+    setVapiErr((prev) => ({ ...prev, [tenantSlug]: "" }));
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenantSlug}/vapi-number`, {
+        method: "PATCH",
+        headers: commonHeaders,
+        body: JSON.stringify({ vapi_phone_number_id: value.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setTenants((prev) =>
+        prev.map((t) => t.slug === tenantSlug ? { ...t, vapi_phone_number_id: data.vapi_phone_number_id } : t)
+      );
+    } catch (e) {
+      setVapiErr((prev) => ({ ...prev, [tenantSlug]: String(e.message || e) }));
+    } finally {
+      setSavingVapi((prev) => ({ ...prev, [tenantSlug]: false }));
+    }
+  }
+
   // counts
   const counts = invites.reduce((acc, inv) => {
     acc[inv.status] = (acc[inv.status] || 0) + 1;
@@ -153,7 +603,27 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   }, {});
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
+    <div style={{ display: "grid", gap: 32 }}>
+
+      {/* Remove Tenant Modal */}
+      {removingTenant && (
+        <RemoveTenantModal
+          tenant={removingTenant}
+          apiBase={apiBase}
+          commonHeaders={commonHeaders}
+          onClose={() => setRemovingTenant(null)}
+          onDeleted={(slug) => {
+            setRemovingTenant(null);
+            setTenants((prev) => prev.filter((t) => t.slug !== slug));
+          }}
+        />
+      )}
+
+      {/* Value / Usage Overview */}
+      <TenantUsageSection apiBase={apiBase} commonHeaders={commonHeaders} />
+
+      {/* Divider */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} />
 
       {/* Header */}
       <div>
@@ -171,40 +641,100 @@ export default function AdminTab({ apiBase, commonHeaders }) {
         background: "rgba(255,255,255,0.03)",
       }}>
         <h3 style={{ margin: "0 0 14px", fontSize: 15, color: "#e5e7eb" }}>Send Invite</h3>
-        <form onSubmit={sendInvite} style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 260px" }}>
-            <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
-              Customer Email
-            </label>
-            <input
-              type="email"
-              placeholder="customer@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-              autoComplete="off"
-            />
+        <form onSubmit={sendInvite} style={{ display: "grid", gap: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 260px" }}>
+              <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
+                Customer Email
+              </label>
+              <input
+                type="email"
+                placeholder="customer@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={inputStyle}
+                autoComplete="off"
+              />
+            </div>
+            <div style={{ width: 110 }}>
+              <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
+                Expires (days)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={daysValid}
+                onChange={(e) => setDaysValid(Number(e.target.value))}
+                style={{ ...inputStyle, width: "100%" }}
+              />
+            </div>
           </div>
-          <div style={{ width: 110 }}>
-            <label style={{ display: "block", fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 6 }}>
-              Expires (days)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={60}
-              value={daysValid}
-              onChange={(e) => setDaysValid(Number(e.target.value))}
-              style={{ ...inputStyle, width: "100%" }}
-            />
+
+          <div>
+            <div style={{ fontSize: 12, color: "rgba(229,231,235,0.55)", marginBottom: 8 }}>
+              Features included in this plan
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {ALL_FEATURES.map(({ slug, label }) => {
+                const checked = selectedFeatures.includes(slug);
+                return (
+                  <label
+                    key={slug}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: checked
+                        ? "1px solid rgba(249,115,22,0.6)"
+                        : "1px solid rgba(255,255,255,0.10)",
+                      background: checked
+                        ? "rgba(249,115,22,0.12)"
+                        : "rgba(255,255,255,0.04)",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      color: checked ? "#f97316" : "rgba(229,231,235,0.75)",
+                      fontWeight: checked ? 700 : 400,
+                      userSelect: "none",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setSelectedFeatures((prev) =>
+                          checked ? prev.filter((f) => f !== slug) : [...prev, slug]
+                        )
+                      }
+                      style={{ accentColor: "#f97316" }}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
           </div>
-          <button
-            type="submit"
-            disabled={sending}
-            style={{ ...btnOrange, opacity: sending ? 0.7 : 1 }}
-          >
-            {sending ? "Sending…" : "Send Invite"}
-          </button>
+
+          <div>
+            <button
+              type="submit"
+              disabled={sending || selectedFeatures.length === 0}
+              style={{
+                ...btnOrange,
+                opacity: sending || selectedFeatures.length === 0 ? 0.5 : 1,
+                cursor: sending || selectedFeatures.length === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              {sending ? "Sending…" : "Send Invite"}
+            </button>
+            {selectedFeatures.length === 0 && (
+              <span style={{ marginLeft: 12, fontSize: 12, color: "rgba(229,231,235,0.4)" }}>
+                Select at least one feature
+              </span>
+            )}
+          </div>
         </form>
 
         {sendErr && (
@@ -248,7 +778,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
             {/* Header row */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "1fr 90px 100px 100px auto",
+              gridTemplateColumns: "1fr 90px 100px 100px 1fr auto",
               gap: 12,
               padding: "6px 14px",
               fontSize: 11,
@@ -261,6 +791,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
               <span>Status</span>
               <span>Sent</span>
               <span>Expires</span>
+              <span>Features</span>
               <span></span>
             </div>
 
@@ -269,7 +800,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                 key={inv.code}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 90px 100px 100px auto",
+                  gridTemplateColumns: "1fr 90px 100px 100px 1fr auto",
                   gap: 12,
                   alignItems: "center",
                   padding: "12px 14px",
@@ -297,6 +828,24 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                   {fmtDate(inv.expires_at)}
                 </span>
 
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {(inv.features || []).length === 0 ? (
+                    <span style={{ fontSize: 11, color: "rgba(229,231,235,0.25)" }}>—</span>
+                  ) : (inv.features || []).map((f) => (
+                    <span key={f} style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: "2px 7px",
+                      borderRadius: 5,
+                      background: "rgba(249,115,22,0.12)",
+                      color: "#f97316",
+                      border: "1px solid rgba(249,115,22,0.3)",
+                    }}>
+                      {f}
+                    </span>
+                  ))}
+                </div>
+
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   {inv.status !== "signed_up" && (
                     <button
@@ -310,6 +859,199 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ---- Tenant Management ---- */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <h2 style={{ margin: "0 0 4px", fontSize: 22, color: "#e5e7eb" }}>Tenant Management</h2>
+            <p style={{ margin: 0, fontSize: 14, color: "rgba(229,231,235,0.55)" }}>
+              View and remove tenants. Deletion is permanent and cannot be undone.
+            </p>
+          </div>
+          <button onClick={loadTenants} disabled={tenantsLoading} style={btnGhost}>
+            {tenantsLoading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
+
+        {tenantsErr && (
+          <div style={{ fontSize: 13, color: "#fca5a5", marginBottom: 10 }}>{tenantsErr}</div>
+        )}
+
+        {!tenantsLoading && tenants.length === 0 && !tenantsErr && (
+          <div style={{ padding: "32px 0", textAlign: "center", color: "rgba(229,231,235,0.35)", fontSize: 14 }}>
+            No tenants found.
+          </div>
+        )}
+
+        {tenants.length > 0 && (
+          <div style={{ display: "grid", gap: 8 }}>
+            {tenants.map((t) => {
+              const isSaving = savingFeatures[t.slug];
+              const tenantFeatures = t.features || [];
+              return (
+                <div
+                  key={t.slug}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    background: "rgba(255,255,255,0.03)",
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  {/* Top row: name / email / slug / joined / remove */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 180px" }}>
+                      <div style={{ fontSize: 14, color: "#e5e7eb", fontWeight: 600 }}>
+                        {t.business_name || t.name || <span style={{ color: "rgba(229,231,235,0.35)" }}>—</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(229,231,235,0.4)", fontFamily: "monospace", marginTop: 2 }}>
+                        {t.slug}
+                        {t.is_admin && (
+                          <span style={{
+                            marginLeft: 6,
+                            fontSize: 9,
+                            fontWeight: 800,
+                            color: "#a78bfa",
+                            background: "rgba(167,139,250,0.12)",
+                            padding: "1px 5px",
+                            borderRadius: 4,
+                          }}>
+                            ADMIN
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span style={{ flex: "1 1 160px", fontSize: 12, color: "rgba(229,231,235,0.55)" }}>
+                      {t.email || "—"}
+                    </span>
+                    <span style={{ fontSize: 11, color: "rgba(229,231,235,0.4)", whiteSpace: "nowrap" }}>
+                      Joined {fmtDate(t.created_at)}
+                    </span>
+                    <button onClick={() => setRemovingTenant(t)} style={btnRed}>
+                      Remove
+                    </button>
+                  </div>
+
+                  {/* Feature toggles */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", whiteSpace: "nowrap", minWidth: 56 }}>
+                      {isSaving ? "Saving…" : "Features:"}
+                    </span>
+                    {ALL_FEATURES.map(({ slug: feat, label }) => {
+                      const active = tenantFeatures.includes(feat);
+                      return (
+                        <button
+                          key={feat}
+                          disabled={isSaving}
+                          onClick={() => toggleFeature(t.slug, tenantFeatures, feat)}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 6,
+                            border: active
+                              ? "1px solid rgba(249,115,22,0.6)"
+                              : "1px solid rgba(255,255,255,0.10)",
+                            background: active
+                              ? "rgba(249,115,22,0.15)"
+                              : "rgba(255,255,255,0.04)",
+                            color: active ? "#f97316" : "rgba(229,231,235,0.35)",
+                            fontSize: 11,
+                            fontWeight: active ? 700 : 400,
+                            cursor: isSaving ? "not-allowed" : "pointer",
+                            opacity: isSaving ? 0.6 : 1,
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {active ? "✓ " : ""}{label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Vapi phone number assignment */}
+                  {(() => {
+                    const currentInput = vapiInputs[t.slug] ?? (t.vapi_phone_number_id || "");
+                    const saved = t.vapi_phone_number_id || "";
+                    const isDirty = currentInput.trim() !== saved;
+                    const isSavingVapi = savingVapi[t.slug];
+                    const errMsg = vapiErr[t.slug];
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", whiteSpace: "nowrap", minWidth: 56 }}>
+                          Vapi #:
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 260px" }}>
+                          <input
+                            type="text"
+                            placeholder="phn_xxxx  (Vapi Phone Number ID)"
+                            value={currentInput}
+                            onChange={(e) =>
+                              setVapiInputs((prev) => ({ ...prev, [t.slug]: e.target.value }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && isDirty && !isSavingVapi) {
+                                assignVapiNumber(t.slug, currentInput);
+                              }
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: "5px 10px",
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              borderRadius: 7,
+                              border: saved
+                                ? "1px solid rgba(110,231,183,0.4)"
+                                : "1px solid rgba(255,255,255,0.10)",
+                              background: "rgba(255,255,255,0.04)",
+                              color: saved ? "#6ee7b7" : "#e5e7eb",
+                              outline: "none",
+                            }}
+                          />
+                          {isDirty && (
+                            <button
+                              disabled={isSavingVapi}
+                              onClick={() => assignVapiNumber(t.slug, currentInput)}
+                              style={{
+                                ...btnGhost,
+                                padding: "5px 12px",
+                                fontSize: 11,
+                                opacity: isSavingVapi ? 0.5 : 1,
+                                cursor: isSavingVapi ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              {isSavingVapi ? "Saving…" : "Save"}
+                            </button>
+                          )}
+                          {!isDirty && saved && (
+                            <button
+                              onClick={() => {
+                                setVapiInputs((prev) => ({ ...prev, [t.slug]: "" }));
+                                assignVapiNumber(t.slug, "");
+                              }}
+                              style={{
+                                ...btnRed,
+                                padding: "5px 10px",
+                                fontSize: 11,
+                              }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        {errMsg && (
+                          <span style={{ fontSize: 11, color: "#fca5a5", fontWeight: 700 }}>{errMsg}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

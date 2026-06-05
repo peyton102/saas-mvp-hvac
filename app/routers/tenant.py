@@ -1,5 +1,6 @@
 # app/routers/tenant.py
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -337,3 +338,86 @@ def debug_tenant_brand(
     db: Session = Depends(get_session),
 ):
     return brand(tenant_id, db=db)
+
+
+# ---------------- booking config ----------------
+
+VALID_DAYS = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"}
+_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+_DEFAULT_BOOKING_CONFIG = {
+    "booking_days": ["mon", "tue", "wed", "thu", "fri"],
+    "booking_start": "08:00",
+    "booking_end": "17:00",
+    "slot_minutes": 60,
+}
+
+
+def get_tenant_booking_config(tenant_id: str, db: Session) -> dict:
+    """
+    Returns the booking config for a tenant, falling back to defaults if not configured.
+    """
+    t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
+    if not t or not t.booking_days:
+        return dict(_DEFAULT_BOOKING_CONFIG)
+
+    days = [d for d in t.booking_days.split(",") if d in VALID_DAYS] or _DEFAULT_BOOKING_CONFIG["booking_days"]
+    return {
+        "booking_days":  days,
+        "booking_start": t.booking_start or _DEFAULT_BOOKING_CONFIG["booking_start"],
+        "booking_end":   t.booking_end   or _DEFAULT_BOOKING_CONFIG["booking_end"],
+        "slot_minutes":  t.slot_minutes  or _DEFAULT_BOOKING_CONFIG["slot_minutes"],
+    }
+
+
+class BookingConfigIn(BaseModel):
+    booking_days: List[str] = []
+    booking_start: str = "08:00"
+    booking_end: str = "17:00"
+    slot_minutes: int = 60
+
+
+@router.get("/booking-config")
+def get_booking_config(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_session),
+):
+    return get_tenant_booking_config(tenant_id, db)
+
+
+@router.post("/booking-config")
+def save_booking_config(
+    body: BookingConfigIn,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_session),
+):
+    valid_days = [d for d in body.booking_days if d in VALID_DAYS]
+    if not valid_days:
+        raise HTTPException(status_code=422, detail="Select at least one available day.")
+
+    if not _TIME_RE.match(body.booking_start) or not _TIME_RE.match(body.booking_end):
+        raise HTTPException(status_code=422, detail="Times must be in HH:MM format.")
+
+    if body.booking_start >= body.booking_end:
+        raise HTTPException(status_code=422, detail="End time must be after start time.")
+
+    if body.slot_minutes not in (30, 60, 90, 120):
+        raise HTTPException(status_code=422, detail="Slot length must be 30, 60, 90, or 120 minutes.")
+
+    t = db.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    t.booking_days  = ",".join(valid_days)
+    t.booking_start = body.booking_start
+    t.booking_end   = body.booking_end
+    t.slot_minutes  = body.slot_minutes
+    db.add(t)
+    db.commit()
+
+    return {
+        "ok": True,
+        "booking_days":  valid_days,
+        "booking_start": body.booking_start,
+        "booking_end":   body.booking_end,
+        "slot_minutes":  body.slot_minutes,
+    }

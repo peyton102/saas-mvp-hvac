@@ -44,9 +44,17 @@ def ensure_invite_table(session: Session) -> None:
         created_at TEXT NOT NULL,
         expires_at TEXT NULL,
         used_at TEXT NULL,
-        note TEXT NULL
+        note TEXT NULL,
+        features TEXT NULL
     )
     """))
+    # idempotent: add features column if table already existed without it
+    try:
+        session.exec(text("SAVEPOINT sp_inv_features"))
+        session.exec(text("ALTER TABLE invite_code ADD COLUMN features TEXT"))
+        session.exec(text("RELEASE SAVEPOINT sp_inv_features"))
+    except Exception:
+        session.exec(text("ROLLBACK TO SAVEPOINT sp_inv_features"))
 
 
 def _now_iso() -> str:

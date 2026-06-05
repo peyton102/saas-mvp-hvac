@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 from app.routers import public
 from collections import defaultdict
 from typing import Optional
@@ -48,6 +49,8 @@ from app import tenantold
 from app.routers import auth
 from app.routers.invites import router as invite_router
 from app.routers.admin_invites import router as admin_invites_router
+from app.routers.admin_tenant_mgmt import router as admin_tenant_mgmt_router
+from app.routers.admin_usage import router as admin_usage_router
 from app.routers import cron
 
 def gen_op_id(route: APIRoute):
@@ -67,6 +70,7 @@ _CORS_ORIGINS = [
     "https://saas-mvp-hvac.onrender.com",
     "https://saas-mvp-hvac-staging.onrender.com",
     "https://saas-mvp-hvac-1.onrender.com",
+    "https://hvac-staging-site.onrender.com",
 ]
 _extra = os.getenv("CORS_EXTRA_ORIGINS", "")
 for _o in _extra.replace(",", " ").split():
@@ -82,6 +86,10 @@ app.add_middleware(
 )
 
 PORT = int(os.getenv("PORT", "8799"))
+
+# ---------- STATIC FILES ----------
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/book", StaticFiles(directory=os.path.join(_static_dir, "book"), html=True), name="book")
 
 # ---------- GLOBAL ERROR HANDLER ----------
 @app.exception_handler(Exception)
@@ -154,6 +162,9 @@ OPEN_PATHS = {
     "/auth/signup",
     "/auth/forgot-password",
     "/auth/reset-password",
+    "/auth/invite/create",
+    "/auth/invite/list",
+    "/auth/invite/verify",
     "/_int/whoami-raw",
     "/whoami",
     "/debug/whoami-verbose",
@@ -178,7 +189,8 @@ OPEN_PREFIXES = (
     "/webhooks/calendly",
     "/backup/",
     "/cron/",
-      ) + (("/debug/",) if IS_DEV else tuple())
+    "/oauth/google/",  # Google OAuth — callback arrives from Google with no auth headers
+) + (("/debug/",) if IS_DEV else tuple())
 
 
 
@@ -319,8 +331,11 @@ app.include_router(finance_export_router.router)
 app.include_router(auth.router)
 app.include_router(invite_router)
 app.include_router(admin_invites_router)
+app.include_router(admin_tenant_mgmt_router)
+app.include_router(admin_usage_router)
 app.include_router(cron.router)
 app.include_router(reminders_router)
+app.include_router(tenant_router.router)
 # ---------- Startup ----------
 @app.on_event("startup")
 def on_startup():

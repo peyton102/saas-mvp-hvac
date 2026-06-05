@@ -22,6 +22,20 @@ def run_startup_migrations() -> None:
         ("sp_tenant_twilio_number", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS twilio_number TEXT DEFAULT ''"),
         ("sp_lead_service_urgency", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS service_urgency TEXT"),
         ("sp_lead_notes", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS notes TEXT"),
+        ("sp_tenant_gcal_refresh_token", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_refresh_token TEXT"),
+        ("sp_tenant_gcal_access_token", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_access_token TEXT"),
+        ("sp_tenant_gcal_token_expires_at", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_token_expires_at BIGINT"),
+        ("sp_tenant_gcal_calendar_id", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_calendar_id TEXT DEFAULT 'primary'"),
+        ("sp_tenant_gcal_sync_token", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_sync_token TEXT"),
+        ("sp_tenant_gcal_last_synced_at", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS gcal_last_synced_at TIMESTAMP"),
+        ("sp_booking_gcal_event_id", "ALTER TABLE booking ADD COLUMN IF NOT EXISTS gcal_event_id TEXT"),
+        ("sp_tenant_booking_days",  "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS booking_days TEXT"),
+        ("sp_tenant_booking_start", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS booking_start TEXT"),
+        ("sp_tenant_booking_end",   "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS booking_end TEXT"),
+        ("sp_tenant_slot_minutes",  "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS slot_minutes INTEGER"),
+        ("sp_lead_job_won",      "ALTER TABLE lead ADD COLUMN IF NOT EXISTS job_won BOOLEAN DEFAULT FALSE"),
+        ("sp_lead_job_value",    "ALTER TABLE lead ADD COLUMN IF NOT EXISTS job_value NUMERIC"),
+        ("sp_booking_job_value", "ALTER TABLE booking ADD COLUMN IF NOT EXISTS job_value NUMERIC"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

@@ -27,6 +27,8 @@ class Lead(SQLModel, table=True):
     source: Optional[str] = Field(default=None, max_length=50)  # e.g. "missed_call", "web_form"
     service_urgency: Optional[str] = Field(default=None, max_length=200)
     notes: Optional[str] = Field(default=None)
+    job_won: Optional[bool] = Field(default=False)
+    job_value: Optional[float] = Field(default=None)
 
 
 class Booking(SQLModel, table=True):
@@ -38,9 +40,11 @@ class Booking(SQLModel, table=True):
     start: datetime
     end: datetime
     notes: Optional[str] = None
-    source: Optional[str] = None  # e.g., "calendly", "direct"
+    source: Optional[str] = None  # e.g., "calendly", "direct", "google_calendar"
     tenant_id: str = Field(default="public", index=True)  # <-- keep "public"
     completed_at: Optional[datetime] = Field(default=None, index=True)
+    gcal_event_id: Optional[str] = Field(default=None, index=True)  # dedup key for GCal imports
+    job_value: Optional[float] = Field(default=None)
 
 class Review(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -86,6 +90,12 @@ class Tenant(SQLModel, table=True):
     # Vapi Phone Number ID — used to route end-of-call webhooks to this tenant
     twilio_number: Optional[str] = Field(default="", max_length=128)
 
+    # Booking availability
+    booking_days: Optional[str] = Field(default=None)   # comma-separated slugs e.g. "mon,tue,wed,thu,fri"
+    booking_start: Optional[str] = Field(default=None)  # "HH:MM"
+    booking_end: Optional[str] = Field(default=None)    # "HH:MM"
+    slot_minutes: Optional[int] = Field(default=None)   # 30 | 60 | 90 | 120
+
     # platform admin flag
     is_admin: bool = Field(default=False)
 
@@ -94,6 +104,14 @@ class Tenant(SQLModel, table=True):
     qbo_access_token: Optional[str] = None
     qbo_refresh_token: Optional[str] = None
     qbo_token_expires_at: Optional[int] = None
+
+    # --- Google Calendar fields ---
+    gcal_refresh_token: Optional[str] = None
+    gcal_access_token: Optional[str] = None
+    gcal_token_expires_at: Optional[int] = None  # Unix timestamp
+    gcal_calendar_id: Optional[str] = Field(default="primary", max_length=255)
+    gcal_sync_token: Optional[str] = None        # incremental sync token from Google
+    gcal_last_synced_at: Optional[datetime] = None  # last successful sync timestamp
 
     api_keys: List["ApiKey"] = Relationship(back_populates="tenant")
 

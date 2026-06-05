@@ -4,7 +4,7 @@ from typing import Optional, List
 
 from dateutil import parser as dtparse
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 from zoneinfo import ZoneInfo  # 👈 add this
@@ -12,8 +12,8 @@ from zoneinfo import ZoneInfo  # 👈 add this
 from app import config, storage
 from app.db import get_session
 from app.deps import get_tenant_id
-from app.models import Booking as BookingModel, ReminderSent
-from app.routers.tenant import get_tenant_tz
+from app.models import Booking as BookingModel, ReminderSent, Tenant
+from app.routers.tenant import get_tenant_tz, get_tenant_booking_config
 
 from app.services import google_calendar as gcal
 from app.services.sms import (
@@ -42,6 +42,10 @@ class BookOut(BaseModel):
     event_id: Optional[str] = None
     sms_sent: Optional[bool] = None
     email_sent: Optional[bool] = None
+
+
+class CompleteIn(BaseModel):
+    job_value: Optional[float] = None
 
 
 # ===== Helpers =====
@@ -74,39 +78,27 @@ def _gcal_create_event(
     email: Optional[str],
     phone: Optional[str],
     notes: Optional[str],
+    tenant_id: str,
+    session,
 ) -> str:
-    """
-    Call google_calendar.create_event(svc, calendar_id=..., summary=..., description=..., start_dt=..., end_dt=..., tz_str=...)
-    """
+    """Push a booking to the tenant's connected Google Calendar. Returns the event id or ''."""
+    tenant = session.exec(select(Tenant).where(Tenant.slug == tenant_id)).first()
+    if not tenant:
+        print(f"[GCAL] Tenant '{tenant_id}' not found – skipping calendar event.")
+        return ""
+
+    svc = gcal.get_service_for_tenant(tenant, session)
+    if svc is None:
+        print(f"[GCAL] Tenant '{tenant_id}' has no calendar connected – skipping.")
+        return ""
+
+    calendar_id = (tenant.gcal_calendar_id or "primary").strip()
+    tz_str = (tenant.timezone or getattr(config, "TZ", "America/New_York")).strip()
+
     summary = f"Estimate: {name}"
     description = (
         f"Name: {name}\nPhone: {phone or ''}\nEmail: {email or ''}\nNotes: {notes or ''}"
     ).strip()
-
-    # calendar + tz from env
-    try:
-        cal_ids = getattr(config, "GOOGLE_CALENDAR_IDS", "primary")
-        calendar_id = (cal_ids.split(",")[0] or "primary").strip()
-    except Exception:
-        calendar_id = "primary"
-    tz_str = getattr(config, "TZ", "America/New_York")
-
-    # --- acquire Google service (try common builder names) ---
-    svc = None
-    for attr in ("get_service", "get_calendar_service", "build_service", "service"):
-        obj = getattr(gcal, attr, None)
-        try:
-            if callable(obj):
-                svc = obj()
-            elif obj is not None:
-                svc = obj
-        except Exception as e:
-            print(f"[GCAL SERVICE {attr} ERROR] {e!r}")
-        if svc:
-            break
-    if svc is None:
-        print("[GCAL] No calendar service configured – skipping calendar event.")
-        return ""
 
     try:
         ev = gcal.create_event(
@@ -129,36 +121,37 @@ def _gcal_create_event(
     return ""
 
 
+# day-name → Python weekday (Monday=0)
+_DAY_TO_WEEKDAY = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
 # ===== Availability =====
 @router.get("/availability", operation_id="bookings_availability_get")
 def availability(
-    days: int = Query(7, ge=1, le=14),
+    days: int = Query(14, ge=1, le=28),
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """Return open slots based on BUSINESS_HOURS & SLOT_MINUTES, filtered by existing DB bookings."""
-    try:
-        bh = getattr(config, "BUSINESS_HOURS", "09:00-17:00")
-        slot_min = int(getattr(config, "SLOT_MINUTES", 60))
-        buf_min = int(getattr(config, "SLOT_BUFFER_MINUTES", 0))
-    except Exception:
-        bh, slot_min, buf_min = "09:00-17:00", 60, 0
+    """Return open slots based on per-tenant booking config, filtered by existing DB bookings."""
+    cfg = get_tenant_booking_config(tenant_id, session)
+    slot_min = cfg["slot_minutes"]
 
     try:
-        start_str, end_str = bh.split("-")
-        start_t = time.fromisoformat(start_str)
-        end_t = time.fromisoformat(end_str)
+        start_t = time.fromisoformat(cfg["booking_start"])
+        end_t   = time.fromisoformat(cfg["booking_end"])
     except Exception:
-        start_t = time(9, 0)
-        end_t = time(17, 0)
+        start_t, end_t = time(8, 0), time(17, 0)
+
+    allowed_weekdays = {
+        _DAY_TO_WEEKDAY[d] for d in cfg["booking_days"] if d in _DAY_TO_WEEKDAY
+    }
 
     tenant_tz = get_tenant_tz(tenant_id, session)
-    now_tz = datetime.now(tenant_tz)
+    now_tz  = datetime.now(tenant_tz)
     now_utc = datetime.now(timezone.utc)
     window_end = now_utc + timedelta(days=days)
 
-    # Bookings are stored as UTC-naive — strip tz for comparison
-    now_naive = now_utc.replace(tzinfo=None)
+    now_naive        = now_utc.replace(tzinfo=None)
     window_end_naive = window_end.replace(tzinfo=None)
     existing = session.exec(
         select(BookingModel)
@@ -168,16 +161,18 @@ def availability(
     ).all()
 
     out: List[str] = []
-    step = timedelta(minutes=slot_min + buf_min)
+    step = timedelta(minutes=slot_min)
 
     for d in range(days):
         day = (now_tz + timedelta(days=d)).date()
-        cursor = datetime.combine(day, start_t, tzinfo=tenant_tz)
-        end_of_day = datetime.combine(day, end_t, tzinfo=tenant_tz)
-        while cursor + timedelta(minutes=slot_min) <= end_of_day:
+        if day.weekday() not in allowed_weekdays:
+            continue
+        cursor      = datetime.combine(day, start_t, tzinfo=tenant_tz)
+        end_of_day  = datetime.combine(day, end_t,   tzinfo=tenant_tz)
+        while cursor + step <= end_of_day:
             slot_start = cursor
-            slot_end = cursor + timedelta(minutes=slot_min)
-            if slot_start < now_tz:
+            slot_end   = cursor + step
+            if slot_start <= now_tz:
                 cursor += step
                 continue
             s = slot_start.astimezone(timezone.utc).replace(tzinfo=None)
@@ -190,9 +185,18 @@ def availability(
     return {"slots": out}
 
 
+@router.get("/public/booking-config")
+def public_booking_config(
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Public endpoint — returns the tenant's booking config for the booking form."""
+    return get_tenant_booking_config(tenant_id, session)
+
+
 @router.get("/public/availability", operation_id="public_bookings_availability_get")
 def public_availability(
-    days: int = Query(7, ge=1, le=14),
+    days: int = Query(14, ge=1, le=60),
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
@@ -238,16 +242,60 @@ def list_upcoming_bookings(
             "end": _to_tenant_tz(r.end),
             "created_at": _to_tenant_tz(getattr(r, "created_at", None)),
             "completed_at": _to_tenant_tz(getattr(r, "completed_at", None)),
+            "job_value": r.job_value,
         })
 
     return out
 
 
 # ===== Direct Booking (per-tenant) =====
+
+def _post_booking_tasks(
+    tenant_id: str,
+    start_local: datetime,
+    end_local: datetime,
+    name: str,
+    email: Optional[str],
+    phone: Optional[str],
+    e164: str,
+    notes: Optional[str],
+):
+    """GCal + email run in background so the HTTP response returns immediately after DB commit."""
+    # GCal (best-effort)
+    try:
+        gen = get_session()
+        session = next(gen)
+        try:
+            _gcal_create_event(
+                start_local, end_local, name, email, phone, notes,
+                tenant_id=tenant_id, session=session,
+            )
+        finally:
+            session.close()
+    except Exception as exc:
+        print(f"[BOOK BG GCAL ERROR] {exc}")
+
+    # Email confirmation
+    try:
+        email_payload = {
+            "name": name,
+            "email": (email or "").strip(),
+            "phone": e164 or (phone or ""),
+            "address": "",
+            "service": "appointment",
+            "starts_at_iso": start_local.isoformat(),
+            "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
+        }
+        send_booking_confirmation(tenant_id, email_payload)
+    except Exception as exc:
+        print(f"[BOOK BG EMAIL ERROR] {exc}")
+
+
 @router.post("/book", response_model=BookOut)
 def book(
     request: Request,
     payload: BookIn,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
@@ -271,47 +319,9 @@ def book(
     if conflict:
         raise HTTPException(status_code=409, detail="Time slot is not available")
 
-    event_id = _gcal_create_event(
-        start_local, end_local, payload.name, payload.email, payload.phone, payload.notes
-    )
-
     e164 = normalize_us_phone(payload.phone) if payload.phone else ""
-    sms_ok = False
-    if e164:
-        try:
-            sms_ok = booking_confirmation_sms(
-                tenant_id,
-                {
-                    "name": payload.name,
-                    "phone": e164,
-                    "service": "appointment",
-                    "starts_at_iso": start_local.isoformat(),
 
-                },
-            )
-        except Exception as e:
-            print(f"[BOOK SMS ERROR] {e}")
-
-    # CSV log (preserve existing behavior only when DB_FIRST is false)
-    try:
-        if (not getattr(config, "DB_FIRST", True)) and hasattr(storage, "save_booking"):
-            tz_str=str(start_local.tzinfo or ""),
-            storage.save_booking(
-                event_id=event_id,
-                invitee_name=payload.name,
-                invitee_email=(payload.email or ""),
-                invitee_phone=e164,
-                start_time=start_local.isoformat(),
-                end_time=end_local.isoformat(),
-                tz_str=tz_str,
-                notes=(payload.notes or ""),
-                sms_sent=bool(sms_ok),
-                source="api",
-            )
-    except Exception as e:
-        print(f"[BOOK CSV LOG ERROR] {e}")
-
-    # DB write (per-tenant)
+    # DB write first
     session.add(
         BookingModel(
             tenant_id=tenant_id,
@@ -320,47 +330,39 @@ def book(
             email=(payload.email or None),
             start=start_utc,
             end=end_utc,
-
             notes=(payload.notes or None),
             source="api",
         )
     )
     session.commit()
 
-    # Office SMS notify
-    try:
-        office_payload = {
-            "name": payload.name,
-            "phone": e164 or (payload.phone or ""),
-            "service": "appointment",
-            "starts_at_iso": start_local.isoformat(),
-        }
-        booking_office_notify_sms(tenant_id, office_payload)
-    except Exception as e:
-        print(f"[BOOK OFFICE SMS ERROR] {e}")
+    # SMS — fast (Twilio), keep synchronous so we know it fired
+    sms_ok = False
+    if e164:
+        try:
+            sms_ok = booking_confirmation_sms(
+                tenant_id,
+                {"name": payload.name, "phone": e164, "service": "appointment", "starts_at_iso": start_local.isoformat()},
+            )
+        except Exception as exc:
+            print(f"[BOOK SMS ERROR] {exc}")
 
-    # ===== Booking confirmation EMAIL (office + customer) =====
-    email_ok = False
     try:
-        email_payload = {
-            "name": payload.name,
-            "email": (payload.email or "").strip(),
-            "phone": e164 or (payload.phone or ""),
-            "address": "",
-            "service": "appointment",
-            "starts_at_iso": start_local.isoformat(),
-            "reschedule_url": getattr(config, "BOOKING_LINK", "") or "",
-        }
-        email_ok = send_booking_confirmation(tenant_id, email_payload)
-    except Exception as e:
-        print(f"[BOOK EMAIL ERROR] {e}")
+        booking_office_notify_sms(
+            tenant_id,
+            {"name": payload.name, "phone": e164 or (payload.phone or ""), "service": "appointment", "starts_at_iso": start_local.isoformat()},
+        )
+    except Exception as exc:
+        print(f"[BOOK OFFICE SMS ERROR] {exc}")
 
-    return BookOut(
-        ok=True,
-        event_id=event_id,
-        sms_sent=bool(sms_ok),
-        email_sent=bool(email_ok),
+    # GCal + email deferred — run after response is returned
+    background_tasks.add_task(
+        _post_booking_tasks,
+        tenant_id, start_local, end_local,
+        payload.name, payload.email, payload.phone, e164, payload.notes,
     )
+
+    return BookOut(ok=True, sms_sent=bool(sms_ok), email_sent=None)
 
 
 # ===== Debug endpoint: tenant-aware =====
@@ -389,12 +391,12 @@ def list_upcoming_bookings_debug(
 @router.post("/bookings/{booking_id}/complete")
 def complete_booking(
     booking_id: int,
+    background_tasks: BackgroundTasks,
+    payload: CompleteIn = Body(default=CompleteIn()),
     session: Session = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ):
-    """
-    Mark a booking as completed and queue a review SMS to send ~2 hours later.
-    """
+    """Mark a booking as completed, optionally recording job revenue, and send review SMS."""
     booking = session.exec(
         select(BookingModel)
         .where(BookingModel.id == booking_id)
@@ -405,23 +407,25 @@ def complete_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
 
     booking.completed_at = datetime.now(timezone.utc)
+    if payload.job_value is not None:
+        booking.job_value = float(payload.job_value)
     session.add(booking)
-
-    if booking.phone:
-        reminder = ReminderSent(
-            phone=booking.phone,
-            name=booking.name,
-            booking_start=booking.start,
-            booking_end=booking.end,
-            message=None,
-            template="review-queue",
-            source="booking-complete",
-            sms_sent=False,
-            tenant_id=tenant_id,
-        )
-        session.add(reminder)
-
     session.commit()
+
+    # Fire review SMS in background — no queue delay, no cron dependency
+    if booking.phone:
+        tenant_tz = get_tenant_tz(tenant_id, session)
+        starts_at = booking.start
+        if starts_at and starts_at.tzinfo is None:
+            starts_at = starts_at.replace(tzinfo=timezone.utc)
+        starts_iso = starts_at.astimezone(tenant_tz).isoformat() if starts_at else ""
+
+        background_tasks.add_task(
+            booking_reminder_sms,
+            tenant_id,
+            {"name": booking.name or "there", "phone": booking.phone, "service": "appointment", "starts_at_iso": starts_iso},
+            "review",
+        )
 
     return {"ok": True, "booking_id": booking_id, "tenant_id": tenant_id}
 

@@ -359,42 +359,35 @@ def booking_reminder_sms(tenant_id: str, payload: dict, kind: str) -> bool:
     return send_sms(phone, body)
 
 
-def _booking_link_for_slug(tenant_slug: str) -> str | None:
+def lead_nudge_sms(tenant_id: str, payload: dict) -> bool:
     """
-    Build a tenant-specific booking link from config.BOOKING_LINK.
+    Follow-up nudge sent to the customer when a lead hasn't been contacted
+    after X hours. Different tone from the auto-reply — warmer, not a repeat.
 
-    If BOOKING_LINK is like:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?
-
-    Then return:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
+    payload fields: name, phone
     """
-    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
-    if not base:
-        return None
+    phone = (payload.get("phone") or "").strip()
+    if not phone:
+        return False
 
-    # drop any existing ?query
-    base = base.split("?", 1)[0]
-    return f"{base}?tenant={tenant_slug}"
+    brand = get_brand_for_tenant(tenant_id)
+    business_name = brand.get("business_name") or tenant_id
+    business_phone = brand.get("business_phone") or None
+    booking_link = brand.get("booking_link") or _booking_link_for_slug(tenant_id)
 
+    name = (payload.get("name") or "").strip()
+    first = name.split(" ")[0] if name else "there"
 
-def _booking_link_for_slug(tenant_slug: str) -> str | None:
-    """
-    Build a tenant-specific booking link from config.BOOKING_LINK.
+    body = (
+        f"Hi {first}, this is {business_name} following up — "
+        f"we haven't been able to reach you yet but we still want to help."
+    )
+    if business_phone:
+        body += f" Give us a call at {business_phone}"
+    if booking_link:
+        body += f" or book a time here: {booking_link}"
 
-    If BOOKING_LINK is like:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?
-
-    Then return:
-      https://saas-mvp-hvac-1.onrender.com/book/index.html?tenant=<tenant_slug>
-    """
-    base = (getattr(config, "BOOKING_LINK", "") or "").strip()
-    if not base:
-        return None
-
-    # drop any existing ?query
-    base = base.split("?", 1)[0]
-    return f"{base}?tenant={tenant_slug}"
+    return send_sms(phone, body)
 
 
 def lead_auto_reply_sms(tenant_id: str, payload: dict) -> bool:

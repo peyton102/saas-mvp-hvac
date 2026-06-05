@@ -91,6 +91,246 @@ function NotesCell({ lead, onSave }) {
   );
 }
 
+function WonCell({ lead, onSave }) {
+  const [entering, setEntering] = useState(false);
+  const [val, setVal] = useState("");
+  const inputRef = useRef();
+
+  useEffect(() => { if (entering && inputRef.current) inputRef.current.focus(); }, [entering]);
+
+  if (lead.job_won) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: C.green }}>
+          Won {lead.job_value != null ? `$${Number(lead.job_value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : ""}
+        </span>
+        <button
+          onClick={() => onSave(lead.id, false, null)}
+          style={{ fontSize: 10, color: C.muted, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
+        >
+          undo
+        </button>
+      </div>
+    );
+  }
+
+  if (entering) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ fontSize: 12, color: C.muted }}>$</span>
+        <input
+          ref={inputRef}
+          type="number"
+          min="0"
+          step="any"
+          placeholder="0"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") { onSave(lead.id, true, val); setEntering(false); setVal(""); }
+            if (e.key === "Escape") { setEntering(false); setVal(""); }
+          }}
+          style={{
+            width: 70, padding: "4px 6px", fontSize: 12,
+            background: C.inputBg, border: `1px solid ${C.green}`,
+            borderRadius: 6, color: C.text, outline: "none",
+          }}
+        />
+        <button
+          onClick={() => { onSave(lead.id, true, val); setEntering(false); setVal(""); }}
+          style={{ fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 6, border: "none", background: C.greenBg, color: C.green, cursor: "pointer" }}
+        >
+          Save
+        </button>
+        <button
+          onClick={() => { setEntering(false); setVal(""); }}
+          style={{ fontSize: 11, padding: "4px 6px", borderRadius: 6, border: "none", background: "transparent", color: C.muted, cursor: "pointer" }}
+        >
+          ✕
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEntering(true)}
+      style={{
+        padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+        cursor: "pointer", border: "none", whiteSpace: "nowrap",
+        background: "rgba(74,222,128,0.08)", color: "rgba(74,222,128,0.55)",
+        transition: "all 0.15s",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = C.greenBg; e.currentTarget.style.color = C.green; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "rgba(74,222,128,0.08)"; e.currentTarget.style.color = "rgba(74,222,128,0.55)"; }}
+    >
+      Mark Won
+    </button>
+  );
+}
+
+function nextHourTime() {
+  const d = new Date();
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1);
+  return `${String(d.getHours()).padStart(2, "0")}:00`;
+}
+
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function ConvertToBookingModal({ lead, onSave, onClose }) {
+  const [date,     setDate]     = useState(todayLocal());
+  const [time,     setTime]     = useState(nextHourTime());
+  const [duration, setDuration] = useState("60");
+  const [notes,    setNotes]    = useState("");
+  const [saving,   setSaving]   = useState(false);
+  const [err,      setErr]      = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setErr("");
+    const startMs = new Date(`${date}T${time}:00`).getTime();
+    const endMs   = startMs + parseInt(duration, 10) * 60 * 1000;
+    const endDate = new Date(endMs);
+    const pad = n => String(n).padStart(2, "0");
+    const start = `${date}T${time}:00`;
+    const end   = `${endDate.getFullYear()}-${pad(endDate.getMonth()+1)}-${pad(endDate.getDate())}T${pad(endDate.getHours())}:${pad(endDate.getMinutes())}:00`;
+    try {
+      await onSave({ name: lead.name, phone: lead.phone, email: lead.email || null, notes: notes.trim() || null, start, end });
+    } catch (e) {
+      setErr(String(e.message || e));
+      setSaving(false);
+    }
+  }
+
+  const field = {
+    padding: "9px 12px", fontSize: 14, borderRadius: 8,
+    border: "1px solid rgba(255,255,255,0.12)", background: C.inputBg,
+    color: C.text, outline: "none", width: "100%",
+  };
+
+  return (
+    <div
+      onClick={e => e.target === e.currentTarget && onClose()}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
+        zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      }}
+    >
+      <div style={{
+        background: "#0f172a", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 18,
+        padding: 28, maxWidth: 480, width: "100%", display: "grid", gap: 14,
+      }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: C.text, marginBottom: 4 }}>Convert to Booking</div>
+          <div style={{ fontSize: 13, color: C.muted }}>
+            {lead.name || "—"} · {lead.phone}
+            {lead.message ? <span> · <em>{lead.message}</em></span> : null}
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...field, colorScheme: "dark" }} required />
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ ...field, colorScheme: "dark" }} required />
+          </div>
+          <select value={duration} onChange={e => setDuration(e.target.value)} style={{ ...field, cursor: "pointer" }}>
+            <option value="30">30 min</option>
+            <option value="60">1 hour</option>
+            <option value="90">1.5 hours</option>
+            <option value="120">2 hours</option>
+          </select>
+          <input placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} style={field} />
+
+          {err && <div style={{ fontSize: 12, color: "#fca5a5" }}>{err}</div>}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" onClick={onClose} style={{
+              padding: "9px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13,
+              border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: C.muted, cursor: "pointer",
+            }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} style={{
+              padding: "9px 22px", borderRadius: 8, border: "none", fontWeight: 800, fontSize: 13,
+              background: C.accent, color: "#111", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1,
+            }}>
+              {saving ? "Booking…" : "Book It"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AddLeadForm({ onSave, onCancel }) {
+  const [name, setName]       = useState("");
+  const [phone, setPhone]     = useState("");
+  const [message, setMessage] = useState("");
+  const [autoReply, setAutoReply] = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [err, setErr]         = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!phone.trim()) { setErr("Phone is required."); return; }
+    setSaving(true);
+    setErr("");
+    try {
+      await onSave({ name: name.trim(), phone: phone.trim(), message: message.trim(), send_auto_reply: autoReply, manual_entry: true });
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const field = {
+    padding: "9px 12px", fontSize: 14, borderRadius: 8,
+    border: "1px solid rgba(255,255,255,0.12)", background: C.inputBg,
+    color: C.text, outline: "none", width: "100%",
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{
+      padding: "16px", marginBottom: 16, borderRadius: 12,
+      border: "1px solid rgba(249,115,22,0.25)", background: "rgba(249,115,22,0.04)",
+      display: "grid", gap: 10,
+    }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 2 }}>Add Lead</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <input placeholder="Name (optional)" value={name} onChange={e => setName(e.target.value)} style={field} />
+        <input placeholder="Phone *" value={phone} onChange={e => setPhone(e.target.value)} style={field} required />
+      </div>
+      <input placeholder="Issue / message (optional)" value={message} onChange={e => setMessage(e.target.value)} style={field} />
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.muted, cursor: "pointer" }}>
+        <input type="checkbox" checked={autoReply} onChange={e => setAutoReply(e.target.checked)} style={{ accentColor: C.accent }} />
+        Send auto-reply SMS to customer
+      </label>
+      {err && <div style={{ fontSize: 12, color: "#fca5a5" }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button type="submit" disabled={saving} style={{
+          padding: "9px 20px", borderRadius: 8, border: "none", fontWeight: 800, fontSize: 13,
+          background: C.accent, color: "#111", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1,
+        }}>
+          {saving ? "Saving…" : "Add Lead"}
+        </button>
+        <button type="button" onClick={onCancel} style={{
+          padding: "9px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13,
+          border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: C.muted, cursor: "pointer",
+        }}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const BASE = (typeof apiBase === "string" && apiBase.trim()) ? apiBase : BASE_FALLBACK;
 
@@ -98,6 +338,8 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ col: "created_at", dir: "desc" });
+  const [showAddForm, setShowAddForm]     = useState(false);
+  const [convertingLead, setConvertingLead] = useState(null);
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -144,6 +386,28 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     } catch (e) { console.error(e); }
   }
 
+  async function convertToBooking(lead, bookingPayload) {
+    await apiFetch("/book", { method: "POST", body: JSON.stringify(bookingPayload) });
+    // mark lead as contacted so it dims in the list
+    await apiFetch(`/leads/${lead.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "contacted" }) });
+    setRows(prev => prev.map(r => r.id === lead.id ? { ...r, status: "contacted" } : r));
+    setConvertingLead(null);
+  }
+
+  async function addLead(payload) {
+    await apiFetch("/lead", { method: "POST", body: JSON.stringify(payload) });
+    setShowAddForm(false);
+    loadLeads();
+  }
+
+  async function saveWon(id, won, value) {
+    try {
+      const body = { job_won: won, job_value: won && value !== "" && value != null ? parseFloat(value) : null };
+      await apiFetch(`/leads/${id}/won`, { method: "PATCH", body: JSON.stringify(body) });
+      setRows(prev => prev.map(r => r.id === id ? { ...r, job_won: won, job_value: body.job_value } : r));
+    } catch (e) { console.error(e); }
+  }
+
   async function saveNotes(id, notes) {
     try {
       await apiFetch(`/leads/${id}/notes`, { method: "PATCH", body: JSON.stringify({ notes }) });
@@ -186,6 +450,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     { key: "service_urgency", label: "Preferred Day", w: "110px" },
     { key: "notes",      label: "Notes",          w: "160px" },
     { key: "status",     label: "Contacted",      w: "90px"  },
+    { key: "job_won",    label: "Won",            w: "120px" },
   ];
 
   const thStyle = (key) => ({
@@ -205,27 +470,50 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   return (
     <div style={{ color: C.text, fontFamily: "system-ui, -apple-system, sans-serif" }}>
 
+      {convertingLead && (
+        <ConvertToBookingModal
+          lead={convertingLead}
+          onSave={(payload) => convertToBooking(convertingLead, payload)}
+          onClose={() => setConvertingLead(null)}
+        />
+      )}
+
       {/* Header row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Leads</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{visible.length} lead{visible.length !== 1 ? "s" : ""}</div>
         </div>
-        <input
-          type="text"
-          placeholder="Search name, phone, issue, notes…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{
-            padding: "9px 14px", borderRadius: 10, fontSize: 13,
-            background: C.inputBg, border: C.border, color: C.text,
-            outline: "none", width: "min(280px, 100%)",
-          }}
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="Search name, phone, issue, notes…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              padding: "9px 14px", borderRadius: 10, fontSize: 13,
+              background: C.inputBg, border: C.border, color: C.text,
+              outline: "none", width: "min(240px, 100%)",
+            }}
+          />
+          <button
+            onClick={() => setShowAddForm(v => !v)}
+            style={{
+              padding: "9px 16px", borderRadius: 10, fontWeight: 800, fontSize: 13,
+              border: "none", background: C.accent, color: "#111", cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            + Add Lead
+          </button>
+        </div>
       </div>
 
+      {showAddForm && (
+        <AddLeadForm onSave={addLead} onCancel={() => setShowAddForm(false)} />
+      )}
+
       {/* Table — horizontal scroll on mobile */}
-      <div style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
+      <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
           <thead>
             <tr style={{ background: "rgba(255,255,255,0.03)" }}>
@@ -243,10 +531,10 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
             )}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
             )}
             {!loading && visible.map((r, i) => {
               const contacted = (r.status || "").toLowerCase() === "contacted";
@@ -296,20 +584,37 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                     <NotesCell lead={r} onSave={saveNotes} />
                   </td>
 
-                  {/* Contacted toggle */}
+                  {/* Contacted + Book */}
                   <td style={{ padding: "10px 10px", textAlign: "center" }}>
-                    <button
-                      onClick={() => toggleContacted(r.id, r.status)}
-                      style={{
-                        padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                        cursor: "pointer", border: "none", whiteSpace: "nowrap",
-                        background: contacted ? C.greenBg : "rgba(249,115,22,0.12)",
-                        color: contacted ? C.green : C.accent,
-                        transition: "all 0.15s",
-                      }}
-                    >
-                      {contacted ? "✓ Done" : "Mark Done"}
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "center" }}>
+                      <button
+                        onClick={() => toggleContacted(r.id, r.status)}
+                        style={{
+                          padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                          cursor: "pointer", border: "none", whiteSpace: "nowrap",
+                          background: contacted ? C.greenBg : "rgba(249,115,22,0.12)",
+                          color: contacted ? C.green : C.accent,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {contacted ? "✓ Done" : "Mark Done"}
+                      </button>
+                      <button
+                        onClick={() => setConvertingLead(r)}
+                        style={{
+                          padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                          cursor: "pointer", border: "none", whiteSpace: "nowrap",
+                          background: "rgba(96,165,250,0.12)", color: "#60a5fa",
+                        }}
+                      >
+                        Book
+                      </button>
+                    </div>
+                  </td>
+
+                  {/* Won toggle */}
+                  <td style={{ padding: "10px 10px" }}>
+                    <WonCell lead={r} onSave={saveWon} />
                   </td>
                 </tr>
               );
