@@ -166,7 +166,6 @@ OPEN_PATHS = {
     "/auth/invite/create",
     "/auth/invite/list",
     "/auth/invite/verify",
-    "/auth/invite/set-admin",
     "/_int/whoami-raw",
     "/whoami",
     "/debug/whoami-verbose",
@@ -192,6 +191,7 @@ OPEN_PREFIXES = (
     "/backup/",
     "/cron/",
     "/oauth/google/",  # Google OAuth — callback arrives from Google with no auth headers
+    "/auth/invite/set-admin/",
 ) + (("/debug/",) if IS_DEV else tuple())
 
 
