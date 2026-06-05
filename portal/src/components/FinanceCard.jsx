@@ -303,15 +303,21 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
       setCsvData(parsed);
       const h = parsed.headers;
       setCsvMapping({
-        amount:      autoDetect(h, ["amount", "total", "price", "subtotal", "invoice total"]),
-        description: autoDetect(h, ["description", "source", "category", "item", "service", "memo"]),
-        notes:       autoDetect(h, ["notes", "note", "comment", "remarks"]),
+        total:        autoDetect(h, ["total", "invoice total", "amount", "price", "subtotal"]),
+        parts_cost:   autoDetect(h, ["parts_cost", "parts cost", "materials", "material_cost", "parts"]),
+        labor_hours:  autoDetect(h, ["labor_hours", "hours", "labor hours", "hrs"]),
+        labor_rate:   autoDetect(h, ["labor_rate", "rate", "hourly_rate", "hourly rate", "labor rate"]),
+        service_type: autoDetect(h, ["service_type", "service type", "job_type", "job type", "type", "category"]),
+        customer:     autoDetect(h, ["customer_name", "customer", "client", "name"]),
+        description:  autoDetect(h, ["description", "notes", "memo", "desc"]),
+        date:         autoDetect(h, ["date", "invoice_date", "service_date", "invoice date", "service date"]),
+        address:      autoDetect(h, ["service_address", "address", "location"]),
       });
     };
     reader.readAsText(file);
   }
 
-  async function importCSV(entryType) {
+  async function importCSV() {
     if (!csvData) return;
     setCsvImporting(true);
     setCsvResult(null);
@@ -320,32 +326,64 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
 
     for (const row of csvData.rows) {
       try {
-        const get = (idx) =>
-          idx !== "" ? (row[csvData.headers[Number(idx)]] || "") : "";
-        const rawAmount = get(csvMapping.amount).replace(/[$,\s]/g, "");
-        const description = get(csvMapping.description);
-        const notes = get(csvMapping.notes);
+        const get = (key) => {
+          const idx = csvMapping[key];
+          return idx !== "" && idx !== undefined ? (row[csvData.headers[Number(idx)]] || "").trim() : "";
+        };
 
-        if (!rawAmount || isNaN(Number(rawAmount))) { fail++; continue; }
+        const rawTotal = get("total").replace(/[$,\s]/g, "");
+        if (!rawTotal || isNaN(Number(rawTotal))) { fail++; continue; }
 
-        if (entryType === "revenue") {
-          await apiFetch("/finance/revenue", {
-            method: "POST",
-            body: JSON.stringify({ amount: rawAmount, source: description, notes }),
-          });
-        } else {
+        const customer    = get("customer");
+        const serviceType = get("service_type");
+        const description = get("description");
+        const date        = get("date");
+        const address     = get("address");
+        const rawParts    = get("parts_cost").replace(/[$,\s]/g, "") || "0";
+        const laborHours  = get("labor_hours").replace(/[$,\s]/g, "") || "0";
+        const laborRate   = get("labor_rate").replace(/[$,\s]/g, "") || "0";
+
+        const noteParts = [
+          customer    && `Customer: ${customer}`,
+          description && description,
+          date        && `Date: ${date}`,
+          address     && `Address: ${address}`,
+        ].filter(Boolean);
+        const notes = noteParts.join(" | ") || undefined;
+
+        await apiFetch("/finance/revenue", {
+          method: "POST",
+          body: JSON.stringify({
+            amount: rawTotal,
+            source: serviceType || "Service",
+            job_type: serviceType || undefined,
+            notes,
+          }),
+        });
+
+        const hasCost = parseFloat(rawParts) > 0 || (parseFloat(laborHours) > 0 && parseFloat(laborRate) > 0);
+        if (hasCost) {
           await apiFetch("/finance/cost", {
             method: "POST",
-            body: JSON.stringify({ amount: rawAmount, category: description, notes }),
+            body: JSON.stringify({
+              amount: rawParts,
+              hours: laborHours,
+              hourly_rate: laborRate,
+              category: serviceType || "Service",
+              vendor: customer || undefined,
+              job_type: serviceType || undefined,
+              notes,
+            }),
           });
         }
+
         ok++;
       } catch { fail++; }
     }
 
     setCsvImporting(false);
     setCsvResult({ ok, fail });
-    if (ok > 0) { loadAll(); setActiveTab(entryType === "revenue" ? "revenue" : "costs"); }
+    if (ok > 0) { loadAll(); }
   }
 
   // ── toggle add mode helpers ──
@@ -683,10 +721,10 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
 
           {!csvFile && (
             <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
-              Upload a CSV invoice or accounting export. We'll auto-detect Amount, Description, and Notes columns.
+              Upload your HVAC invoice CSV. Each row becomes one revenue entry + one cost entry automatically.
               <br />
               <span style={{ fontSize: 12, opacity: 0.7 }}>
-                Supported exports: QuickBooks, Wave, FreshBooks, or any custom invoice CSV.
+                Expected columns: total, parts_cost, labor_hours, labor_rate, service_type, customer_name, description, date, service_address
               </span>
             </div>
           )}
@@ -705,9 +743,15 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
                   {[
-                    { key: "amount",      label: "Amount *" },
-                    { key: "description", label: "Source / Category" },
-                    { key: "notes",       label: "Notes" },
+                    { key: "total",        label: "Invoice Total *" },
+                    { key: "parts_cost",   label: "Parts / Materials Cost" },
+                    { key: "labor_hours",  label: "Labor Hours" },
+                    { key: "labor_rate",   label: "Labor Rate ($/hr)" },
+                    { key: "service_type", label: "Service Type" },
+                    { key: "customer",     label: "Customer Name" },
+                    { key: "description",  label: "Description" },
+                    { key: "date",         label: "Invoice Date" },
+                    { key: "address",      label: "Service Address" },
                   ].map(({ key, label }) => (
                     <div key={key}>
                       <div style={{ color: C.muted, fontSize: 11, marginBottom: 4 }}>{label}</div>
@@ -775,28 +819,16 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
               {/* Import action buttons */}
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <button
-                  onClick={() => importCSV("revenue")}
-                  disabled={csvImporting || !csvMapping.amount}
+                  onClick={() => importCSV()}
+                  disabled={csvImporting || !csvMapping.total}
                   style={{
                     padding: "9px 18px", borderRadius: 9, border: "none",
-                    background: C.green, color: "#000", fontWeight: 700, fontSize: 13,
-                    cursor: csvImporting ? "default" : "pointer",
-                    opacity: csvImporting || !csvMapping.amount ? 0.55 : 1,
+                    background: C.accent, color: "#000", fontWeight: 700, fontSize: 13,
+                    cursor: csvImporting || !csvMapping.total ? "default" : "pointer",
+                    opacity: csvImporting || !csvMapping.total ? 0.55 : 1,
                   }}
                 >
-                  {csvImporting ? "Importing…" : `Import as Revenue (${csvData.rows.length} rows)`}
-                </button>
-                <button
-                  onClick={() => importCSV("cost")}
-                  disabled={csvImporting || !csvMapping.amount}
-                  style={{
-                    padding: "9px 18px", borderRadius: 9, border: "none",
-                    background: C.red, color: "#000", fontWeight: 700, fontSize: 13,
-                    cursor: csvImporting ? "default" : "pointer",
-                    opacity: csvImporting || !csvMapping.amount ? 0.55 : 1,
-                  }}
-                >
-                  {csvImporting ? "Importing…" : `Import as Costs (${csvData.rows.length} rows)`}
+                  {csvImporting ? "Importing…" : `Import HVAC Invoices (${csvData.rows.length} rows)`}
                 </button>
                 <button
                   type="button" onClick={() => setAddMode(null)}
@@ -818,8 +850,8 @@ export default function FinanceCard({ apiBase, commonHeaders }) {
                     color: csvResult.fail === 0 ? C.green : C.accent,
                   }}
                 >
-                  {csvResult.ok} rows imported
-                  {csvResult.fail > 0 ? `, ${csvResult.fail} skipped (missing or invalid amount)` : " successfully"}
+                  {csvResult.ok} invoices imported
+                  {csvResult.fail > 0 ? `, ${csvResult.fail} skipped (missing or invalid total)` : " — revenue and costs split automatically"}
                 </div>
               )}
             </>
