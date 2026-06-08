@@ -161,6 +161,7 @@ OPEN_PATHS = {
     "/health",
     "/auth/login",
     "/auth/signup",
+    "/auth/register",
     "/auth/forgot-password",
     "/auth/reset-password",
     "/auth/invite/create",
