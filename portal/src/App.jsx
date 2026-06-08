@@ -361,6 +361,7 @@ function App() {
   const resetToken  = new URLSearchParams(window.location.search).get("reset_token");
   const inviteParam = new URLSearchParams(window.location.search).get("invite");
   const emailParam  = new URLSearchParams(window.location.search).get("email");
+  const signupParam = new URLSearchParams(window.location.search).get("signup");
 
 
   async function fetchMe(token) {
@@ -430,14 +431,18 @@ function handleLoggedIn(loginData) {
       );
     }
 
-    if (showSignup) {
+    if (showSignup || signupParam) {
       return (
         <SignupPage
           onSignedUp={(data) => {
+            if (signupParam) window.history.replaceState({}, "", "/");
             setShowSignup(false);
             handleLoggedIn(data);
           }}
-          onBack={() => setShowSignup(false)}
+          onBack={() => {
+            if (signupParam) window.history.replaceState({}, "", "/");
+            setShowSignup(false);
+          }}
         />
       );
     }
