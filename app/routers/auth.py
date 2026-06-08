@@ -363,7 +363,7 @@ def register(payload: RegisterRequest, background_tasks: BackgroundTasks, sessio
             text("""
                 UPDATE tenant
                 SET password_hash = :pwd,
-                    features = NULL,
+                    features = 'finance,leads,vapi,bookings',
                     trial_expires_at = :trial
                 WHERE id = :tid
             """).bindparams(pwd=password_hash, trial=trial_expires_at, tid=tenant.id)
