@@ -368,6 +368,41 @@ def send_password_reset_email(email: str, reset_url: str) -> bool:
     return send_email(email, subject, text, html=html)
 
 
+def send_welcome_email(email: str, business_name: str, portal_url: str) -> bool:
+    """Send a welcome / account-created email to a new tenant."""
+    from_name = getattr(config, "FROM_NAME", "Torevez")
+    subject = f"Welcome to {from_name} — your account is ready"
+    login_url = portal_url.rstrip("/")
+    text = (
+        f"Hi {business_name},\n\n"
+        f"Your {from_name} account has been created. You're on a free 30-day trial — no credit card needed.\n\n"
+        f"Log in here: {login_url}\n\n"
+        f"If you have any questions, just reply to this email.\n\n"
+        f"— The {from_name} Team"
+    )
+    html = f"""
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;max-width:520px">
+      <h2 style="color:#111827">Welcome to <span style="color:#f97316">{from_name}</span></h2>
+      <p>Hi <strong>{business_name}</strong>,</p>
+      <p>Your account is ready. You're on a <strong>free 30-day trial</strong> — no credit card needed.</p>
+      <p>
+        <a href="{login_url}"
+           style="display:inline-block;padding:12px 28px;background:#f97316;color:#111827;
+                  font-weight:700;text-decoration:none;border-radius:8px">
+          Go to Dashboard
+        </a>
+      </p>
+      <p style="color:#6b7280;font-size:13px">
+        Or copy this link:<br>{login_url}
+      </p>
+      <p style="color:#6b7280;font-size:13px">
+        Questions? Just reply to this email — we're happy to help.
+      </p>
+    </div>
+    """.strip()
+    return send_email(email, subject, text, html=html)
+
+
 def send_booking_reminder(tenant: str, payload: dict, window: str) -> bool:
     """
     window: "24h" or "2h" (or any tag like "review" if you reuse it)

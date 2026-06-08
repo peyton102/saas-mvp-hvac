@@ -40,7 +40,7 @@ function EyeIcon({ open }) {
   );
 }
 
-export default function LoginPage({ onLoggedIn, onInviteSignup, onForgotPassword }) {
+export default function LoginPage({ onLoggedIn, onSignup, onInviteSignup, onForgotPassword }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -190,13 +190,23 @@ export default function LoginPage({ onLoggedIn, onInviteSignup, onForgotPassword
         </div>
 
         <div style={{ textAlign: "center", color: "rgba(229,231,235,0.85)" }}>
-          Need an invite?{" "}
+          No account?{" "}
           <button
             type="button"
-        onClick={() => onInviteSignup?.()}
+            onClick={() => onSignup?.()}
             style={linkStyle}
           >
-            Create account
+            Start free trial
+          </button>
+        </div>
+
+        <div style={{ textAlign: "center" }}>
+          <button
+            type="button"
+            onClick={() => onInviteSignup?.()}
+            style={{ ...linkStyle, color: "rgba(229,231,235,0.35)", fontSize: 12, fontWeight: 500 }}
+          >
+            Have an invite code?
           </button>
         </div>
 

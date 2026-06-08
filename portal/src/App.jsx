@@ -6,6 +6,7 @@ import LoginPage from "./LoginPage";
 import TenantSettingsCard from "./components/TenantSettingsCard.jsx";
 import { getToken, setToken, clearToken } from "./auth";
 import InviteSignupPage from "./InviteSignupPage.jsx";
+import SignupPage from "./SignupPage.jsx";
 import ForgotPasswordPage from "./ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./ResetPasswordPage.jsx";
 import BookingAvailabilityCard from "./components/BookingAvailabilityCard.jsx";
@@ -136,6 +137,27 @@ const headers = useMemo(() => {
           Log out
         </button>
       </div>
+
+      {/* trial banner */}
+      {me?.trial_days_left !== null && me?.trial_days_left !== undefined && me.trial_active && me.trial_days_left <= 7 && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 14,
+            borderRadius: 14,
+            background: me.trial_days_left <= 3
+              ? "rgba(239,68,68,0.10)"
+              : "rgba(249,115,22,0.10)",
+            border: `1px solid ${me.trial_days_left <= 3 ? "rgba(239,68,68,0.35)" : "rgba(249,115,22,0.35)"}`,
+            fontSize: 14,
+            color: me.trial_days_left <= 3 ? "#fca5a5" : "#fde68a",
+          }}
+        >
+          {me.trial_days_left === 0
+            ? "Your free trial expires today."
+            : `Your free trial ends in ${me.trial_days_left} day${me.trial_days_left === 1 ? "" : "s"}.`}
+        </div>
+      )}
 
       {/* setup banner */}
       {needsSetup && !settingsComplete && (
@@ -331,6 +353,7 @@ function TopTab({ label, active, onClick, admin = false }) {
 function App() {
   const [me, setMe] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showSignup, setShowSignup] = useState(false);
   const [showInviteSignup, setShowInviteSignup] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
@@ -407,6 +430,18 @@ function handleLoggedIn(loginData) {
       );
     }
 
+    if (showSignup) {
+      return (
+        <SignupPage
+          onSignedUp={(data) => {
+            setShowSignup(false);
+            handleLoggedIn(data);
+          }}
+          onBack={() => setShowSignup(false)}
+        />
+      );
+    }
+
     if (showInviteSignup || inviteParam) {
       return (
         <InviteSignupPage
@@ -435,9 +470,70 @@ function handleLoggedIn(loginData) {
     return (
       <LoginPage
         onLoggedIn={handleLoggedIn}
+        onSignup={() => setShowSignup(true)}
         onInviteSignup={() => setShowInviteSignup(true)}
         onForgotPassword={() => setShowForgotPassword(true)}
       />
+    );
+  }
+
+  // Trial expired — show locked screen instead of dashboard
+  if (me && !me.trial_active) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          width: "100%",
+          display: "grid",
+          placeItems: "center",
+          padding: 24,
+          boxSizing: "border-box",
+          background:
+            "radial-gradient(900px 520px at 50% 0%, rgba(249,115,22,0.10), rgba(0,0,0,0) 65%), linear-gradient(180deg, #0b1220 0%, #05070d 100%)",
+          color: "#e5e7eb",
+          fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
+        }}
+      >
+        <div style={{ textAlign: "center", maxWidth: 480 }}>
+          <div style={{ fontSize: 64, fontWeight: 900, marginBottom: 12 }}>
+            <span style={{ color: "#e5e7eb" }}>Tore</span>
+            <span style={{ color: "#f97316" }}>vez</span>
+          </div>
+          <h2 style={{ fontSize: 28, fontWeight: 900, marginBottom: 12 }}>
+            Your free trial has ended
+          </h2>
+          <p style={{ color: "rgba(229,231,235,0.65)", fontSize: 16, marginBottom: 28 }}>
+            Your 30-day trial for <strong style={{ color: "#e5e7eb" }}>{me.business_name || me.email}</strong> has expired.
+            Reach out to get your account reactivated.
+          </p>
+          <a
+            href="mailto:support@torevez.com"
+            style={{
+              display: "inline-block",
+              padding: "14px 32px",
+              background: "#f97316",
+              color: "#111827",
+              fontWeight: 900,
+              fontSize: 16,
+              borderRadius: 12,
+              textDecoration: "none",
+            }}
+          >
+            Contact Us to Reactivate
+          </a>
+          <div style={{ marginTop: 20 }}>
+            <button
+              onClick={() => { clearToken(); window.location.reload(); }}
+              style={{
+                background: "none", border: "none", color: "rgba(229,231,235,0.45)",
+                cursor: "pointer", fontSize: 13,
+              }}
+            >
+              Log out
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 

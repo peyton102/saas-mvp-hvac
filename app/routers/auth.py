@@ -21,7 +21,7 @@ from app.routers.invites import ensure_invite_table
 from app.models import Tenant, ApiKey, PasswordResetToken
 from app.db import get_session
 from app import config
-from app.services.email import send_password_reset_email
+from app.services.email import send_password_reset_email, send_welcome_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -131,6 +131,9 @@ class MeResponse(BaseModel):
     office_sms_to: Optional[str] = None
     office_email_to: Optional[str] = None
 
+    trial_active: bool = True
+    trial_days_left: Optional[int] = None
+
 class SignupRequest(BaseModel):
     invite_code: str
     business_name: str
@@ -138,6 +141,13 @@ class SignupRequest(BaseModel):
     phone: Optional[str] = None
     password: str
     review_link: Optional[str] = None
+
+
+class RegisterRequest(BaseModel):
+    business_name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    password: str
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -297,6 +307,110 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
     )
 
 
+# ----------------- Self-serve Register (no invite code, 30-day trial) -----------------
+
+@router.post("/register", response_model=SignupResponse)
+def register(payload: RegisterRequest, session: Session = Depends(get_session)):
+    """
+    Public self-serve signup. No invite code required.
+    Creates a tenant with a 30-day free trial.
+    """
+    # Ensure required columns exist
+    for sp, ddl in [
+        ("sp_reg_pwd",     "ALTER TABLE tenant ADD COLUMN password_hash TEXT"),
+        ("sp_reg_feat",    "ALTER TABLE tenant ADD COLUMN features TEXT"),
+        ("sp_reg_trial",   "ALTER TABLE tenant ADD COLUMN trial_expires_at TIMESTAMPTZ"),
+    ]:
+        try:
+            session.exec(text(f"SAVEPOINT {sp}"))
+            session.exec(text(ddl))
+            session.exec(text(f"RELEASE SAVEPOINT {sp}"))
+        except Exception:
+            session.exec(text(f"ROLLBACK TO SAVEPOINT {sp}"))
+
+    slug = slugify(payload.business_name)
+    email_lower = payload.email.lower().strip()
+    api_key_plain = secrets.token_hex(32)
+    trial_expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+
+    try:
+        existing_slug = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+        if existing_slug:
+            raise HTTPException(status_code=400, detail="Business name already taken. Try a different one.")
+
+        existing_email = session.exec(select(Tenant).where(Tenant.email == email_lower)).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="An account with this email already exists.")
+
+        if len(payload.password) < 8:
+            raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
+
+        _bl_base = (getattr(config, "BOOKING_LINK", "") or "").strip().split("?")[0]
+        booking_link_default = f"{_bl_base}?tenant={slug}" if _bl_base else ""
+        tenant = Tenant(
+            slug=slug,
+            business_name=payload.business_name.strip(),
+            email=email_lower,
+            phone=(payload.phone or "").strip(),
+            booking_link=booking_link_default,
+            is_active=True,
+        )
+        session.add(tenant)
+        session.flush()
+
+        password_hash = hash_password(payload.password)
+        session.exec(
+            text("""
+                UPDATE tenant
+                SET password_hash = :pwd,
+                    features = NULL,
+                    trial_expires_at = :trial
+                WHERE id = :tid
+            """).bindparams(pwd=password_hash, trial=trial_expires_at, tid=tenant.id)
+        )
+
+        api_key_row = ApiKey(
+            tenant_id=tenant.id,
+            hashed_key=hash_api_key(api_key_plain),
+            is_active=True,
+        )
+        session.add(api_key_row)
+        session.commit()
+
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Signup failed — please try again") from exc
+
+    # Send welcome email (best-effort — don't fail signup if email fails)
+    try:
+        portal_url = getattr(config, "PORTAL_URL", "https://saas-mvp-hvac-1.onrender.com").rstrip("/")
+        send_welcome_email(email_lower, payload.business_name.strip(), portal_url)
+    except Exception as e:
+        print(f"[REGISTER WELCOME EMAIL ERROR] {e}")
+
+    backup_event(
+        session,
+        category="auth",
+        action="register_success",
+        tenant_id=slug,
+        user_email=email_lower,
+        ok=True,
+        payload={"tenant_slug": slug},
+    )
+
+    token_data = {"sub": email_lower, "tenant": slug}
+    access_token = create_access_token(token_data)
+
+    return SignupResponse(
+        tenant_slug=slug,
+        api_key=api_key_plain,
+        access_token=access_token,
+    )
+
+
 # ----------------- Login -----------------
 
 
@@ -414,6 +528,7 @@ def me(
     for sp, ddl in [
         ("sp_me_is_admin",  "ALTER TABLE tenant ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"),
         ("sp_me_features",  "ALTER TABLE tenant ADD COLUMN features TEXT"),
+        ("sp_me_trial",     "ALTER TABLE tenant ADD COLUMN trial_expires_at TIMESTAMPTZ"),
     ]:
         try:
             session.exec(text(f"SAVEPOINT {sp}"))
@@ -437,12 +552,28 @@ def me(
         and (tenant.office_email_to or "").strip()
     )
 
-    # features stored as comma-separated text on the tenant row
-    features_row = session.exec(
-        text("SELECT features FROM tenant WHERE slug = :slug LIMIT 1").bindparams(slug=tenant_slug)
+    # features + trial stored on tenant row
+    extra_row = session.exec(
+        text("SELECT features, trial_expires_at FROM tenant WHERE slug = :slug LIMIT 1").bindparams(slug=tenant_slug)
     ).first()
-    features_raw = (features_row[0] if features_row else None) or ""
+    features_raw = (extra_row[0] if extra_row else None) or ""
     features_list = [f for f in features_raw.split(",") if f] if features_raw else []
+
+    # trial status
+    trial_active = True
+    trial_days_left = None
+    trial_exp_raw = extra_row[1] if extra_row else None
+    if trial_exp_raw:
+        try:
+            trial_exp_dt = datetime.fromisoformat(str(trial_exp_raw).replace("Z", "+00:00"))
+            if trial_exp_dt.tzinfo is None:
+                trial_exp_dt = trial_exp_dt.replace(tzinfo=timezone.utc)
+            now_utc = datetime.now(timezone.utc)
+            delta = trial_exp_dt - now_utc
+            trial_days_left = max(0, delta.days)
+            trial_active = delta.total_seconds() > 0
+        except Exception:
+            pass
 
     return MeResponse(
         email=email,
@@ -455,6 +586,8 @@ def me(
         review_google_url=tenant.review_google_url,
         office_sms_to=tenant.office_sms_to,
         office_email_to=tenant.office_email_to,
+        trial_active=trial_active,
+        trial_days_left=trial_days_left,
     )
 
 
