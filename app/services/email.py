@@ -374,29 +374,29 @@ def send_welcome_email(email: str, business_name: str, portal_url: str) -> bool:
     subject = f"Welcome to {from_name} — your account is ready"
     login_url = portal_url.rstrip("/")
     text = (
-        f"Hi {business_name},\n\n"
-        f"Your {from_name} account has been created. You're on a free 30-day trial — no credit card needed.\n\n"
+        f"Your {from_name} account for {business_name} is ready.\n\n"
+        f"You're on a free 30-day trial — no credit card needed.\n\n"
         f"Log in here: {login_url}\n\n"
-        f"If you have any questions, just reply to this email.\n\n"
+        f"Questions? Just reply to this email.\n\n"
         f"— The {from_name} Team"
     )
     html = f"""
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;max-width:520px">
-      <h2 style="color:#111827">Welcome to <span style="color:#f97316">{from_name}</span></h2>
-      <p>Hi <strong>{business_name}</strong>,</p>
-      <p>Your account is ready. You're on a <strong>free 30-day trial</strong> — no credit card needed.</p>
-      <p>
-        <a href="{login_url}"
-           style="display:inline-block;padding:12px 28px;background:#f97316;color:#111827;
-                  font-weight:700;text-decoration:none;border-radius:8px">
-          Go to Dashboard
-        </a>
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;max-width:520px;padding:32px 24px;background:#ffffff">
+      <div style="font-size:28px;font-weight:900;margin-bottom:24px">
+        <span style="color:#111827">Tore</span><span style="color:#f97316">vez</span>
+      </div>
+      <h2 style="color:#111827;font-size:22px;margin:0 0 12px">Your account is ready.</h2>
+      <p style="color:#374151;margin:0 0 8px">
+        <strong>{business_name}</strong> has been set up on your free 30-day trial.
       </p>
-      <p style="color:#6b7280;font-size:13px">
-        Or copy this link:<br>{login_url}
-      </p>
-      <p style="color:#6b7280;font-size:13px">
-        Questions? Just reply to this email — we're happy to help.
+      <p style="color:#374151;margin:0 0 24px">No credit card needed — just log in and get started.</p>
+      <a href="{login_url}"
+         style="display:inline-block;padding:14px 32px;background:#f97316;color:#111827;
+                font-weight:700;font-size:16px;text-decoration:none;border-radius:8px">
+        Go to Dashboard
+      </a>
+      <p style="color:#9ca3af;font-size:12px;margin-top:32px">
+        Questions? Reply to this email and we'll help you out.
       </p>
     </div>
     """.strip()
