@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Header
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 from sqlalchemy import text
@@ -310,7 +310,7 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
 # ----------------- Self-serve Register (no invite code, 30-day trial) -----------------
 
 @router.post("/register", response_model=SignupResponse)
-def register(payload: RegisterRequest, session: Session = Depends(get_session)):
+def register(payload: RegisterRequest, background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
     """
     Public self-serve signup. No invite code required.
     Creates a tenant with a 30-day free trial.
@@ -384,12 +384,15 @@ def register(payload: RegisterRequest, session: Session = Depends(get_session)):
         session.rollback()
         raise HTTPException(status_code=500, detail="Signup failed — please try again") from exc
 
-    # Send welcome email (best-effort — don't fail signup if email fails)
-    try:
-        portal_url = getattr(config, "PORTAL_URL", "https://saas-mvp-hvac-1.onrender.com").rstrip("/")
-        send_welcome_email(email_lower, payload.business_name.strip(), portal_url)
-    except Exception as e:
-        print(f"[REGISTER WELCOME EMAIL ERROR] {e}")
+    # Send welcome email in background — don't block the response
+    def _send_welcome():
+        try:
+            portal_url = getattr(config, "PORTAL_URL", "https://saas-mvp-hvac-1.onrender.com").rstrip("/")
+            send_welcome_email(email_lower, payload.business_name.strip(), portal_url)
+        except Exception as e:
+            print(f"[REGISTER WELCOME EMAIL ERROR] {e}")
+
+    background_tasks.add_task(_send_welcome)
 
     backup_event(
         session,
