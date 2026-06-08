@@ -200,15 +200,6 @@ export default function LoginPage({ onLoggedIn, onSignup, onInviteSignup, onForg
           </button>
         </div>
 
-        <div style={{ textAlign: "center" }}>
-          <button
-            type="button"
-            onClick={() => onInviteSignup?.()}
-            style={{ ...linkStyle, color: "rgba(229,231,235,0.35)", fontSize: 12, fontWeight: 500 }}
-          >
-            Have an invite code?
-          </button>
-        </div>
 
       </form>
     </div>
