@@ -133,6 +133,7 @@ class MeResponse(BaseModel):
 
     paid_status: str = "free"
     is_locked: bool = False
+    trial_active: bool = True  # always true — no trial system, kept for old frontend compat
 
 class SignupRequest(BaseModel):
     invite_code: str
