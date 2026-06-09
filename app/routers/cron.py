@@ -1,10 +1,14 @@
 # app/routers/cron.py
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from sqlalchemy import text
 from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Tenant
 from app.routers.reminders import send_reminders_all
 from app.services.lead_nudges import send_lead_nudges_all
+from app.services.email import send_monthly_summary_email
 from app import config
 
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -130,3 +134,81 @@ def cron_gcal_reset(
         "bookings_deleted": deleted,
         "next_step": f"Re-run /oauth/google/start?tenant={tenant_slug} to set a new baseline.",
     }
+
+
+@router.post("/monthly-summary")
+def cron_monthly_summary(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    session: Session = Depends(get_session),
+):
+    """
+    Send monthly summary emails to all active tenants.
+    Run on the 1st of each month via Render cron job.
+    """
+    _require_admin_key(x_admin_key)
+
+    now = datetime.now(timezone.utc)
+    # Use previous month's stats if run on the 1st
+    if now.month == 1:
+        year, month = now.year - 1, 12
+    else:
+        year, month = now.year, now.month - 1
+
+    month_start = datetime(year, month, 1, tzinfo=timezone.utc).isoformat()
+    if month == 12:
+        month_end = datetime(year + 1, 1, 1, tzinfo=timezone.utc).isoformat()
+    else:
+        month_end = datetime(year, month + 1, 1, tzinfo=timezone.utc).isoformat()
+
+    from calendar import month_name
+    month_label = f"{month_name[month]} {year}"
+    portal_url = getattr(config, "PORTAL_URL", "https://saas-mvp-hvac-1.onrender.com")
+
+    tenants = session.exec(select(Tenant).where(Tenant.is_active == True)).all()
+
+    sent = 0
+    errors = 0
+    for t in tenants:
+        if not t.email:
+            continue
+        try:
+            leads = session.exec(text("""
+                SELECT COUNT(*) FROM lead
+                WHERE tenant_id = :tid AND created_at >= :s AND created_at < :e
+            """).bindparams(tid=t.slug, s=month_start, e=month_end)).scalar() or 0
+
+            bookings = session.exec(text("""
+                SELECT COUNT(*) FROM booking
+                WHERE tenant_id = :tid AND created_at >= :s AND created_at < :e
+            """).bindparams(tid=t.slug, s=month_start, e=month_end)).scalar() or 0
+
+            won_row = session.exec(text("""
+                SELECT COUNT(*), COALESCE(SUM(job_value), 0) FROM booking
+                WHERE tenant_id = :tid AND completed_at IS NOT NULL AND job_value > 0
+                AND completed_at >= :s AND completed_at < :e
+            """).bindparams(tid=t.slug, s=month_start, e=month_end)).first()
+
+            missed = session.exec(text("""
+                SELECT COUNT(*) FROM lead
+                WHERE tenant_id = :tid AND source = 'missed_call'
+                AND created_at >= :s AND created_at < :e
+            """).bindparams(tid=t.slug, s=month_start, e=month_end)).scalar() or 0
+
+            stats = {
+                "month": month_label,
+                "leads_captured": int(leads),
+                "bookings_made": int(bookings),
+                "jobs_won": int(won_row[0]) if won_row else 0,
+                "revenue_this_month": float(won_row[1]) if won_row else 0.0,
+                "missed_calls_answered": int(missed),
+            }
+            ok = send_monthly_summary_email(t.email, t.business_name or t.slug, stats, portal_url)
+            if ok:
+                sent += 1
+            else:
+                errors += 1
+        except Exception as exc:
+            print(f"[MONTHLY SUMMARY] error for {t.slug}: {exc}")
+            errors += 1
+
+    return {"ok": True, "month": month_label, "sent": sent, "errors": errors}

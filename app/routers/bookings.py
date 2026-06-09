@@ -412,6 +412,31 @@ def complete_booking(
     session.add(booking)
     session.commit()
 
+    # Flip paid_status to 'active' on first won job (best-effort)
+    if payload.job_value and payload.job_value > 0:
+        try:
+            from sqlalchemy import text as _text
+            for sp, ddl in [
+                ("sp_paid_s", "ALTER TABLE tenant ADD COLUMN paid_status TEXT DEFAULT 'free'"),
+                ("sp_bill_d", "ALTER TABLE tenant ADD COLUMN billing_start_date TIMESTAMPTZ"),
+            ]:
+                try:
+                    session.exec(_text(f"SAVEPOINT {sp}"))
+                    session.exec(_text(ddl))
+                    session.exec(_text(f"RELEASE SAVEPOINT {sp}"))
+                except Exception:
+                    session.exec(_text(f"ROLLBACK TO SAVEPOINT {sp}"))
+            session.exec(_text("""
+                UPDATE tenant
+                SET paid_status = 'active',
+                    billing_start_date = :now
+                WHERE slug = :slug
+                AND (paid_status IS NULL OR paid_status = 'free')
+            """).bindparams(slug=tenant_id, now=datetime.now(timezone.utc).isoformat()))
+            session.commit()
+        except Exception as exc:
+            print(f"[COMPLETE BOOKING paid_status flip] {exc}")
+
     # Fire review SMS in background — no queue delay, no cron dependency
     if booking.phone:
         tenant_tz = get_tenant_tz(tenant_id, session)

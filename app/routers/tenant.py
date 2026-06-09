@@ -1,10 +1,12 @@
 # app/routers/tenant.py
 import re
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app import config
@@ -420,4 +422,58 @@ def save_booking_config(
         "booking_start": body.booking_start,
         "booking_end":   body.booking_end,
         "slot_minutes":  body.slot_minutes,
+    }
+
+
+@router.get("/value-summary")
+def value_summary(
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    """Returns this month's value stats for the tenant — used in the Value tab."""
+    now = datetime.now(timezone.utc)
+    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc).isoformat()
+    month_name = now.strftime("%B %Y")
+
+    leads_total = session.exec(text("""
+        SELECT COUNT(*) FROM lead
+        WHERE tenant_id = :tid AND created_at >= :start
+    """).bindparams(tid=tenant_id, start=month_start)).scalar() or 0
+
+    bookings_total = session.exec(text("""
+        SELECT COUNT(*) FROM booking
+        WHERE tenant_id = :tid AND created_at >= :start
+    """).bindparams(tid=tenant_id, start=month_start)).scalar() or 0
+
+    won_row = session.exec(text("""
+        SELECT COUNT(*), COALESCE(SUM(job_value), 0)
+        FROM booking
+        WHERE tenant_id = :tid
+        AND completed_at IS NOT NULL
+        AND job_value > 0
+        AND completed_at >= :start
+    """).bindparams(tid=tenant_id, start=month_start)).first()
+    jobs_won = int(won_row[0]) if won_row else 0
+    revenue = float(won_row[1]) if won_row else 0.0
+
+    missed_calls = session.exec(text("""
+        SELECT COUNT(*) FROM lead
+        WHERE tenant_id = :tid AND source = 'missed_call' AND created_at >= :start
+    """).bindparams(tid=tenant_id, start=month_start)).scalar() or 0
+
+    all_time_revenue_row = session.exec(text("""
+        SELECT COALESCE(SUM(job_value), 0)
+        FROM booking
+        WHERE tenant_id = :tid AND completed_at IS NOT NULL AND job_value > 0
+    """).bindparams(tid=tenant_id)).first()
+    all_time_revenue = float(all_time_revenue_row[0]) if all_time_revenue_row else 0.0
+
+    return {
+        "month": month_name,
+        "leads_captured": int(leads_total),
+        "bookings_made": int(bookings_total),
+        "jobs_won": jobs_won,
+        "revenue_this_month": revenue,
+        "missed_calls_answered": int(missed_calls),
+        "all_time_revenue": all_time_revenue,
     }

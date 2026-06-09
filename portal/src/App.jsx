@@ -12,6 +12,7 @@ import ResetPasswordPage from "./ResetPasswordPage.jsx";
 import BookingAvailabilityCard from "./components/BookingAvailabilityCard.jsx";
 import MissedCallsCard from "./components/MissedCallsCard.jsx";
 import AdminTab from "./components/AdminTab.jsx";
+import ValueCard from "./components/ValueCard.jsx";
 
 // ====== CONFIG ======
 const API_BASE =
@@ -138,26 +139,6 @@ const headers = useMemo(() => {
         </button>
       </div>
 
-      {/* trial banner */}
-      {me?.trial_days_left !== null && me?.trial_days_left !== undefined && me.trial_active && me.trial_days_left <= 7 && (
-        <div
-          style={{
-            marginBottom: 14,
-            padding: 14,
-            borderRadius: 14,
-            background: me.trial_days_left <= 3
-              ? "rgba(239,68,68,0.10)"
-              : "rgba(249,115,22,0.10)",
-            border: `1px solid ${me.trial_days_left <= 3 ? "rgba(239,68,68,0.35)" : "rgba(249,115,22,0.35)"}`,
-            fontSize: 14,
-            color: me.trial_days_left <= 3 ? "#fca5a5" : "#fde68a",
-          }}
-        >
-          {me.trial_days_left === 0
-            ? "Your free trial expires today."
-            : `Your free trial ends in ${me.trial_days_left} day${me.trial_days_left === 1 ? "" : "s"}.`}
-        </div>
-      )}
 
       {/* setup banner */}
       {needsSetup && !settingsComplete && (
@@ -232,6 +213,7 @@ const headers = useMemo(() => {
         {has("bookings") && (
           <TopTab label="Bookings" active={tab === "bookings"} onClick={() => setTab("bookings")} />
         )}
+        <TopTab label="Value" active={tab === "value"} onClick={() => setTab("value")} />
         <TopTab label="Settings" active={tab === "settings"} onClick={() => setTab("settings")} />
         {me?.is_admin && (
           <TopTab label="Admin" active={tab === "admin"} onClick={() => setTab("admin")} admin />
@@ -271,10 +253,52 @@ const headers = useMemo(() => {
                 background: "rgba(0,0,0,0.12)",
               }}
             >
-              <h2 style={{ margin: 0, fontSize: 22 }}>Welcome</h2>
+              <h2 style={{ margin: 0, fontSize: 22 }}>
+                Welcome{me?.business_name ? `, ${me.business_name}` : ""}
+              </h2>
               <p style={{ marginTop: 8, color: "rgba(229,231,235,0.75)" }}>
                 Choose a section above to get started.
               </p>
+              {me?.paid_status === "free" && (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 12,
+                    padding: "6px 12px",
+                    borderRadius: 20,
+                    background: "rgba(34,197,94,0.10)",
+                    border: "1px solid rgba(34,197,94,0.30)",
+                    fontSize: 13,
+                    color: "#86efac",
+                    fontWeight: 600,
+                  }}
+                >
+                  <span style={{ fontSize: 10 }}>●</span>
+                  Free — no charge until your first won job
+                </div>
+              )}
+              {me?.paid_status === "active" && (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 12,
+                    padding: "6px 12px",
+                    borderRadius: 20,
+                    background: "rgba(249,115,22,0.10)",
+                    border: "1px solid rgba(249,115,22,0.30)",
+                    fontSize: 13,
+                    color: "#fdba74",
+                    fontWeight: 600,
+                  }}
+                >
+                  <span style={{ fontSize: 10 }}>●</span>
+                  Active subscription
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -307,6 +331,10 @@ const headers = useMemo(() => {
 
         {tab === "calls" && (
           <MissedCallsCard apiBase={BASE} commonHeaders={headers} />
+        )}
+
+        {tab === "value" && (
+          <ValueCard apiBase={BASE} commonHeaders={headers} />
         )}
 
         {tab === "admin" && me?.is_admin && (
@@ -482,8 +510,8 @@ function handleLoggedIn(loginData) {
     );
   }
 
-  // Trial expired — show locked screen instead of dashboard
-  if (me && !me.trial_active) {
+  // Admin-locked account
+  if (me?.is_locked) {
     return (
       <div
         style={{
@@ -505,11 +533,11 @@ function handleLoggedIn(loginData) {
             <span style={{ color: "#f97316" }}>vez</span>
           </div>
           <h2 style={{ fontSize: 28, fontWeight: 900, marginBottom: 12 }}>
-            Your free trial has ended
+            Account suspended
           </h2>
           <p style={{ color: "rgba(229,231,235,0.65)", fontSize: 16, marginBottom: 28 }}>
-            Your 30-day trial for <strong style={{ color: "#e5e7eb" }}>{me.business_name || me.email}</strong> has expired.
-            Reach out to get your account reactivated.
+            Access to <strong style={{ color: "#e5e7eb" }}>{me.business_name || me.email}</strong> has been suspended.
+            Contact us to get your account reactivated.
           </p>
           <a
             href="mailto:support@torevez.com"
@@ -524,7 +552,7 @@ function handleLoggedIn(loginData) {
               textDecoration: "none",
             }}
           >
-            Contact Us to Reactivate
+            Contact Support
           </a>
           <div style={{ marginTop: 20 }}>
             <button

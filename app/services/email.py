@@ -403,6 +403,74 @@ def send_welcome_email(email: str, business_name: str, portal_url: str) -> bool:
     return send_email(email, subject, text, html=html)
 
 
+def send_monthly_summary_email(email: str, business_name: str, stats: dict, portal_url: str) -> bool:
+    """Send the monthly 'here's what Torevez did for you' recap email."""
+    from_name = getattr(config, "FROM_NAME", "Torevez")
+    month = stats.get("month", "this month")
+    subject = f"Here's what {from_name} caught for you in {month}"
+    login_url = portal_url.rstrip("/")
+
+    leads = stats.get("leads_captured", 0)
+    bookings = stats.get("bookings_made", 0)
+    won = stats.get("jobs_won", 0)
+    revenue = stats.get("revenue_this_month", 0.0)
+    missed = stats.get("missed_calls_answered", 0)
+
+    text_body = (
+        f"Here's your {month} recap for {business_name}:\n\n"
+        f"  Leads captured:       {leads}\n"
+        f"  Bookings made:        {bookings}\n"
+        f"  Jobs won:             {won}"
+        + (f" (${revenue:,.0f})" if revenue else "") + "\n"
+        f"  Missed calls answered:{missed}\n\n"
+        f"View your full dashboard: {login_url}\n\n"
+        f"— The {from_name} Team"
+    )
+
+    rev_line = f"<strong>${revenue:,.0f}</strong> in revenue" if revenue else f"<strong>{won} job{'s' if won != 1 else ''} won</strong>"
+
+    html = f"""
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;max-width:520px;padding:32px 24px;background:#ffffff">
+      <div style="font-size:28px;font-weight:900;margin-bottom:24px">
+        <span style="color:#111827">Tore</span><span style="color:#f97316">vez</span>
+      </div>
+      <h2 style="color:#111827;font-size:20px;margin:0 0 6px">Your {month} recap</h2>
+      <p style="color:#6b7280;margin:0 0 24px;font-size:14px">{business_name}</p>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+        <tr style="background:#f9fafb">
+          <td style="padding:12px 16px;font-size:14px;color:#374151;border-radius:8px 0 0 8px">Leads captured</td>
+          <td style="padding:12px 16px;font-size:22px;font-weight:900;color:#111827;text-align:right">{leads}</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;font-size:14px;color:#374151">Bookings made</td>
+          <td style="padding:12px 16px;font-size:22px;font-weight:900;color:#111827;text-align:right">{bookings}</td>
+        </tr>
+        <tr style="background:#f9fafb">
+          <td style="padding:12px 16px;font-size:14px;color:#374151">Jobs won</td>
+          <td style="padding:12px 16px;font-size:22px;font-weight:900;color:#f97316;text-align:right">{rev_line}</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;font-size:14px;color:#374151">Missed calls answered</td>
+          <td style="padding:12px 16px;font-size:22px;font-weight:900;color:#111827;text-align:right">{missed}</td>
+        </tr>
+      </table>
+
+      <a href="{login_url}"
+         style="display:inline-block;padding:14px 32px;background:#f97316;color:#111827;
+                font-weight:700;font-size:15px;text-decoration:none;border-radius:8px">
+        View Dashboard
+      </a>
+
+      <p style="color:#9ca3af;font-size:12px;margin-top:32px">
+        You're receiving this because you use {from_name} to manage your business.
+      </p>
+    </div>
+    """.strip()
+
+    return send_email(email, subject, text_body, html=html)
+
+
 def send_booking_reminder(tenant: str, payload: dict, window: str) -> bool:
     """
     window: "24h" or "2h" (or any tag like "review" if you reuse it)
