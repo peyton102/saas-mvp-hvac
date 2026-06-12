@@ -28,36 +28,38 @@ def _ensure_nudge_column(session: Session) -> None:
         session.exec(text("ROLLBACK TO SAVEPOINT sp_lead_nudge_col"))
 
 
-def send_lead_nudges_all(hours_old: float, session: Session) -> dict:
+def send_lead_nudges_all(hours_old: float, session: Session, max_hours_old: float = 24.0) -> dict:
     """
     Run nudges across all active tenants.
 
     Args:
-        hours_old: How many hours a 'new' lead must be stale before nudging.
-        session:   DB session (injected by FastAPI).
+        hours_old:     How many hours a 'new' lead must be stale before nudging.
+        session:       DB session (injected by FastAPI).
+        max_hours_old: Upper bound — leads older than this are skipped (default 24h = same day only).
 
     Returns dict with counts for logging.
     """
     _ensure_nudge_column(session)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_old)
+    now = datetime.now(timezone.utc)
+    cutoff_max = now - timedelta(hours=hours_old)       # must be at least this old
+    cutoff_min = now - timedelta(hours=max_hours_old)   # must not be older than this
 
-    # Fetch stale new leads across all tenants in one query.
-    # We only nudge leads that have a phone number.
+    # Only nudge leads captured within the same day window (between min and max cutoff).
     rows = session.exec(text("""
         SELECT id, tenant_id, name, phone
         FROM lead
         WHERE status = 'new'
-          AND (nudge_sent_at IS NULL)
-          AND created_at <= :cutoff
+          AND nudge_sent_at IS NULL
+          AND created_at <= :cutoff_max
+          AND created_at >= :cutoff_min
           AND phone IS NOT NULL
           AND phone != ''
         ORDER BY created_at ASC
-    """).bindparams(cutoff=cutoff)).all()
+    """).bindparams(cutoff_max=cutoff_max, cutoff_min=cutoff_min)).all()
 
     sent = 0
     failed = 0
-    now_iso = datetime.now(timezone.utc).isoformat()
 
     for row in rows:
         lead_id   = row[0]
@@ -67,11 +69,12 @@ def send_lead_nudges_all(hours_old: float, session: Session) -> dict:
 
         ok = lead_nudge_sms(tenant_id, {"name": name, "phone": phone})
 
-        # Always stamp nudge_sent_at — even on failure — so we don't retry
-        # endlessly on a bad number.
+        # Stamp and commit immediately — so a mid-run kill never causes re-sends.
+        now_iso = datetime.now(timezone.utc).isoformat()
         session.exec(text("""
             UPDATE lead SET nudge_sent_at = :ts WHERE id = :id
         """).bindparams(ts=now_iso, id=lead_id))
+        session.commit()
 
         if ok:
             sent += 1
@@ -80,11 +83,10 @@ def send_lead_nudges_all(hours_old: float, session: Session) -> dict:
             failed += 1
             print(f"[LEAD NUDGE] failed tenant={tenant_id} lead_id={lead_id} phone={phone}")
 
-    session.commit()
-
     return {
         "ok": True,
         "hours_old": hours_old,
+        "max_hours_old": max_hours_old,
         "leads_checked": len(rows),
         "nudges_sent": sent,
         "nudges_failed": failed,

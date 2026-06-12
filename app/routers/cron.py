@@ -29,15 +29,17 @@ def debug_admin_key():
 def cron_lead_nudges_run(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
     hours_old: float = Query(2.0, ge=0.5, le=48.0, description="Nudge leads stale for this many hours"),
+    max_hours_old: float = Query(24.0, ge=1.0, le=48.0, description="Skip leads older than this many hours (same-day guard)"),
     session: Session = Depends(get_session),
 ):
     """
     Send follow-up nudge SMS to customers whose lead is still 'new' after
-    `hours_old` hours. Safe to run on a schedule — each lead is only ever
-    nudged once (nudge_sent_at stamp prevents repeats).
+    `hours_old` hours. Only touches leads from the last `max_hours_old` hours
+    (default 24) so old/test data is never re-hit. Each lead is only ever
+    nudged once (nudge_sent_at stamp + per-lead commit prevents repeats).
     """
     _require_admin_key(x_admin_key)
-    return send_lead_nudges_all(hours_old=hours_old, session=session)
+    return send_lead_nudges_all(hours_old=hours_old, max_hours_old=max_hours_old, session=session)
 
 
 @router.post("/reminders/run")
