@@ -36,6 +36,7 @@ def run_startup_migrations() -> None:
         ("sp_lead_job_won",      "ALTER TABLE lead ADD COLUMN IF NOT EXISTS job_won BOOLEAN DEFAULT FALSE"),
         ("sp_lead_job_value",    "ALTER TABLE lead ADD COLUMN IF NOT EXISTS job_value NUMERIC"),
         ("sp_booking_job_value", "ALTER TABLE booking ADD COLUMN IF NOT EXISTS job_value NUMERIC"),
+        ("sp_tenant_vapi_can_book", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS vapi_can_book BOOLEAN DEFAULT FALSE"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

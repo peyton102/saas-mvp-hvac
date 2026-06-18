@@ -214,6 +214,187 @@ def _extract_timing(*values: Optional[str]) -> str:
     return ""
 
 
+_VAPI_DAY_TO_WEEKDAY = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def _get_available_slots_str(tenant_id: str, days: int = 7) -> str:
+    """Query available slots for a tenant and return a human-readable string for Vapi."""
+    from datetime import datetime, timedelta, time, timezone
+    from app.models import Booking as BookingModel, Tenant as _Tenant
+    from app.routers.tenant import get_tenant_booking_config, get_tenant_tz
+    from sqlmodel import select as _sel
+
+    gen = get_session()
+    session = next(gen)
+    try:
+        tenant = session.exec(_sel(_Tenant).where(_Tenant.slug == tenant_id)).first()
+        if not tenant or not getattr(tenant, "vapi_can_book", False):
+            return "I can only collect your contact information at this time. Someone from our team will call you back to schedule."
+
+        cfg = get_tenant_booking_config(tenant_id, session)
+        slot_min = cfg["slot_minutes"]
+        try:
+            start_t = time.fromisoformat(cfg["booking_start"])
+            end_t = time.fromisoformat(cfg["booking_end"])
+        except Exception:
+            start_t, end_t = time(8, 0), time(17, 0)
+
+        allowed_weekdays = {_VAPI_DAY_TO_WEEKDAY[d] for d in cfg["booking_days"] if d in _VAPI_DAY_TO_WEEKDAY}
+        tenant_tz = get_tenant_tz(tenant_id, session)
+        now_tz = datetime.now(tenant_tz)
+        now_utc = datetime.now(timezone.utc)
+        window_end = now_utc + timedelta(days=days)
+        now_naive = now_utc.replace(tzinfo=None)
+        window_end_naive = window_end.replace(tzinfo=None)
+
+        existing = session.exec(
+            _sel(BookingModel)
+            .where(BookingModel.tenant_id == tenant_id)
+            .where(BookingModel.end > now_naive)
+            .where(BookingModel.start < window_end_naive)
+        ).all()
+
+        step = timedelta(minutes=slot_min)
+        by_day: dict = {}
+        for d in range(days):
+            day = (now_tz + timedelta(days=d)).date()
+            if day.weekday() not in allowed_weekdays:
+                continue
+            cursor = datetime.combine(day, start_t, tzinfo=tenant_tz)
+            end_of_day = datetime.combine(day, end_t, tzinfo=tenant_tz)
+            while cursor + step <= end_of_day:
+                slot_start = cursor
+                slot_end = cursor + step
+                if slot_start <= now_tz:
+                    cursor += step
+                    continue
+                s = slot_start.astimezone(timezone.utc).replace(tzinfo=None)
+                e = slot_end.astimezone(timezone.utc).replace(tzinfo=None)
+                conflict = any(not (e <= b.start or s >= b.end) for b in existing)
+                if not conflict:
+                    day_key = day.strftime("%A, %B %d").replace(" 0", " ")
+                    by_day.setdefault(day_key, []).append((slot_start.isoformat(), slot_start.strftime("%I:%M %p").lstrip("0")))
+                cursor += step
+    finally:
+        session.close()
+
+    if not by_day:
+        return "We don't have any open slots in the next week. I'll take your contact info and someone will call you to schedule."
+
+    lines = []
+    for day_label, slots in list(by_day.items())[:3]:
+        time_strs = ", ".join(t for _, t in slots[:6])
+        lines.append(f"{day_label}: {time_strs}")
+    return "Here are our available times: " + "; ".join(lines) + ". Which works best for you?"
+
+
+def _book_slot_for_vapi(tenant_id: str, call_id: str, args: dict, background_tasks) -> str:
+    """Book an appointment from a Vapi tool call. Returns a confirmation string."""
+    from datetime import timezone, timedelta
+    from app.models import Booking as BookingModel, Tenant as _Tenant
+    from app.services.sms import booking_confirmation_sms, booking_office_notify_sms
+    from app.utils.phone import normalize_us_phone
+    from dateutil import parser as dtparse
+    from sqlmodel import select as _sel
+
+    name = _clean_text(args.get("name") or args.get("caller_name") or "")
+    phone_raw = args.get("phone") or args.get("callback_phone") or args.get("phone_number") or ""
+    start_str = _clean_text(args.get("start") or args.get("start_time") or "")
+    end_str = _clean_text(args.get("end") or args.get("end_time") or "")
+    notes = _clean_text(args.get("notes") or args.get("issue") or "")
+
+    if not start_str:
+        return "I need a specific time to book. Could you confirm the date and time you'd like?"
+
+    gen = get_session()
+    session = next(gen)
+    try:
+        tenant = session.exec(_sel(_Tenant).where(_Tenant.slug == tenant_id)).first()
+        if not tenant or not getattr(tenant, "vapi_can_book", False):
+            return "I can only collect your contact information at this time. Someone from our team will call you back to schedule."
+
+        try:
+            start_dt = dtparse.isoparse(start_str)
+        except Exception:
+            return "I couldn't understand that time. Could you please confirm the date and time?"
+
+        if end_str:
+            try:
+                end_dt = dtparse.isoparse(end_str)
+            except Exception:
+                end_dt = None
+        else:
+            end_dt = None
+
+        if end_dt is None:
+            from app.routers.tenant import get_tenant_booking_config
+            cfg = get_tenant_booking_config(tenant_id, session)
+            end_dt = start_dt + timedelta(minutes=cfg["slot_minutes"])
+
+        start_utc = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        end_utc = end_dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+        conflict = session.exec(
+            _sel(BookingModel)
+            .where(BookingModel.tenant_id == tenant_id)
+            .where(BookingModel.start < end_utc)
+            .where(BookingModel.end > start_utc)
+        ).first()
+        if conflict:
+            return "I'm sorry, that time was just taken. Please ask for available times again and I'll find you another slot."
+
+        e164 = normalize_us_phone(phone_raw) if phone_raw else ""
+        booking = BookingModel(
+            tenant_id=tenant_id,
+            name=name or "Phone customer",
+            phone=e164 or _normalize_phone(phone_raw),
+            email=None,
+            start=start_utc,
+            end=end_utc,
+            notes=notes or None,
+            source="vapi",
+        )
+        session.add(booking)
+        session.commit()
+        print(f"[VAPI BOOKING] booked tenant={tenant_id!r} name={name!r} start={start_str!r}", flush=True)
+
+        from app.routers.tenant import get_tenant_tz
+        tenant_tz = get_tenant_tz(tenant_id, session)
+        start_local = start_dt.astimezone(tenant_tz)
+        friendly_time = start_local.strftime("%A, %B %d at %I:%M %p").replace(" 0", " ").lstrip("0")
+        display_phone = e164 or _normalize_phone(phone_raw)
+    except Exception as exc:
+        session.rollback()
+        print(f"[VAPI BOOKING ERROR] {exc}", flush=True)
+        return "I had trouble booking that appointment. A team member will call you back to confirm."
+    finally:
+        session.close()
+
+    if display_phone:
+        def _send_booking_sms():
+            try:
+                booking_confirmation_sms(tenant_id, {
+                    "name": name or "there",
+                    "phone": display_phone,
+                    "service": "appointment",
+                    "starts_at_iso": start_dt.isoformat(),
+                })
+            except Exception as e:
+                print(f"[VAPI BOOKING SMS] confirmation error: {e}", flush=True)
+            try:
+                booking_office_notify_sms(tenant_id, {
+                    "name": name or "Phone customer",
+                    "phone": display_phone,
+                    "service": "appointment",
+                    "starts_at_iso": start_dt.isoformat(),
+                })
+            except Exception as e:
+                print(f"[VAPI BOOKING SMS] office notify error: {e}", flush=True)
+        background_tasks.add_task(_send_booking_sms)
+
+    return f"You're all set! I've booked your appointment for {friendly_time}. You'll receive a confirmation text shortly. Is there anything else I can help you with?"
+
+
 def _reason_for_sms(reason: Optional[str], summary: Optional[str]) -> str:
     reason_text = _clean_text(reason)
     if reason_text and reason_text.lower() != "pending":
@@ -439,40 +620,48 @@ async def _handle_tool_call(body: dict, background_tasks: BackgroundTasks):
             except Exception:
                 args = {}
 
-        if fn_name != "hvac_intake":
-            results.append({"toolCallId": tc_id, "result": "ok"})
-            continue
+        if fn_name == "hvac_intake":
+            if not tenant_id:
+                results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
+                continue
 
-        if not tenant_id:
-            results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
-            continue
+            name = _clean_text(args.get("name") or args.get("caller_name") or "")
+            phone = _normalize_phone(
+                args.get("phone") or args.get("callback_phone") or args.get("phone_number") or ""
+            )
+            issue = _compact_reason(args.get("issue") or args.get("reason") or "")
+            zip_code = _extract_zip(args.get("zip") or args.get("zip_code") or "")
+            service_urgency = _clean_text(
+                args.get("service_urgency")
+                or args.get("timing")
+                or args.get("service_timing")
+                or args.get("preferred_day")
+                or ""
+            )
+            if not service_urgency:
+                service_urgency = _extract_timing(
+                    args.get("timing") or args.get("service_timing") or args.get("preferred_day") or issue
+                )
 
-        name = _clean_text(args.get("name") or args.get("caller_name") or "")
-        phone = _normalize_phone(
-            args.get("phone") or args.get("callback_phone") or args.get("phone_number") or ""
-        )
-        issue = _compact_reason(args.get("issue") or args.get("reason") or "")
-        zip_code = _extract_zip(args.get("zip") or args.get("zip_code") or "")
-        service_urgency = _clean_text(
-            args.get("service_urgency")
-            or args.get("timing")
-            or args.get("service_timing")
-            or args.get("preferred_day")
-            or ""
-        )
-        if not service_urgency:
-            service_urgency = _extract_timing(
-                args.get("timing") or args.get("service_timing") or args.get("preferred_day") or issue
+            print(f"[VAPI TOOL-CALL] queuing background save: name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} zip={zip_code!r}", flush=True)
+
+            background_tasks.add_task(
+                _process_tool_call_background,
+                tenant_id, call_id, name, phone, issue, zip_code, service_urgency,
             )
 
-        print(f"[VAPI TOOL-CALL] queuing background save: name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} zip={zip_code!r}", flush=True)
+            results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
 
-        background_tasks.add_task(
-            _process_tool_call_background,
-            tenant_id, call_id, name, phone, issue, zip_code, service_urgency,
-        )
+        elif fn_name == "get_availability":
+            slots_str = _get_available_slots_str(tenant_id or "")
+            results.append({"toolCallId": tc_id, "result": slots_str})
 
-        results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
+        elif fn_name == "book_appointment":
+            result_str = _book_slot_for_vapi(tenant_id or "", call_id, args, background_tasks)
+            results.append({"toolCallId": tc_id, "result": result_str})
+
+        else:
+            results.append({"toolCallId": tc_id, "result": "ok"})
 
     return {"results": results}
 
