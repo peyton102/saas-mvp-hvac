@@ -96,6 +96,9 @@ class Tenant(SQLModel, table=True):
     booking_end: Optional[str] = Field(default=None)    # "HH:MM"
     slot_minutes: Optional[int] = Field(default=None)   # 30 | 60 | 90 | 120
 
+    # Vapi booking mode: if True, assistant can check availability and book appointments
+    vapi_can_book: Optional[bool] = Field(default=False)
+
     # platform admin flag
     is_admin: bool = Field(default=False)
 

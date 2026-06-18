@@ -66,6 +66,7 @@ export default function TenantSettingsCard({
     review_google_url: "",
     email: "",
     phone: "",
+    vapi_can_book: false,
   });
 
   const isSettingsComplete = useMemo(() => {
@@ -111,6 +112,7 @@ export default function TenantSettingsCard({
           review_google_url: data.review_google_url ?? "",
           email:            data.email            ?? "",
           phone:            data.phone            ?? "",
+          vapi_can_book:    data.vapi_can_book    ?? false,
         };
 
         const raw = (loaded.booking_link || "").trim();
@@ -227,6 +229,45 @@ export default function TenantSettingsCard({
         >
           <input type="url" style={inputStyle} {...bind("booking_link")} />
         </Field>
+
+        <div style={divider} />
+
+        {/* AI Voice Assistant */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 14, color: "#e5e7eb", fontWeight: 600 }}>AI Can Book Appointments</div>
+            <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", marginTop: 3 }}>
+              When enabled, your AI assistant can check your calendar and book directly during calls
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForm(prev => ({ ...prev, vapi_can_book: !prev.vapi_can_book }))}
+            style={{
+              width: 44,
+              height: 24,
+              borderRadius: 12,
+              border: "none",
+              background: form.vapi_can_book ? "#f97316" : "rgba(255,255,255,0.15)",
+              cursor: "pointer",
+              position: "relative",
+              flexShrink: 0,
+              transition: "background 0.2s",
+            }}
+            aria-label="Toggle AI booking"
+          >
+            <span style={{
+              position: "absolute",
+              top: 3,
+              left: form.vapi_can_book ? 23 : 3,
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              background: "#fff",
+              transition: "left 0.2s",
+            }} />
+          </button>
+        </div>
 
         {/* Feedback */}
         {error      && <div style={{ fontSize: 13, color: "#fca5a5", fontWeight: 700 }}>{error}</div>}

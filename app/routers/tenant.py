@@ -191,6 +191,7 @@ class TenantSettingsIn(BaseModel):
     phone: Optional[str] = None
     timezone: Optional[str] = None  # IANA tz string, e.g. "America/Chicago"
     twilio_number: Optional[str] = None
+    vapi_can_book: Optional[bool] = None
 
 
 class ProfileIn(BaseModel):
@@ -329,6 +330,7 @@ def get_tenant_settings(
         "address": t.address,
         "timezone": t.timezone or _DEFAULT_TZ,
         "twilio_number": t.twilio_number or "",
+        "vapi_can_book": bool(t.vapi_can_book) if t.vapi_can_book is not None else False,
     }
 
 
