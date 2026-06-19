@@ -215,6 +215,46 @@ def _extract_timing(*values: Optional[str]) -> str:
     return ""
 
 
+_WORD_TO_DIGIT = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+    "oh": "0",
+}
+
+
+def _normalize_word_digits(text: str) -> str:
+    """
+    Convert consecutive runs of spoken digit-words into numeric strings.
+    Non-digit words pass through unchanged.
+
+    'six nine five nine Main Street, Apopka, Florida, three four seven three six'
+    → '6959 Main Street, Apopka, Florida, 34736'
+    """
+    if not text:
+        return text
+    tokens = text.split()
+    result: list[str] = []
+    i = 0
+    while i < len(tokens):
+        # Strip trailing punctuation only for the lookup; preserve it in output
+        # for non-digit words, but drop it for digit words (period after "six." → "6")
+        bare = tokens[i].lower().rstrip(".,;:")
+        if bare in _WORD_TO_DIGIT:
+            digits: list[str] = []
+            while i < len(tokens):
+                b = tokens[i].lower().rstrip(".,;:")
+                if b in _WORD_TO_DIGIT:
+                    digits.append(_WORD_TO_DIGIT[b])
+                    i += 1
+                else:
+                    break
+            result.append("".join(digits))
+        else:
+            result.append(tokens[i])
+            i += 1
+    return " ".join(result)
+
+
 def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     """
     Walk artifact.messages in order. For each assistant turn, identify which
@@ -277,8 +317,9 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             j, answer = _claim_next_user(i)
             if j >= 0:
                 consumed.add(j)  # consume regardless so it can't bleed into other fields
-                ph = _extract_phone_from_text(answer) or (
-                    _normalize_phone(answer) if re.search(r"\d{7,}", answer) else ""
+                answer_n = _normalize_word_digits(answer)
+                ph = _extract_phone_from_text(answer_n) or (
+                    _normalize_phone(answer_n) if re.search(r"\d{7,}", answer_n) else ""
                 )
                 if ph:
                     out["phone"] = ph
@@ -306,11 +347,12 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             j, answer = _claim_next_user(i)
             if j >= 0:
                 consumed.add(j)
-                zip_match = re.search(r"\b(\d{5})\b", answer)
-                if zip_match and len(answer.strip()) <= 12:
+                answer_n = _normalize_word_digits(answer)
+                zip_match = re.search(r"\b(\d{5})\b", answer_n)
+                if zip_match and len(answer_n.strip()) <= 12:
                     out["zip"] = zip_match.group(1)
                 else:
-                    out["service_address"] = answer.strip()
+                    out["service_address"] = answer_n.strip()
                     if not out["zip"] and zip_match:
                         out["zip"] = zip_match.group(1)
 
@@ -318,8 +360,9 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     if not out["phone"]:
         for j, (r, t) in enumerate(turns):
             if r == "user" and j not in consumed:
-                ph = _extract_phone_from_text(t) or (
-                    _normalize_phone(t) if re.search(r"\d{7,}", t) else ""
+                t_n = _normalize_word_digits(t)
+                ph = _extract_phone_from_text(t_n) or (
+                    _normalize_phone(t_n) if re.search(r"\d{7,}", t_n) else ""
                 )
                 if ph:
                     out["phone"] = ph
