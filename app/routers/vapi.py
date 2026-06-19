@@ -217,8 +217,9 @@ def _extract_timing(*values: Optional[str]) -> str:
 
 def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     """
-    Walk artifact.messages conversation pairs (assistant asks → user answers)
-    to extract intake fields directly from the transcript.
+    Walk artifact.messages in order. For each assistant turn, identify which
+    field it's asking about, then claim the IMMEDIATELY FOLLOWING unconsumed
+    user turn as the answer. Each user turn can only be consumed once.
     """
     out = {
         "name": "",
@@ -229,7 +230,7 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         "zip": "",
     }
 
-    turns = []
+    turns: list[tuple[str, str]] = []
     for m in (messages or []):
         role = (m.get("role") or "").lower()
         text = _clean_text(m.get("content") or m.get("message") or "")
@@ -238,61 +239,85 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         elif role in ("user", "human", "customer") and text:
             turns.append(("user", text))
 
-    def _next_user(after_idx: int) -> str:
-        for r, t in turns[after_idx + 1:]:
-            if r == "user":
-                return t
-        return ""
+    consumed: set[int] = set()
+
+    def _claim_next_user(after_idx: int) -> tuple[int, str]:
+        """Return (index, text) of the first unconsumed user turn after after_idx."""
+        for j in range(after_idx + 1, len(turns)):
+            if turns[j][0] == "user" and j not in consumed:
+                return j, turns[j][1]
+        return -1, ""
 
     for i, (role, text) in enumerate(turns):
         if role != "assistant":
             continue
-        answer = _next_user(i)
-        if not answer:
-            continue
         lower = text.lower()
 
+        # Issue — "what's going on / how can I help / describe"
         if not out["issue"] and re.search(
-            r"(what.{0,20}going on|how can i help|what.{0,15}problem|what.{0,15}issue|what brings|help you today|can i help)",
+            r"(what.{0,20}going on|how can i help|what.{0,15}problem|what.{0,15}issue"
+            r"|what brings|help you today|can i help|tell me more|describe)",
             lower,
         ):
-            out["issue"] = _compact_reason(answer)
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)
+                out["issue"] = _compact_reason(answer)
 
-        if not out["name"] and re.search(r"\bname\b", lower):
-            words = answer.split()
-            out["name"] = " ".join(words[:3]) if len(words) > 3 else answer
+        # Name — "name"
+        elif not out["name"] and re.search(r"\bname\b", lower):
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)
+                words = answer.split()
+                out["name"] = " ".join(words[:3]) if len(words) > 3 else answer
 
-        if re.search(r"\b(phone|callback|call.{0,6}back|number)\b", lower):
-            ph = _extract_phone_from_text(answer) or (
-                _normalize_phone(answer) if re.search(r"\d{7,}", answer) else ""
-            )
-            if ph:
-                out["phone"] = ph
+        # Phone — "phone number / callback number"
+        elif re.search(r"\b(phone.{0,10}number|callback|call.{0,8}back)\b", lower):
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)  # consume regardless so it can't bleed into other fields
+                ph = _extract_phone_from_text(answer) or (
+                    _normalize_phone(answer) if re.search(r"\d{7,}", answer) else ""
+                )
+                if ph:
+                    out["phone"] = ph
 
-        if not out["service_urgency"] and re.search(
-            r"\b(urgent|when would|what day|what time|how soon|when.{0,10}work|schedule)\b", lower
+        # Urgency — "urgent / when would / what day / best time"
+        elif not out["service_urgency"] and re.search(
+            r"\b(urgent|when would|what day|what time|how soon|when.{0,10}work|best time|schedule)\b",
+            lower,
         ):
-            timing = _extract_timing(answer)
-            if timing:
-                out["service_urgency"] = timing
-            elif re.search(r"\b(asap|right away|immediately|today)\b", answer, re.IGNORECASE):
-                out["service_urgency"] = "ASAP"
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)
+                timing = _extract_timing(answer)
+                if timing:
+                    out["service_urgency"] = timing
+                elif re.search(r"\b(asap|right away|immediately|today)\b", answer, re.IGNORECASE):
+                    out["service_urgency"] = "ASAP"
+                else:
+                    out["service_urgency"] = _clean_text(answer).rstrip(".")[:60]
 
-        if not out["service_address"] and not out["zip"] and re.search(
-            r"\b(address|zip|postal|location|where.{0,10}you)\b", lower
+        # Address / ZIP — "address / ZIP / street"
+        elif not out["service_address"] and not out["zip"] and re.search(
+            r"\b(address|zip|postal|street|location|where.{0,10}you)\b", lower
         ):
-            zip_match = re.search(r"\b(\d{5})\b", answer)
-            if zip_match and len(answer.strip()) <= 12:
-                out["zip"] = zip_match.group(1)
-            else:
-                out["service_address"] = answer.strip()
-                if not out["zip"] and zip_match:
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)
+                zip_match = re.search(r"\b(\d{5})\b", answer)
+                if zip_match and len(answer.strip()) <= 12:
                     out["zip"] = zip_match.group(1)
+                else:
+                    out["service_address"] = answer.strip()
+                    if not out["zip"] and zip_match:
+                        out["zip"] = zip_match.group(1)
 
-    # Final fallback: scan all user turns for a bare phone number
+    # Phone fallback: scan unconsumed user turns for a phone number
     if not out["phone"]:
-        for r, t in turns:
-            if r == "user":
+        for j, (r, t) in enumerate(turns):
+            if r == "user" and j not in consumed:
                 ph = _extract_phone_from_text(t) or (
                     _normalize_phone(t) if re.search(r"\d{7,}", t) else ""
                 )
