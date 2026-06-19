@@ -512,29 +512,49 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
     brand = get_brand_for_tenant(tenant_id)
     business_name = brand.get("business_name") or tenant_id
 
-    name = (payload.get("name") or "").strip() or "Unknown"
+    name = (payload.get("name") or "").strip()
     phone_raw = (payload.get("phone") or "").strip()
     phone = _normalize_phone(phone_raw) or phone_raw or "Unknown"
-    issue = (payload.get("issue") or "").strip() or "—"
+    issue = (payload.get("issue") or "").strip()
     service_address = (payload.get("service_address") or "").strip()
     zip_code = (payload.get("zip") or "").strip()
     service_urgency = (payload.get("service_urgency") or "").strip()
+    is_partial = bool(payload.get("partial"))
 
     if service_address:
-        location_line = f"Address: {service_address}"
+        location = service_address
     elif zip_code:
-        location_line = f"ZIP: {zip_code}"
+        location = zip_code
     else:
-        location_line = "ZIP: —"
+        location = "not provided"
 
-    body = (
-        f"🚨 New Lead — {business_name}\n"
-        f"Name: {name}\n"
-        f"Phone: {phone}\n"
-        f"Issue: {issue}\n"
-        f"When: {service_urgency or '—'}\n"
-        f"{location_line}"
-    )
+    if is_partial:
+        parts = []
+        if phone:
+            parts.append(f"Phone: {phone}")
+        if name:
+            parts.append(f"Name: {name}")
+        if issue:
+            parts.append(f"Issue: {issue}")
+        if service_urgency:
+            parts.append(f"When: {service_urgency}")
+        if service_address or zip_code:
+            parts.append(f"Address: {location}")
+        detail = "\n".join(parts) if parts else f"Phone: {phone}"
+        body = (
+            f"⚠️ Partial Lead — {business_name}\n"
+            f"Caller hung up early. What we got:\n"
+            f"{detail}"
+        )
+    else:
+        body = (
+            f"🚨 New Lead — {business_name}\n"
+            f"Name: {name or '—'}\n"
+            f"Phone: {phone}\n"
+            f"Issue: {issue or '—'}\n"
+            f"When: {service_urgency or '—'}\n"
+            f"Address: {location}"
+        )
 
     return send_sms(office_to, body)
 

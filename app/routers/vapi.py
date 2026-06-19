@@ -215,12 +215,101 @@ def _extract_timing(*values: Optional[str]) -> str:
     return ""
 
 
-def _extract_from_artifact_messages(messages: list) -> dict:
+def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     """
-    Scan artifact.messages for the last hvac_intake tool call and return its args.
-    This is the most reliable source when structuredData is incomplete.
+    Walk artifact.messages conversation pairs (assistant asks → user answers)
+    to extract intake fields directly from the transcript.
     """
-    for msg in reversed(messages):
+    out = {
+        "name": "",
+        "phone": _normalize_phone(customer_number) if customer_number else "",
+        "issue": "",
+        "service_urgency": "",
+        "service_address": "",
+        "zip": "",
+    }
+
+    turns = []
+    for m in (messages or []):
+        role = (m.get("role") or "").lower()
+        text = _clean_text(m.get("content") or m.get("message") or "")
+        if role in ("assistant", "bot") and text:
+            turns.append(("assistant", text))
+        elif role in ("user", "human", "customer") and text:
+            turns.append(("user", text))
+
+    def _next_user(after_idx: int) -> str:
+        for r, t in turns[after_idx + 1:]:
+            if r == "user":
+                return t
+        return ""
+
+    for i, (role, text) in enumerate(turns):
+        if role != "assistant":
+            continue
+        answer = _next_user(i)
+        if not answer:
+            continue
+        lower = text.lower()
+
+        if not out["issue"] and re.search(
+            r"(what.{0,20}going on|how can i help|what.{0,15}problem|what.{0,15}issue|what brings|help you today|can i help)",
+            lower,
+        ):
+            out["issue"] = _compact_reason(answer)
+
+        if not out["name"] and re.search(r"\bname\b", lower):
+            words = answer.split()
+            out["name"] = " ".join(words[:3]) if len(words) > 3 else answer
+
+        if re.search(r"\b(phone|callback|call.{0,6}back|number)\b", lower):
+            ph = _extract_phone_from_text(answer) or (
+                _normalize_phone(answer) if re.search(r"\d{7,}", answer) else ""
+            )
+            if ph:
+                out["phone"] = ph
+
+        if not out["service_urgency"] and re.search(
+            r"\b(urgent|when would|what day|what time|how soon|when.{0,10}work|schedule)\b", lower
+        ):
+            timing = _extract_timing(answer)
+            if timing:
+                out["service_urgency"] = timing
+            elif re.search(r"\b(asap|right away|immediately|today)\b", answer, re.IGNORECASE):
+                out["service_urgency"] = "ASAP"
+
+        if not out["service_address"] and not out["zip"] and re.search(
+            r"\b(address|zip|postal|location|where.{0,10}you)\b", lower
+        ):
+            zip_match = re.search(r"\b(\d{5})\b", answer)
+            if zip_match and len(answer.strip()) <= 12:
+                out["zip"] = zip_match.group(1)
+            else:
+                out["service_address"] = answer.strip()
+                if not out["zip"] and zip_match:
+                    out["zip"] = zip_match.group(1)
+
+    # Final fallback: scan all user turns for a bare phone number
+    if not out["phone"]:
+        for r, t in turns:
+            if r == "user":
+                ph = _extract_phone_from_text(t) or (
+                    _normalize_phone(t) if re.search(r"\d{7,}", t) else ""
+                )
+                if ph:
+                    out["phone"] = ph
+                    break
+
+    print(f"[VAPI TRANSCRIPT] parsed: {out}", flush=True)
+    return out
+
+
+def _extract_tool_call_args(messages: list) -> dict:
+    """
+    Secondary fallback: find hvac_intake tool call args in artifact.messages.
+    Vapi includes these even in end-of-call payloads.
+    """
+    for msg in reversed(messages or []):
         role = (msg.get("role") or "").lower()
         if role in ("tool_call", "tool_calls"):
             for tc in (msg.get("toolCalls") or []):
@@ -232,6 +321,7 @@ def _extract_from_artifact_messages(messages: list) -> dict:
                             args = _json.loads(args)
                         except Exception:
                             args = {}
+                    print(f"[VAPI TOOL-ARGS] found hvac_intake args: {args}", flush=True)
                     return args
     return {}
 
@@ -253,8 +343,13 @@ def _reason_for_sms(reason: Optional[str], summary: Optional[str]) -> str:
 
 def _extract_from_vapi_body(body: dict) -> dict:
     """
-    VAPI sends end-of-call webhooks as a nested structure, not the flat fields
-    this endpoint originally expected. This function normalises both formats.
+    Extract intake fields from a Vapi end-of-call-report payload.
+
+    Priority order:
+      1. Transcript conversation parsing (_parse_transcript) — most reliable
+      2. hvac_intake tool call args found in artifact.messages — strong fallback
+      3. analysis.structuredData — only if Vapi assistant is configured to populate it
+      4. call.customer.number — always used as phone fallback
     """
     if "message" not in body:
         return body
@@ -264,92 +359,72 @@ def _extract_from_vapi_body(body: dict) -> dict:
     analysis = msg.get("analysis") or {}
     structured = analysis.get("structuredData") or {}
     summary = msg.get("summary") or analysis.get("summary") or ""
-
-    # Also pull data from the hvac_intake tool call in artifact.messages —
-    # this is the most reliable source when structuredData is missing fields.
     artifact = msg.get("artifact") or {}
     artifact_messages = artifact.get("messages") or []
-    tool_args = _extract_from_artifact_messages(artifact_messages)
 
     customer = call.get("customer") or {}
-    phone = (
-        structured.get("phone")
-        or structured.get("callback_phone")
-        or structured.get("callbackPhone")
-        or structured.get("callback_number")
-        or structured.get("callbackNumber")
-        or structured.get("phone_number")
-        or structured.get("phoneNumber")
-        or tool_args.get("phone")
-        or tool_args.get("callback_phone")
-        or tool_args.get("phone_number")
-        or customer.get("number")
-        or ""
-    )
-
+    customer_number = customer.get("number") or ""
     phone_number_id = call.get("phoneNumberId") or ""
-
     call_id = call.get("id") or ""
-    print(f"[VAPI EXTRACT] call keys: {list(call.keys())}", flush=True)
+    forwarded_from = call.get("forwardingPhoneNumber") or call.get("forwardedFrom") or ""
+
     print(
-        f"[VAPI EXTRACT] call.id={call_id!r} phoneNumberId={phone_number_id!r} "
-        f"forwardingPhoneNumber={call.get('forwardingPhoneNumber')!r} "
-        f"forwardedFrom={call.get('forwardedFrom')!r}",
+        f"[VAPI EXTRACT] call_id={call_id!r} phoneNumberId={phone_number_id!r} "
+        f"artifact_messages={len(artifact_messages)} structured={bool(structured)}",
         flush=True,
     )
 
-    forwarded_from = (
-        call.get("forwardingPhoneNumber")
-        or call.get("forwardedFrom")
-        or ""
+    # Layer 1: parse the actual conversation transcript
+    transcript = _parse_transcript(artifact_messages, customer_number=customer_number)
+
+    # Layer 2: hvac_intake tool call args (mid-call args stored in artifact.messages)
+    tool_args = _extract_tool_call_args(artifact_messages)
+
+    def _first(*values):
+        return next((v for v in values if v and str(v).strip()), "")
+
+    name = _first(
+        transcript.get("name"),
+        tool_args.get("name"), tool_args.get("caller_name"),
+        structured.get("name"), structured.get("caller_name"),
+        _extract_name_from_text(summary),
+    )
+    phone = _first(
+        transcript.get("phone"),
+        tool_args.get("phone"), tool_args.get("callback_phone"), tool_args.get("phone_number"),
+        structured.get("phone"), structured.get("phoneNumber"), structured.get("callback_phone"),
+        _extract_phone_from_text(summary),
+        _normalize_phone(customer_number),
+    )
+    issue = _first(
+        transcript.get("issue"),
+        tool_args.get("issue"), tool_args.get("reason"),
+        structured.get("issue"), structured.get("reason"),
+        _compact_reason(summary),
+    )
+    service_address = _first(
+        transcript.get("service_address"),
+        tool_args.get("service_address"), tool_args.get("address"),
+        structured.get("service_address"), structured.get("address"),
+    )
+    zip_code = _first(
+        transcript.get("zip"),
+        tool_args.get("zip"), tool_args.get("zip_code"),
+        structured.get("zip"), structured.get("zip_code"),
+        _extract_zip(summary),
+    )
+    service_urgency = _first(
+        transcript.get("service_urgency"),
+        tool_args.get("service_urgency"), tool_args.get("timing"),
+        structured.get("service_urgency"),
+        _extract_timing(summary),
     )
 
-    name = (
-        structured.get("name")
-        or structured.get("caller_name")
-        or tool_args.get("name")
-        or tool_args.get("caller_name")
-        or _extract_name_from_text(summary)
-        or ""
+    print(
+        f"[VAPI EXTRACT] final: name={name!r} phone={phone!r} issue={issue!r} "
+        f"urgency={service_urgency!r} address={service_address!r} zip={zip_code!r}",
+        flush=True,
     )
-    issue = (
-        structured.get("issue")
-        or structured.get("reason")
-        or tool_args.get("issue")
-        or tool_args.get("reason")
-        or summary
-        or ""
-    )
-    zip_code = (
-        structured.get("zip")
-        or structured.get("zip_code")
-        or structured.get("zipcode")
-        or structured.get("postal_code")
-        or tool_args.get("zip")
-        or tool_args.get("zip_code")
-        or ""
-    )
-    service_address = _clean_text(
-        structured.get("service_address")
-        or structured.get("serviceAddress")
-        or structured.get("address")
-        or tool_args.get("service_address")
-        or tool_args.get("address")
-        or ""
-    )
-    service_urgency = _clean_text(
-        structured.get("service_urgency")
-        or structured.get("serviceUrgency")
-        or structured.get("urgency")
-        or tool_args.get("service_urgency")
-        or tool_args.get("timing")
-        or ""
-    )
-    if not service_urgency:
-        service_urgency = _extract_timing(summary) or ""
-    phone = _extract_phone_from_text(issue, summary) or _normalize_phone(phone)
-    issue = _compact_reason(issue)
-    zip_code = _extract_zip(zip_code or summary)
 
     return {
         "call_id": call_id,
@@ -457,44 +532,28 @@ def _process_tool_call_background(tenant_id: str, call_id: str, name: str, phone
 async def _handle_tool_call(body: dict, background_tasks: BackgroundTasks):
     """
     Handle VAPI tool-call events mid-conversation.
-    Returns immediately to VAPI, saves lead + sends SMS in background.
+    hvac_intake: acknowledge only — all data capture happens on end-of-call-report.
+    No DB writes, no SMS sends here.
     """
     msg = body.get("message") or {}
     tool_calls = msg.get("toolCalls") or msg.get("toolCallList") or []
     call = msg.get("call") or {}
-    phone_number_id = call.get("phoneNumberId") or ""
     call_id = call.get("id") or ""
 
-    print(f"[VAPI TOOL-CALL] call_id={call_id!r} phone_number_id={phone_number_id!r} tools={[tc.get('function', {}).get('name') for tc in tool_calls]}", flush=True)
-
-    # Resolve tenant synchronously (fast, just a env var or small DB lookup)
-    gen = get_session()
-    session = next(gen)
-    try:
-        tenant_id = _resolve_tenant(phone_number_id, session)
-    finally:
-        session.close()
+    print(
+        f"[VAPI TOOL-CALL] mid-call ack-only call_id={call_id!r} "
+        f"tools={[tc.get('function', {}).get('name') for tc in tool_calls]}",
+        flush=True,
+    )
 
     results = []
     for tc in tool_calls:
         tc_id = tc.get("id") or ""
-        fn = tc.get("function") or {}
-        fn_name = fn.get("name") or ""
-        args = fn.get("arguments") or {}
-        if isinstance(args, str):
-            try:
-                args = _json.loads(args)
-            except Exception:
-                args = {}
-
-        if fn_name != "hvac_intake":
+        fn_name = (tc.get("function") or {}).get("name") or ""
+        if fn_name == "hvac_intake":
+            results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
+        else:
             results.append({"toolCallId": tc_id, "result": "ok"})
-            continue
-
-        # Acknowledge immediately — lead is saved on end-of-call-report, not here.
-        # This prevents the double-fire bug where mid-call phone_number_id is empty.
-        print(f"[VAPI TOOL-CALL] hvac_intake acknowledged (will save on end-of-call-report) call_id={call_id!r}", flush=True)
-        results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
 
     return {"results": results}
 
@@ -552,18 +611,36 @@ async def vapi_intake(
         print(f"[VAPI] duplicate intake ignored for tenant={tenant_id!r} call_id={payload.call_id!r}", flush=True)
         return {"status": "ok", "tenant_id": tenant_id, "deduped": True}
 
-    message_parts = [payload.issue or ""]
-    message = " | ".join(p for p in message_parts if p).strip() or "Inbound call via Vapi"
+    name = (payload.name or "").strip()
+    phone = (payload.phone or "").strip()
+    issue = (payload.issue or "").strip()
+    service_urgency = (payload.service_urgency or "").strip() or None
+    service_address = (payload.service_address or "").strip() or None
+    zip_code = (payload.zip or "").strip() or None
+
+    message = issue or "Inbound call via Vapi"
+
+    # Partial lead: fewer than 2 of (name, issue, address/zip) were captured
+    key_fields = [name, issue, service_address or zip_code]
+    populated_count = sum(1 for f in key_fields if f)
+    is_partial = populated_count < 2
+
+    print(
+        f"[VAPI] saving lead tenant={tenant_id!r} partial={is_partial} "
+        f"name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} "
+        f"address={service_address!r} zip={zip_code!r}",
+        flush=True,
+    )
 
     lead = LeadModel(
-        name=(payload.name or "").strip(),
-        phone=(payload.phone or "").strip(),
+        name=name or phone or "Unknown caller",
+        phone=phone,
         email=None,
         message=message,
         tenant_id=tenant_id,
         source="vapi",
-        service_urgency=(payload.service_urgency or "").strip() or None,
-        service_address=(payload.service_address or "").strip() or None,
+        service_urgency=service_urgency,
+        service_address=service_address,
     )
     try:
         session.add(lead)
@@ -575,14 +652,15 @@ async def vapi_intake(
 
     try:
         vapi_lead_office_sms(tenant_id, {
-            "name": payload.name,
-            "phone": payload.phone,
-            "issue": payload.issue,
-            "zip": payload.zip,
-            "service_address": payload.service_address,
-            "service_urgency": payload.service_urgency,
+            "name": name,
+            "phone": phone,
+            "issue": issue,
+            "zip": zip_code,
+            "service_address": service_address,
+            "service_urgency": service_urgency,
+            "partial": is_partial,
         })
-        print(f"[VAPI] office SMS sent for tenant={tenant_id!r}", flush=True)
+        print(f"[VAPI] office SMS sent for tenant={tenant_id!r} partial={is_partial}", flush=True)
     except Exception as e:
         print(f"[VAPI] office SMS error: {e}", flush=True)
 
