@@ -30,6 +30,8 @@ class Lead(SQLModel, table=True):
     job_won: Optional[bool] = Field(default=False)
     job_value: Optional[float] = Field(default=None)
     service_address: Optional[str] = Field(default=None)
+    customer_type: Optional[str] = Field(default=None)   # "existing" | "new"
+    property_type: Optional[str] = Field(default=None)   # "residential" | "commercial"
 
 
 class Booking(SQLModel, table=True):

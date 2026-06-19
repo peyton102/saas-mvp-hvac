@@ -39,6 +39,8 @@ def run_startup_migrations() -> None:
         ("sp_tenant_features",   "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS features TEXT"),
         ("sp_tenant_is_admin",   "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE"),
         ("sp_lead_service_address", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS service_address TEXT"),
+        ("sp_lead_customer_type",   "ALTER TABLE lead ADD COLUMN IF NOT EXISTS customer_type TEXT"),
+        ("sp_lead_property_type",   "ALTER TABLE lead ADD COLUMN IF NOT EXISTS property_type TEXT"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

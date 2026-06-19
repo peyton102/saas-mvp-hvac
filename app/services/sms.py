@@ -519,6 +519,8 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
     service_address = (payload.get("service_address") or "").strip()
     zip_code = (payload.get("zip") or "").strip()
     service_urgency = (payload.get("service_urgency") or "").strip()
+    customer_type = (payload.get("customer_type") or "").strip()
+    property_type = (payload.get("property_type") or "").strip()
     is_partial = bool(payload.get("partial"))
 
     if service_address:
@@ -534,6 +536,10 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
             parts.append(f"Phone: {phone}")
         if name:
             parts.append(f"Name: {name}")
+        if customer_type:
+            parts.append(f"Customer: {customer_type}")
+        if property_type:
+            parts.append(f"Property: {property_type}")
         if issue:
             parts.append(f"Issue: {issue}")
         if service_urgency:
@@ -550,6 +556,8 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
         body = (
             f"🚨 New Lead — {business_name}\n"
             f"Name: {name or '—'}\n"
+            f"Customer: {customer_type or 'unknown'}\n"
+            f"Property: {property_type or 'unknown'}\n"
             f"Phone: {phone}\n"
             f"Issue: {issue or '—'}\n"
             f"When: {service_urgency or '—'}\n"

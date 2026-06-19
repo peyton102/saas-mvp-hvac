@@ -26,6 +26,8 @@ class VapiIntakePayload(BaseModel):
     zip: Optional[str] = None
     service_address: Optional[str] = None
     service_urgency: Optional[str] = None
+    customer_type: Optional[str] = None
+    property_type: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
 
@@ -268,6 +270,8 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         "service_urgency": "",
         "service_address": "",
         "zip": "",
+        "customer_type": "",
+        "property_type": "",
     }
 
     turns: list[tuple[str, str]] = []
@@ -304,6 +308,32 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             if j >= 0:
                 consumed.add(j)
                 out["issue"] = _compact_reason(answer)
+
+        # Property type — "residential or commercial"
+        elif not out["property_type"] and re.search(
+            r"\b(residential or commercial|commercial or residential|residential.*commercial)\b", lower
+        ):
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)
+                a = answer.lower()
+                if re.search(r"\b(residential|home|house)\b", a):
+                    out["property_type"] = "residential"
+                elif re.search(r"\b(commercial|business|office|shop)\b", a):
+                    out["property_type"] = "commercial"
+
+        # Customer type — "existing customer / first time / new customer"
+        elif not out["customer_type"] and re.search(
+            r"\b(existing|first.?time|new customer|existing.*customer|existing.*frost)\b", lower
+        ):
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)
+                a = answer.lower()
+                if re.search(r"\b(existing|yes|i.?m a customer|called before|have called|i have)\b", a):
+                    out["customer_type"] = "existing"
+                elif re.search(r"\b(new|first.?time|no|haven.?t called|first)\b", a):
+                    out["customer_type"] = "new"
 
         # Name — ONLY fire when assistant explicitly asks for name; never fall back
         elif not out["name"] and re.search(r"\bname\b", lower):
@@ -495,10 +525,21 @@ def _extract_from_vapi_body(body: dict) -> dict:
         structured.get("service_urgency"),
         _extract_timing(summary),
     )
+    customer_type = _first(
+        transcript.get("customer_type"),
+        tool_args.get("customer_type"),
+        structured.get("customer_type"),
+    )
+    property_type = _first(
+        transcript.get("property_type"),
+        tool_args.get("property_type"),
+        structured.get("property_type"),
+    )
 
     print(
         f"[VAPI EXTRACT] final: name={name!r} phone={phone!r} issue={issue!r} "
-        f"urgency={service_urgency!r} address={service_address!r} zip={zip_code!r}",
+        f"urgency={service_urgency!r} address={service_address!r} zip={zip_code!r} "
+        f"customer_type={customer_type!r} property_type={property_type!r}",
         flush=True,
     )
 
@@ -511,6 +552,8 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "zip": zip_code,
         "service_address": service_address or None,
         "service_urgency": service_urgency,
+        "customer_type": customer_type or None,
+        "property_type": property_type or None,
         "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
     }
@@ -693,6 +736,8 @@ async def vapi_intake(
     service_urgency = (payload.service_urgency or "").strip() or None
     service_address = (payload.service_address or "").strip() or None
     zip_code = (payload.zip or "").strip() or None
+    customer_type = (payload.customer_type or "").strip() or None
+    property_type = (payload.property_type or "").strip() or None
 
     message = issue or "Inbound call via Vapi"
 
@@ -704,7 +749,8 @@ async def vapi_intake(
     print(
         f"[VAPI] saving lead tenant={tenant_id!r} partial={is_partial} "
         f"name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} "
-        f"address={service_address!r} zip={zip_code!r}",
+        f"address={service_address!r} zip={zip_code!r} "
+        f"customer_type={customer_type!r} property_type={property_type!r}",
         flush=True,
     )
 
@@ -717,6 +763,8 @@ async def vapi_intake(
         source="vapi",
         service_urgency=service_urgency,
         service_address=service_address,
+        customer_type=customer_type,
+        property_type=property_type,
     )
     try:
         session.add(lead)
@@ -734,6 +782,8 @@ async def vapi_intake(
             "zip": zip_code,
             "service_address": service_address,
             "service_urgency": service_urgency,
+            "customer_type": customer_type,
+            "property_type": property_type,
             "partial": is_partial,
         })
         print(f"[VAPI] office SMS sent for tenant={tenant_id!r} partial={is_partial}", flush=True)
