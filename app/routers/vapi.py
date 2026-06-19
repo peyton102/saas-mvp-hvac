@@ -293,10 +293,11 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             continue
         lower = text.lower()
 
-        # Issue — "what's going on / how can I help / describe"
+        # Issue — expanded keyword set to catch varied assistant phrasings
         if not out["issue"] and re.search(
-            r"(what.{0,20}going on|how can i help|what.{0,15}problem|what.{0,15}issue"
-            r"|what brings|help you today|can i help|tell me more|describe)",
+            r"(what.{0,20}going on|what.{0,20}happening|how can i help|what.{0,15}problem"
+            r"|what.{0,15}issue|what brings|help you today|can i help|tell me more|describe"
+            r"|blowing warm|not turning on|leaking)",
             lower,
         ):
             j, answer = _claim_next_user(i)
@@ -304,7 +305,7 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
                 consumed.add(j)
                 out["issue"] = _compact_reason(answer)
 
-        # Name — "name"
+        # Name — ONLY fire when assistant explicitly asks for name; never fall back
         elif not out["name"] and re.search(r"\bname\b", lower):
             j, answer = _claim_next_user(i)
             if j >= 0:
@@ -347,6 +348,13 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             j, answer = _claim_next_user(i)
             if j >= 0:
                 consumed.add(j)
+                # Strip leading filler affirmations ("Yes. ", "Yeah, ", "Sure ", etc.)
+                answer = re.sub(
+                    r"^(yes|yeah|yep|yup|sure|okay|ok|alright)[.,!]?\s*",
+                    "",
+                    answer,
+                    flags=re.IGNORECASE,
+                ).strip()
                 answer_n = _normalize_word_digits(answer)
                 zip_match = re.search(r"\b(\d{5})\b", answer_n)
                 if zip_match and len(answer_n.strip()) <= 12:
