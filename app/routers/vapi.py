@@ -24,6 +24,7 @@ class VapiIntakePayload(BaseModel):
     language: Optional[str] = None
     summary: Optional[str] = None
     zip: Optional[str] = None
+    service_address: Optional[str] = None
     service_urgency: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
@@ -214,6 +215,27 @@ def _extract_timing(*values: Optional[str]) -> str:
     return ""
 
 
+def _extract_from_artifact_messages(messages: list) -> dict:
+    """
+    Scan artifact.messages for the last hvac_intake tool call and return its args.
+    This is the most reliable source when structuredData is incomplete.
+    """
+    for msg in reversed(messages):
+        role = (msg.get("role") or "").lower()
+        if role in ("tool_call", "tool_calls"):
+            for tc in (msg.get("toolCalls") or []):
+                fn = tc.get("function") or {}
+                if fn.get("name") == "hvac_intake":
+                    args = fn.get("arguments") or {}
+                    if isinstance(args, str):
+                        try:
+                            args = _json.loads(args)
+                        except Exception:
+                            args = {}
+                    return args
+    return {}
+
+
 def _reason_for_sms(reason: Optional[str], summary: Optional[str]) -> str:
     reason_text = _clean_text(reason)
     if reason_text and reason_text.lower() != "pending":
@@ -243,6 +265,12 @@ def _extract_from_vapi_body(body: dict) -> dict:
     structured = analysis.get("structuredData") or {}
     summary = msg.get("summary") or analysis.get("summary") or ""
 
+    # Also pull data from the hvac_intake tool call in artifact.messages —
+    # this is the most reliable source when structuredData is missing fields.
+    artifact = msg.get("artifact") or {}
+    artifact_messages = artifact.get("messages") or []
+    tool_args = _extract_from_artifact_messages(artifact_messages)
+
     customer = call.get("customer") or {}
     phone = (
         structured.get("phone")
@@ -252,6 +280,9 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or structured.get("callbackNumber")
         or structured.get("phone_number")
         or structured.get("phoneNumber")
+        or tool_args.get("phone")
+        or tool_args.get("callback_phone")
+        or tool_args.get("phone_number")
         or customer.get("number")
         or ""
     )
@@ -276,12 +307,16 @@ def _extract_from_vapi_body(body: dict) -> dict:
     name = (
         structured.get("name")
         or structured.get("caller_name")
+        or tool_args.get("name")
+        or tool_args.get("caller_name")
         or _extract_name_from_text(summary)
         or ""
     )
     issue = (
         structured.get("issue")
         or structured.get("reason")
+        or tool_args.get("issue")
+        or tool_args.get("reason")
         or summary
         or ""
     )
@@ -290,12 +325,24 @@ def _extract_from_vapi_body(body: dict) -> dict:
         or structured.get("zip_code")
         or structured.get("zipcode")
         or structured.get("postal_code")
+        or tool_args.get("zip")
+        or tool_args.get("zip_code")
+        or ""
+    )
+    service_address = _clean_text(
+        structured.get("service_address")
+        or structured.get("serviceAddress")
+        or structured.get("address")
+        or tool_args.get("service_address")
+        or tool_args.get("address")
         or ""
     )
     service_urgency = _clean_text(
         structured.get("service_urgency")
         or structured.get("serviceUrgency")
         or structured.get("urgency")
+        or tool_args.get("service_urgency")
+        or tool_args.get("timing")
         or ""
     )
     if not service_urgency:
@@ -311,6 +358,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "issue": issue,
         "summary": summary,
         "zip": zip_code,
+        "service_address": service_address or None,
         "service_urgency": service_urgency,
         "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
@@ -443,35 +491,9 @@ async def _handle_tool_call(body: dict, background_tasks: BackgroundTasks):
             results.append({"toolCallId": tc_id, "result": "ok"})
             continue
 
-        if not tenant_id:
-            results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
-            continue
-
-        name = _clean_text(args.get("name") or args.get("caller_name") or "")
-        phone = _normalize_phone(
-            args.get("phone") or args.get("callback_phone") or args.get("phone_number") or ""
-        )
-        issue = _compact_reason(args.get("issue") or args.get("reason") or "")
-        zip_code = _extract_zip(args.get("zip") or args.get("zip_code") or "")
-        service_urgency = _clean_text(
-            args.get("service_urgency")
-            or args.get("timing")
-            or args.get("service_timing")
-            or args.get("preferred_day")
-            or ""
-        )
-        if not service_urgency:
-            service_urgency = _extract_timing(
-                args.get("timing") or args.get("service_timing") or args.get("preferred_day") or issue
-            )
-
-        print(f"[VAPI TOOL-CALL] queuing background save: name={name!r} phone={phone!r} issue={issue!r} urgency={service_urgency!r} zip={zip_code!r}", flush=True)
-
-        background_tasks.add_task(
-            _process_tool_call_background,
-            tenant_id, call_id, name, phone, issue, zip_code, service_urgency,
-        )
-
+        # Acknowledge immediately — lead is saved on end-of-call-report, not here.
+        # This prevents the double-fire bug where mid-call phone_number_id is empty.
+        print(f"[VAPI TOOL-CALL] hvac_intake acknowledged (will save on end-of-call-report) call_id={call_id!r}", flush=True)
         results.append({"toolCallId": tc_id, "result": "Got it, we'll have them call you back shortly."})
 
     return {"results": results}
@@ -541,6 +563,7 @@ async def vapi_intake(
         tenant_id=tenant_id,
         source="vapi",
         service_urgency=(payload.service_urgency or "").strip() or None,
+        service_address=(payload.service_address or "").strip() or None,
     )
     try:
         session.add(lead)
@@ -556,6 +579,7 @@ async def vapi_intake(
             "phone": payload.phone,
             "issue": payload.issue,
             "zip": payload.zip,
+            "service_address": payload.service_address,
             "service_urgency": payload.service_urgency,
         })
         print(f"[VAPI] office SMS sent for tenant={tenant_id!r}", flush=True)

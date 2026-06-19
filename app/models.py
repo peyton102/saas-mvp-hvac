@@ -29,6 +29,7 @@ class Lead(SQLModel, table=True):
     notes: Optional[str] = Field(default=None)
     job_won: Optional[bool] = Field(default=False)
     job_value: Optional[float] = Field(default=None)
+    service_address: Optional[str] = Field(default=None)
 
 
 class Booking(SQLModel, table=True):

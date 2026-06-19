@@ -446,8 +446,9 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     { key: "created_at", label: "Time Received", w: "120px" },
     { key: "name",       label: "Name",          w: "110px" },
     { key: "phone",      label: "Phone",          w: "120px" },
-    { key: "message",    label: "Issue",          w: "180px" },
-    { key: "service_urgency", label: "Preferred Day", w: "110px" },
+    { key: "message",         label: "Issue",          w: "180px" },
+    { key: "service_address", label: "Address",        w: "150px" },
+    { key: "service_urgency", label: "Preferred Day",  w: "110px" },
     { key: "notes",      label: "Notes",          w: "160px" },
     { key: "status",     label: "Contacted",      w: "90px"  },
     { key: "job_won",    label: "Won",            w: "120px" },
@@ -531,10 +532,10 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
             )}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
             )}
             {!loading && visible.map((r, i) => {
               const contacted = (r.status || "").toLowerCase() === "contacted";
@@ -571,6 +572,13 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                   <td style={{ padding: "10px 10px", color: C.text }}>
                     <div style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.message || ""}>
                       {r.message || "—"}
+                    </div>
+                  </td>
+
+                  {/* Address */}
+                  <td style={{ padding: "10px 10px", color: C.text, fontSize: 12 }}>
+                    <div style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.service_address || ""}>
+                      {r.service_address || "—"}
                     </div>
                   </td>
 
