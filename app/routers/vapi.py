@@ -29,6 +29,7 @@ class VapiIntakePayload(BaseModel):
     service_urgency: Optional[str] = None
     customer_type: Optional[str] = None
     property_type: Optional[str] = None
+    email: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
 
@@ -258,6 +259,20 @@ def _normalize_word_digits(text: str) -> str:
     return " ".join(result)
 
 
+def _normalize_email(text: str) -> str:
+    """
+    Normalize a spoken email: "peyton at gmail dot com" → "peyton@gmail.com"
+    """
+    if not text:
+        return text
+    s = re.sub(r"\s+dot\s+", ".", text, flags=re.IGNORECASE)
+    s = re.sub(r"\s+at\s+", "@", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s*@\s*", "@", s)
+    s = re.sub(r"\s*\.\s*", ".", s)
+    m = re.search(r"[\w.+-]+@[\w.-]+\.\w+", s)
+    return m.group(0).lower() if m else s.strip().lower()
+
+
 _URGENCY_HOUR_MAP = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
     "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
@@ -478,13 +493,14 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     """
     out = {
         "name": "",
-        "phone": _normalize_phone(customer_number) if customer_number else "",
+        "phone": "",  # never pre-fill with caller ID; use _extract_from_vapi_body fallback
         "issue": "",
         "service_urgency": "",
         "service_address": "",
         "zip": "",
         "customer_type": "",
         "property_type": "",
+        "email": "",
     }
 
     turns: list[tuple[str, str]] = []
@@ -558,6 +574,16 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
                 name = re.sub(r"^(it.?s|my name is|i.?m|this is)\s+", "", name, flags=re.IGNORECASE).strip()
                 # Strip trailing dangling conjunctions ("Ain Madden and" → "Ain Madden")
                 name = re.sub(r"\s+\b(and|or|but)\b\s*$", "", name, flags=re.IGNORECASE).strip()
+                # Strip trailing phone-like digit-word run (5+ words): user said name+phone in one breath
+                _dw = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)"
+                phone_tail = re.search(rf"(?:\s+{_dw}){{5,}}\s*$", name, re.IGNORECASE)
+                if phone_tail:
+                    if not out["phone"]:
+                        tail_n = _normalize_word_digits(phone_tail.group(0).strip())
+                        ph = _normalize_phone(tail_n) if re.search(r"\d{7,}", tail_n) else ""
+                        if ph:
+                            out["phone"] = ph
+                    name = name[:phone_tail.start()].strip()
                 out["name"] = name or answer
 
         # Phone — "phone number / callback number"
@@ -588,19 +614,21 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
                 else:
                     out["service_urgency"] = _clean_text(answer).rstrip(".")[:60]
 
-        # Address / ZIP — "address / ZIP / street"
+        # Address / ZIP — "address / ZIP / street" (exclude "email address" — handled separately)
         elif not out["service_address"] and not out["zip"] and re.search(
             r"\b(address|zip|postal|street|location|where.{0,10}you)\b", lower
-        ):
+        ) and not re.search(r"\bemail\b", lower):
             j, answer = _claim_next_user(i)
             if j >= 0:
                 consumed.add(j)
-                # Strip leading filler affirmations ("Yes. ", "Yeah, ", "Sure ", etc.)
+                # Strip leading filler ("Yes.", "Sure", "It's at", "My address is", etc.)
                 answer = re.sub(
-                    r"^(yes|yeah|yep|yup|sure|okay|ok|alright)[.,!]?\s*",
-                    "",
-                    answer,
-                    flags=re.IGNORECASE,
+                    r"^(?:yes|yeah|yep|yup|sure|okay|ok|alright|so)[.,!]?\s*",
+                    "", answer, flags=re.IGNORECASE,
+                ).strip()
+                answer = re.sub(
+                    r"^(?:it.?s|the address is|my address is|it is)\s+(?:at\s+)?",
+                    "", answer, flags=re.IGNORECASE,
                 ).strip()
                 answer_n = _normalize_word_digits(answer)
                 zip_match = re.search(r"\b(\d{5})\b", answer_n)
@@ -611,12 +639,12 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
                     if not out["zip"] and zip_match:
                         out["zip"] = zip_match.group(1)
 
-    # Issue fallback: if the opener didn't match any issue keywords, use the first user turn
-    if not out["issue"]:
-        for _j, (_r, _t) in enumerate(turns):
-            if _r == "user":
-                out["issue"] = _compact_reason(_t)
-                break
+        # Email — "email / email address"
+        elif not out["email"] and re.search(r"\bemail\b", lower):
+            j, answer = _claim_next_user(i)
+            if j >= 0:
+                consumed.add(j)
+                out["email"] = _normalize_email(answer)
 
     # Phone fallback: scan unconsumed user turns for a phone number
     if not out["phone"]:
@@ -759,11 +787,16 @@ def _extract_from_vapi_body(body: dict) -> dict:
         tool_args.get("property_type"),
         structured.get("property_type"),
     )
+    email = _first(
+        transcript.get("email"),
+        tool_args.get("email"),
+        structured.get("email"),
+    ) or None
 
     print(
         f"[VAPI EXTRACT] final: name={name!r} phone={phone!r} issue={issue!r} "
         f"urgency={service_urgency!r} address={service_address!r} zip={zip_code!r} "
-        f"customer_type={customer_type!r} property_type={property_type!r}",
+        f"customer_type={customer_type!r} property_type={property_type!r} email={email!r}",
         flush=True,
     )
 
@@ -772,6 +805,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "name": name,
         "phone": phone,
         "issue": issue,
+        "email": email,
         "summary": summary,
         "zip": zip_code,
         "service_address": service_address or None,
@@ -958,6 +992,7 @@ async def vapi_intake(
     name = (payload.name or "").strip()
     phone = (payload.phone or "").strip()
     issue = (payload.issue or "").strip()
+    email = (payload.email or "").strip() or None
     service_urgency = (payload.service_urgency or "").strip() or None
     service_address = (payload.service_address or "").strip() or None
     zip_code = (payload.zip or "").strip() or None
@@ -982,7 +1017,7 @@ async def vapi_intake(
     lead = LeadModel(
         name=name or phone or "Unknown caller",
         phone=phone,
-        email=None,
+        email=email,
         message=message,
         tenant_id=tenant_id,
         source="vapi",
@@ -1004,6 +1039,7 @@ async def vapi_intake(
         vapi_lead_office_sms(tenant_id, {
             "name": name,
             "phone": phone,
+            "email": email,
             "issue": issue,
             "zip": zip_code,
             "service_address": service_address,

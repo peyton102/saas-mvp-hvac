@@ -515,6 +515,7 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
     name = (payload.get("name") or "").strip()
     phone_raw = (payload.get("phone") or "").strip()
     phone = _normalize_phone(phone_raw) or phone_raw or "Unknown"
+    email = (payload.get("email") or "").strip()
     issue = (payload.get("issue") or "").strip()
     service_address = (payload.get("service_address") or "").strip()
     zip_code = (payload.get("zip") or "").strip()
@@ -559,6 +560,7 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
             f"Customer: {customer_type or 'unknown'}\n"
             f"Property: {property_type or 'unknown'}\n"
             f"Phone: {phone}\n"
+            f"Email: {email or '—'}\n"
             f"Issue: {issue or '—'}\n"
             f"When: {service_urgency or '—'}\n"
             f"Address: {location}"
