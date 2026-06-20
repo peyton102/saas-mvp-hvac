@@ -257,6 +257,101 @@ def _normalize_word_digits(text: str) -> str:
     return " ".join(result)
 
 
+_URGENCY_HOUR_MAP = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+}
+_URGENCY_MINUTE_MAP = {
+    "oh": 0, "zero": 0, "five": 5, "ten": 10, "fifteen": 15,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+}
+_URGENCY_DATE_ONES = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19,
+}
+_URGENCY_DATE_TENS = {"twenty": 20, "thirty": 30}
+_URGENCY_MONTHS_RE = (
+    r"january|february|march|april|may|june|july|august"
+    r"|september|october|november|december"
+)
+
+
+def _normalize_urgency(text: str) -> str:
+    """
+    Light normalization of spoken dates and times in a service_urgency string.
+      "June twenty one at three thirty" → "June 21 at 3:30"
+      "Saturday at two pm"             → "Saturday at 2pm"
+    Day-only strings ("Monday", "Monday next week", "ASAP") are unchanged.
+    """
+    if not text:
+        return text
+
+    _ones_re = "|".join(_URGENCY_DATE_ONES)
+    _tens_re = "|".join(_URGENCY_DATE_TENS)
+    _hour_re = "|".join(_URGENCY_HOUR_MAP)
+    _min_re = "|".join(_URGENCY_MINUTE_MAP)
+
+    # 1. Spoken month date: "June twenty one" → "June 21"
+    def _sub_date(m: re.Match) -> str:
+        month = m.group(1)
+        tens_w = (m.group(2) or "").lower()
+        ones_w = (m.group(3) or "").lower()
+        if tens_w in _URGENCY_DATE_TENS:
+            day = _URGENCY_DATE_TENS[tens_w] + (_URGENCY_DATE_ONES.get(ones_w, 0) if ones_w else 0)
+        else:
+            day = _URGENCY_DATE_ONES.get(tens_w, 0)
+        return f"{month} {day}" if day else m.group(0)
+
+    text = re.sub(
+        rf"\b({_URGENCY_MONTHS_RE})\s+({_tens_re}|{_ones_re})(?:\s+({_ones_re}))?\b",
+        _sub_date, text, flags=re.IGNORECASE,
+    )
+
+    # 2. Spoken time after "at": "at three thirty" → "at 3:30", "at two pm" → "at 2pm"
+    def _sub_at_time(m: re.Match) -> str:
+        hour_w = m.group(1).lower()
+        min_w = (m.group(2) or "").lower()
+        ampm = (m.group(3) or "").lower().replace(" ", "")
+        hour = _URGENCY_HOUR_MAP.get(hour_w)
+        if hour is None:
+            return m.group(0)
+        if min_w:
+            minute = _URGENCY_MINUTE_MAP.get(min_w)
+            if minute is None:
+                return m.group(0)
+            return f"at {hour}:{minute:02d}{ampm}"
+        return f"at {hour}{ampm}"
+
+    text = re.sub(
+        rf"\bat\s+({_hour_re})(?:\s+({_min_re}))?(\s+(?:am|pm))?\b",
+        _sub_at_time, text, flags=re.IGNORECASE,
+    )
+
+    # 3. Bare spoken hour + am/pm (no "at"): "two pm" → "2pm"
+    def _sub_bare_time(m: re.Match) -> str:
+        hour_w = m.group(1).lower()
+        min_w = (m.group(2) or "").lower()
+        ampm = m.group(3).lower().replace(" ", "")
+        hour = _URGENCY_HOUR_MAP.get(hour_w)
+        if hour is None:
+            return m.group(0)
+        if min_w:
+            minute = _URGENCY_MINUTE_MAP.get(min_w)
+            if minute is None:
+                return m.group(0)
+            return f"{hour}:{minute:02d}{ampm}"
+        return f"{hour}{ampm}"
+
+    text = re.sub(
+        rf"\b({_hour_re})(?:\s+({_min_re}))?(\s+(?:am|pm))\b",
+        _sub_bare_time, text, flags=re.IGNORECASE,
+    )
+
+    return text
+
+
 def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     """
     Walk artifact.messages in order. For each assistant turn, identify which
@@ -519,12 +614,12 @@ def _extract_from_vapi_body(body: dict) -> dict:
         structured.get("zip"), structured.get("zip_code"),
         _extract_zip(summary),
     )
-    service_urgency = _first(
+    service_urgency = _normalize_urgency(_first(
         transcript.get("service_urgency"),
         tool_args.get("service_urgency"), tool_args.get("timing"),
         structured.get("service_urgency"),
         _extract_timing(summary),
-    )
+    ))
     customer_type = _first(
         transcript.get("customer_type"),
         tool_args.get("customer_type"),
