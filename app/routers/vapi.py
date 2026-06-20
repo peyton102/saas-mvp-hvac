@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from app.call_cache import lookup as cache_lookup, evict as cache_evict
@@ -278,78 +279,195 @@ _URGENCY_MONTHS_RE = (
 )
 
 
-def _normalize_urgency(text: str) -> str:
+_URGENCY_TOD_KEYWORDS = {"morning", "afternoon", "evening", "anytime"}
+
+
+def _normalize_urgency(text: str, _today: Optional[date] = None) -> str:
     """
-    Light normalization of spoken dates and times in a service_urgency string.
-      "June twenty one at three thirty" → "June 21 at 3:30"
-      "Saturday at two pm"             → "Saturday at 2pm"
-    Day-only strings ("Monday", "Monday next week", "ASAP") are unchanged.
+    Full normalization of a service_urgency capture:
+      C. Strip conversational filler ("Alright", "I'd like to schedule for", …)
+      +  Digit-word conversion ("two pm" → "2pm", "June twenty one" → "June 21")
+      A. Resolve dates (day-of-week → upcoming calendar date, today/tomorrow, ordinals)
+      B. Extract times (ranges → "from Xam-Yam", specific, time-of-day keywords)
+    Returns "needs scheduling" when no parseable date or time is found.
     """
     if not text:
         return text
 
+    today = _today or datetime.now().date()
+    s = text.strip()
+
+    # Quick passthrough for clean ASAP values
+    if re.match(r"^(asap|urgent|right away|immediately|as soon as possible)$", s, re.IGNORECASE):
+        return "ASAP"
+
+    # ── Part C: Strip conversational filler ─────────────────────────────
+    s = re.sub(
+        r"^(?:(?:alright|okay|ok|sure|yes|yeah|yep|just|so)[.,!]?\s+)+",
+        "", s, flags=re.IGNORECASE,
+    ).strip()
+    s = re.sub(
+        r"(i.{0,2}d like to schedule\s*(?:for\s*)?|let.{0,2}s (?:do|say)\s*"
+        r"|how about\s*|i was thinking\s*|can we (?:do|schedule)\s*)",
+        "", s, flags=re.IGNORECASE,
+    ).strip()
+    s = re.sub(r"^for\s+", "", s, flags=re.IGNORECASE).strip()
+    s = re.sub(r"\b(?:a\s+)?routine\b", "", s, flags=re.IGNORECASE).strip()
+
+    if re.search(r"\b(asap|right away|immediately|as soon as possible)\b", s, re.IGNORECASE):
+        return "ASAP"
+
+    # ── Digit-word pre-pass ──────────────────────────────────────────────
     _ones_re = "|".join(_URGENCY_DATE_ONES)
     _tens_re = "|".join(_URGENCY_DATE_TENS)
     _hour_re = "|".join(_URGENCY_HOUR_MAP)
     _min_re = "|".join(_URGENCY_MINUTE_MAP)
 
-    # 1. Spoken month date: "June twenty one" → "June 21"
-    def _sub_date(m: re.Match) -> str:
-        month = m.group(1)
-        tens_w = (m.group(2) or "").lower()
-        ones_w = (m.group(3) or "").lower()
-        if tens_w in _URGENCY_DATE_TENS:
-            day = _URGENCY_DATE_TENS[tens_w] + (_URGENCY_DATE_ONES.get(ones_w, 0) if ones_w else 0)
-        else:
-            day = _URGENCY_DATE_ONES.get(tens_w, 0)
+    def _sub_spoken_date(m: re.Match) -> str:
+        month, tw, ow = m.group(1), (m.group(2) or "").lower(), (m.group(3) or "").lower()
+        day = (_URGENCY_DATE_TENS.get(tw, 0) + _URGENCY_DATE_ONES.get(ow, 0)
+               if tw in _URGENCY_DATE_TENS else _URGENCY_DATE_ONES.get(tw, 0))
         return f"{month} {day}" if day else m.group(0)
 
-    text = re.sub(
+    s = re.sub(
         rf"\b({_URGENCY_MONTHS_RE})\s+({_tens_re}|{_ones_re})(?:\s+({_ones_re}))?\b",
-        _sub_date, text, flags=re.IGNORECASE,
+        _sub_spoken_date, s, flags=re.IGNORECASE,
     )
 
-    # 2. Spoken time after "at": "at three thirty" → "at 3:30", "at two pm" → "at 2pm"
-    def _sub_at_time(m: re.Match) -> str:
-        hour_w = m.group(1).lower()
-        min_w = (m.group(2) or "").lower()
-        ampm = (m.group(3) or "").lower().replace(" ", "")
-        hour = _URGENCY_HOUR_MAP.get(hour_w)
-        if hour is None:
+    def _sub_at_tw(m: re.Match) -> str:
+        hw, mw = m.group(1).lower(), (m.group(2) or "").lower()
+        ap = (m.group(3) or "").lower().replace(" ", "")
+        h = _URGENCY_HOUR_MAP.get(hw)
+        if h is None:
             return m.group(0)
-        if min_w:
-            minute = _URGENCY_MINUTE_MAP.get(min_w)
-            if minute is None:
-                return m.group(0)
-            return f"at {hour}:{minute:02d}{ampm}"
-        return f"at {hour}{ampm}"
+        if mw:
+            mi = _URGENCY_MINUTE_MAP.get(mw)
+            return f"at {h}:{mi:02d}{ap}" if mi is not None else m.group(0)
+        return f"at {h}{ap}"
 
-    text = re.sub(
+    s = re.sub(
         rf"\bat\s+({_hour_re})(?:\s+({_min_re}))?(\s+(?:am|pm))?\b",
-        _sub_at_time, text, flags=re.IGNORECASE,
+        _sub_at_tw, s, flags=re.IGNORECASE,
     )
 
-    # 3. Bare spoken hour + am/pm (no "at"): "two pm" → "2pm"
-    def _sub_bare_time(m: re.Match) -> str:
-        hour_w = m.group(1).lower()
-        min_w = (m.group(2) or "").lower()
-        ampm = m.group(3).lower().replace(" ", "")
-        hour = _URGENCY_HOUR_MAP.get(hour_w)
-        if hour is None:
+    def _sub_bare_tw(m: re.Match) -> str:
+        hw, mw = m.group(1).lower(), (m.group(2) or "").lower()
+        ap = m.group(3).lower().replace(" ", "")
+        h = _URGENCY_HOUR_MAP.get(hw)
+        if h is None:
             return m.group(0)
-        if min_w:
-            minute = _URGENCY_MINUTE_MAP.get(min_w)
-            if minute is None:
-                return m.group(0)
-            return f"{hour}:{minute:02d}{ampm}"
-        return f"{hour}{ampm}"
+        if mw:
+            mi = _URGENCY_MINUTE_MAP.get(mw)
+            return f"{h}:{mi:02d}{ap}" if mi is not None else m.group(0)
+        return f"{h}{ap}"
 
-    text = re.sub(
+    s = re.sub(
         rf"\b({_hour_re})(?:\s+({_min_re}))?(\s+(?:am|pm))\b",
-        _sub_bare_time, text, flags=re.IGNORECASE,
+        _sub_bare_tw, s, flags=re.IGNORECASE,
     )
 
-    return text
+    # ── Part A: Date resolution ──────────────────────────────────────────
+    date_str = ""
+
+    # today / tomorrow
+    if re.search(r"\btoday\b", s, re.IGNORECASE):
+        date_str = f"{today.strftime('%A')} {today.strftime('%B')} {today.day}"
+        s = re.sub(r"\btoday\b", "", s, flags=re.IGNORECASE).strip()
+    elif re.search(r"\btomorrow\b", s, re.IGNORECASE):
+        tmrw = today + timedelta(days=1)
+        date_str = f"{tmrw.strftime('%A')} {tmrw.strftime('%B')} {tmrw.day}"
+        s = re.sub(r"\btomorrow\b", "", s, flags=re.IGNORECASE).strip()
+
+    # Day-of-week → resolve to upcoming date (same weekday → next week)
+    _DOW = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    dm = re.search(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", s, re.IGNORECASE)
+    if dm and not date_str:
+        dn = dm.group(1).lower()
+        ahead = (_DOW.index(dn) - today.weekday()) % 7 or 7
+        resolved = today + timedelta(days=ahead)
+        date_str = f"{dn.capitalize()} {resolved.strftime('%B')} {resolved.day}"
+        s = (s[:dm.start()] + s[dm.end():]).strip()
+
+    # Ordinal date: "the 22nd", "22nd", "the 22"
+    om = re.search(r"\bthe\s+(\d{1,2})(?:st|nd|rd|th)?\b|\b(\d{1,2})(?:st|nd|rd|th)\b", s, re.IGNORECASE)
+    if om and not date_str:
+        dn_num = int(om.group(1) or om.group(2))
+        if 1 <= dn_num <= 31:
+            try:
+                cand = today.replace(day=dn_num)
+                if cand < today:
+                    raise ValueError
+                date_str = f"{today.strftime('%B')} {dn_num}"
+            except ValueError:
+                try:
+                    nm = (today.replace(month=1, year=today.year + 1)
+                          if today.month == 12 else today.replace(month=today.month + 1))
+                    date_str = f"{nm.strftime('%B')} {dn_num}"
+                except ValueError:
+                    pass
+            s = (s[:om.start()] + s[om.end():]).strip()
+
+    # Already-normalized "Month DD" (from spoken-date digit-word pass above)
+    mmm = re.search(rf"\b({_URGENCY_MONTHS_RE})\s+(\d{{1,2}})\b", s, re.IGNORECASE)
+    if mmm and not date_str:
+        date_str = f"{mmm.group(1).capitalize()} {mmm.group(2)}"
+        s = (s[:mmm.start()] + s[mmm.end():]).strip()
+
+    # ── Part B: Time extraction ──────────────────────────────────────────
+    time_str = ""
+
+    def _infer_ampm(h: int) -> str:
+        return "am" if 6 <= h <= 11 else "pm"
+
+    # Range: "8 to 10", "8am to 10am", "8-10am"
+    rng = re.search(
+        r"\b(\d{1,2}(?::\d{2})?(?:am|pm)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?(?:am|pm)?)\b",
+        s, re.IGNORECASE,
+    )
+    if rng:
+        t1, t2 = rng.group(1).lower(), rng.group(2).lower()
+        a1, a2 = re.search(r"(am|pm)$", t1), re.search(r"(am|pm)$", t2)
+        if a2 and not a1:
+            t1 += a2.group(1)
+        elif a1 and not a2:
+            t2 += a1.group(1)
+        elif not a1 and not a2:
+            h1 = int(re.match(r"(\d+)", t1).group(1))
+            h2 = int(re.match(r"(\d+)", t2).group(1))
+            t1 += _infer_ampm(h1)
+            t2 += _infer_ampm(h2)
+        time_str = f"from {t1}-{t2}"
+        s = (s[:rng.start()] + s[rng.end():]).strip()
+
+    if not time_str:
+        # Specific time: "2pm", "2:30pm", "8am"
+        tm = re.search(r"\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b", s, re.IGNORECASE)
+        if tm:
+            time_str = tm.group(1).lower().replace(" ", "")
+            s = (s[:tm.start()] + s[tm.end():]).strip()
+
+    if not time_str:
+        # Time-of-day keyword: morning / afternoon / evening / anytime
+        todm = re.search(r"\b(morning|afternoon|evening|anytime|any\s*time)\b", s, re.IGNORECASE)
+        if todm:
+            time_str = todm.group(1).lower().replace(" ", "")
+            s = (s[:todm.start()] + s[todm.end():]).strip()
+
+    # ── Combine ──────────────────────────────────────────────────────────
+    if not date_str and not time_str:
+        return "needs scheduling"
+
+    parts: list[str] = []
+    if date_str:
+        parts.append(date_str)
+    if time_str:
+        if time_str in _URGENCY_TOD_KEYWORDS or time_str.startswith("from "):
+            parts.append(time_str)
+        elif date_str:
+            parts.append(f"at {time_str}")
+        else:
+            parts.append(time_str)
+    return " ".join(parts)
 
 
 def _parse_transcript(messages: list, customer_number: str = "") -> dict:
@@ -435,8 +553,12 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             j, answer = _claim_next_user(i)
             if j >= 0:
                 consumed.add(j)
-                words = answer.split()
-                out["name"] = " ".join(words[:3]) if len(words) > 3 else answer
+                # Strip leading affirmations and "it's / my name is / I'm"
+                name = re.sub(r"^(yes|yeah|yep|yup|sure|okay|ok|alright)[.,!]?\s*", "", answer, flags=re.IGNORECASE).strip()
+                name = re.sub(r"^(it.?s|my name is|i.?m|this is)\s+", "", name, flags=re.IGNORECASE).strip()
+                # Strip trailing dangling conjunctions ("Ain Madden and" → "Ain Madden")
+                name = re.sub(r"\s+\b(and|or|but)\b\s*$", "", name, flags=re.IGNORECASE).strip()
+                out["name"] = name or answer
 
         # Phone — "phone number / callback number"
         elif re.search(r"\b(phone.{0,10}number|callback|call.{0,8}back)\b", lower):
@@ -488,6 +610,13 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
                     out["service_address"] = answer_n.strip()
                     if not out["zip"] and zip_match:
                         out["zip"] = zip_match.group(1)
+
+    # Issue fallback: if the opener didn't match any issue keywords, use the first user turn
+    if not out["issue"]:
+        for _j, (_r, _t) in enumerate(turns):
+            if _r == "user":
+                out["issue"] = _compact_reason(_t)
+                break
 
     # Phone fallback: scan unconsumed user turns for a phone number
     if not out["phone"]:
@@ -719,6 +848,7 @@ def _process_tool_call_background(tenant_id: str, call_id: str, name: str, phone
                 tenant_id=tenant_id,
                 source="vapi",
                 service_urgency=service_urgency or None,
+                needs_callback_for_scheduling=(service_urgency == "needs scheduling"),
             )
             session.add(lead)
             session.commit()
@@ -860,6 +990,7 @@ async def vapi_intake(
         service_address=service_address,
         customer_type=customer_type,
         property_type=property_type,
+        needs_callback_for_scheduling=(service_urgency == "needs scheduling"),
     )
     try:
         session.add(lead)
