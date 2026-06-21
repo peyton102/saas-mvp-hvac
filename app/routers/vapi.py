@@ -225,14 +225,19 @@ _WORD_TO_DIGIT = {
     "oh": "0",
 }
 
+_TENS_TO_NUM = {
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
+
 
 def _normalize_word_digits(text: str) -> str:
     """
-    Convert consecutive runs of spoken digit-words into numeric strings.
-    Non-digit words pass through unchanged.
+    Convert spoken digit-words and number-words to numerics, collapsing adjacent groups.
+    Handles tens+ones compounds ("sixty nine" → "69") and mixed ("sixty 9" → "69").
 
-    'six nine five nine Main Street, Apopka, Florida, three four seven three six'
-    → '6959 Main Street, Apopka, Florida, 34736'
+    'six nine five nine Main Street three four seven three six' → '6959 Main Street 34736'
+    'sixty nine fifty nine Perch Hammock Loop' → '6959 Perch Hammock Loop'
     """
     if not text:
         return text
@@ -240,10 +245,25 @@ def _normalize_word_digits(text: str) -> str:
     result: list[str] = []
     i = 0
     while i < len(tokens):
-        # Strip trailing punctuation only for the lookup; preserve it in output
-        # for non-digit words, but drop it for digit words (period after "six." → "6")
         bare = tokens[i].lower().rstrip(".,;:")
-        if bare in _WORD_TO_DIGIT:
+        if bare in _TENS_TO_NUM:
+            tens_val = _TENS_TO_NUM[bare]
+            i += 1
+            if i < len(tokens):
+                nb = tokens[i].lower().rstrip(".,;:")
+                if nb in _WORD_TO_DIGIT:
+                    # "sixty nine" → 69
+                    result.append(str(tens_val + int(_WORD_TO_DIGIT[nb])))
+                    i += 1
+                elif re.match(r"^[1-9]$", nb):
+                    # "sixty 9" (mixed) → 69
+                    result.append(str(tens_val + int(nb)))
+                    i += 1
+                else:
+                    result.append(str(tens_val))
+            else:
+                result.append(str(tens_val))
+        elif bare in _WORD_TO_DIGIT:
             digits: list[str] = []
             while i < len(tokens):
                 b = tokens[i].lower().rstrip(".,;:")
@@ -256,7 +276,14 @@ def _normalize_word_digits(text: str) -> str:
         else:
             result.append(tokens[i])
             i += 1
-    return " ".join(result)
+    # Collapse adjacent all-digit tokens ("69" "59" → "6959")
+    collapsed: list[str] = []
+    for tok in result:
+        if collapsed and re.match(r"^\d+$", tok) and re.match(r"^\d+$", collapsed[-1]):
+            collapsed[-1] += tok
+        else:
+            collapsed.append(tok)
+    return " ".join(collapsed)
 
 
 def _normalize_email(text: str) -> str:
@@ -315,10 +342,19 @@ def _normalize_email(text: str) -> str:
                         i += 1
                     else:
                         break
-                word = "".join(letters)
+                # Detect confirmation spelling: "madden m a d d e n p..." →
+                # letters start with the previous word → keep only the suffix
+                prev = parts[-1].lower() if parts and parts[-1] != "." else ""
+                joined = "".join(letters)
+                if prev and joined.startswith(prev):
+                    suffix = letters[len(prev):]
+                else:
+                    suffix = letters
+                word = "".join(suffix)
                 if digs:
                     word += "".join(digs)
-                parts.append(word)
+                if word:
+                    parts.append(word)
             elif tok in _WORD_TO_DIGIT:
                 # Bare digit-word run (no preceding single letters)
                 digs = []
@@ -365,6 +401,8 @@ def _normalize_email(text: str) -> str:
         return s.strip().lower()
 
     result = f"{username}@{domain}"
+    # Fix common ASR "com" transcription errors
+    result = re.sub(r"\.(mom|cum|con|calm)$", ".com", result, flags=re.IGNORECASE)
     m = re.search(r"[\w.+-]+@[\w.-]+\.\w+", result)
     return m.group(0).lower() if m else result.lower()
 
@@ -610,144 +648,136 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
 
     consumed: set[int] = set()
 
-    def _claim_next_user(after_idx: int) -> tuple[int, str]:
-        """Return (index, text) of the first unconsumed user turn after after_idx."""
-        for j in range(after_idx + 1, len(turns)):
-            if turns[j][0] == "user" and j not in consumed:
-                return j, turns[j][1]
-        return -1, ""
-
-    def _find_assistant(keyword_re: str, exclude_re: str = "") -> int:
-        """Return index of first assistant turn matching keyword_re (skipping exclude_re matches)."""
+    def _find_pair(keyword_re: str, exclude_re: str = "") -> tuple[int, str]:
+        """
+        Find the first (assistant, user) pairing where:
+        - assistant turn matches keyword_re (and not exclude_re)
+        - the immediately following user turn is unconsumed
+        If a matching assistant turn's next user turn is consumed, tries the
+        next matching assistant turn. Returns (user_idx, user_text) or (-1, "").
+        """
         for i, (role, text) in enumerate(turns):
             if role != "assistant":
                 continue
             lower = text.lower()
-            if re.search(keyword_re, lower):
-                if exclude_re and re.search(exclude_re, lower):
-                    continue
-                return i
-        return -1
+            if not re.search(keyword_re, lower):
+                continue
+            if exclude_re and re.search(exclude_re, lower):
+                continue
+            for j in range(i + 1, len(turns)):
+                if turns[j][0] == "user":
+                    if j not in consumed:
+                        return j, turns[j][1]
+                    break  # next user turn is consumed; try next matching assistant
+        return -1, ""
 
-    # 1. NAME — parse first so the name answer is locked before any other field runs
-    i = _find_assistant(r"\bname\b")
-    if i >= 0:
-        j, answer = _claim_next_user(i)
-        if j >= 0:
-            consumed.add(j)
-            name = re.sub(r"^(yes|yeah|yep|yup|sure|okay|ok|alright)[.,!]?\s*", "", answer, flags=re.IGNORECASE).strip()
-            name = re.sub(r"^(it.?s|my name is|i.?m|this is)\s+", "", name, flags=re.IGNORECASE).strip()
-            name = re.sub(r"\s+\b(and|or|but)\b\s*$", "", name, flags=re.IGNORECASE).strip()
-            _dw = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)"
-            phone_tail = re.search(rf"(?:\s+{_dw}){{5,}}\s*$", name, re.IGNORECASE)
-            if phone_tail:
-                if not out["phone"]:
-                    tail_n = _normalize_word_digits(phone_tail.group(0).strip())
-                    ph = _normalize_phone(tail_n) if re.search(r"\d{7,}", tail_n) else ""
-                    if ph:
-                        out["phone"] = ph
-                name = name[:phone_tail.start()].strip()
-            out["name"] = name or answer
-
-    # 2. PHONE — explicit phone question; skip if already recovered from name turn
-    if not out["phone"]:
-        i = _find_assistant(r"\b(phone.{0,10}number|callback|call.{0,8}back|number to call|best number)\b")
-        if i >= 0:
-            j, answer = _claim_next_user(i)
-            if j >= 0:
-                consumed.add(j)
-                answer_n = _normalize_word_digits(answer)
-                ph = _extract_phone_from_text(answer_n) or (
-                    _normalize_phone(answer_n) if re.search(r"\d{7,}", answer_n) else ""
-                )
+    # 1. NAME — require explicit ask for the caller's name; skip assistant self-intros
+    j, answer = _find_pair(
+        r"\byour\s+(?:full\s+)?name\b|\bfull\s+name\b|\bget\s+your\s+name\b"
+        r"|\bname\s+please\b|\bwhat.{0,15}your\s+name\b"
+    )
+    if j >= 0:
+        consumed.add(j)
+        name = re.sub(r"^(yes|yeah|yep|yup|sure|okay|ok|alright)[.,!]?\s*", "", answer, flags=re.IGNORECASE).strip()
+        name = re.sub(r"^(it.?s|my name is|i.?m|this is)\s+", "", name, flags=re.IGNORECASE).strip()
+        name = re.sub(r"\s+\b(and|or|but)\b\s*$", "", name, flags=re.IGNORECASE).strip()
+        _dw = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)"
+        phone_tail = re.search(rf"(?:\s+{_dw}){{5,}}\s*$", name, re.IGNORECASE)
+        if phone_tail:
+            if not out["phone"]:
+                tail_n = _normalize_word_digits(phone_tail.group(0).strip())
+                ph = _normalize_phone(tail_n) if re.search(r"\d{7,}", tail_n) else ""
                 if ph:
                     out["phone"] = ph
+            name = name[:phone_tail.start()].strip()
+        out["name"] = name or answer
 
-    # 3. EMAIL
-    i = _find_assistant(r"\bemail\b")
-    if i >= 0:
-        j, answer = _claim_next_user(i)
+    # 2. PROPERTY TYPE — match before customer_type and issue so the opener is consumed first
+    j, answer = _find_pair(r"\b(residential or commercial|commercial or residential|residential.*commercial)\b")
+    if j >= 0:
+        consumed.add(j)
+        a = answer.lower()
+        if re.search(r"\b(residential|home|house)\b", a):
+            out["property_type"] = "residential"
+        elif re.search(r"\b(commercial|business|office|shop)\b", a):
+            out["property_type"] = "commercial"
+
+    # 3. CUSTOMER TYPE
+    j, answer = _find_pair(r"\b(existing|first.?time|new customer|existing.*customer|existing.*frost)\b")
+    if j >= 0:
+        consumed.add(j)
+        a = answer.lower()
+        if re.search(r"\b(existing|yes|i.?m a customer|called before|have called|i have)\b", a):
+            out["customer_type"] = "existing"
+        elif re.search(r"\b(new|first.?time|no|haven.?t called|first)\b", a):
+            out["customer_type"] = "new"
+
+    # 4. PHONE — skip if already captured from name turn
+    if not out["phone"]:
+        j, answer = _find_pair(r"\b(phone.{0,10}number|callback|call.{0,8}back|number to call|best number)\b")
         if j >= 0:
             consumed.add(j)
-            out["email"] = _normalize_email(answer)
+            answer_n = _normalize_word_digits(answer)
+            ph = _extract_phone_from_text(answer_n) or (
+                _normalize_phone(answer_n) if re.search(r"\d{7,}", answer_n) else ""
+            )
+            if ph:
+                out["phone"] = ph
 
-    # 4. ISSUE
-    i = _find_assistant(
+    # 5. EMAIL
+    j, answer = _find_pair(r"\bemail\b")
+    if j >= 0:
+        consumed.add(j)
+        out["email"] = _normalize_email(answer)
+
+    # 6. ISSUE — runs after property/customer so consumed turns are skipped automatically
+    j, answer = _find_pair(
         r"(what.{0,20}going on|what.{0,20}happening|how can i help|what.{0,15}problem"
         r"|what.{0,15}issue|what brings|help you today|can i help|tell me more|describe"
+        r"|what can i do|help you with|calling about|how may i|assist you"
         r"|blowing warm|not turning on|leaking)"
     )
-    if i >= 0:
-        j, answer = _claim_next_user(i)
-        if j >= 0:
-            consumed.add(j)
-            out["issue"] = _compact_reason(answer)
-
-    # 5. CUSTOMER TYPE
-    i = _find_assistant(r"\b(existing|first.?time|new customer|existing.*customer|existing.*frost)\b")
-    if i >= 0:
-        j, answer = _claim_next_user(i)
-        if j >= 0:
-            consumed.add(j)
-            a = answer.lower()
-            if re.search(r"\b(existing|yes|i.?m a customer|called before|have called|i have)\b", a):
-                out["customer_type"] = "existing"
-            elif re.search(r"\b(new|first.?time|no|haven.?t called|first)\b", a):
-                out["customer_type"] = "new"
-
-    # 6. PROPERTY TYPE
-    i = _find_assistant(r"\b(residential or commercial|commercial or residential|residential.*commercial)\b")
-    if i >= 0:
-        j, answer = _claim_next_user(i)
-        if j >= 0:
-            consumed.add(j)
-            a = answer.lower()
-            if re.search(r"\b(residential|home|house)\b", a):
-                out["property_type"] = "residential"
-            elif re.search(r"\b(commercial|business|office|shop)\b", a):
-                out["property_type"] = "commercial"
+    if j >= 0:
+        consumed.add(j)
+        out["issue"] = _compact_reason(answer)
 
     # 7. SERVICE URGENCY
-    i = _find_assistant(
+    j, answer = _find_pair(
         r"\b(urgent|when would|what day|what date|what time|how soon|when.{0,10}work|best time|schedule)\b"
     )
-    if i >= 0:
-        j, answer = _claim_next_user(i)
-        if j >= 0:
-            consumed.add(j)
-            timing = _extract_timing(answer)
-            if timing:
-                out["service_urgency"] = timing
-            elif re.search(r"\b(asap|right away|immediately|today)\b", answer, re.IGNORECASE):
-                out["service_urgency"] = "ASAP"
-            else:
-                out["service_urgency"] = _clean_text(answer).rstrip(".")[:60]
+    if j >= 0:
+        consumed.add(j)
+        timing = _extract_timing(answer)
+        if timing:
+            out["service_urgency"] = timing
+        elif re.search(r"\b(asap|right away|immediately|today)\b", answer, re.IGNORECASE):
+            out["service_urgency"] = "ASAP"
+        else:
+            out["service_urgency"] = _clean_text(answer).rstrip(".")[:60]
 
-    # 8. ADDRESS — last; exclude "email address" questions (already consumed in step 3)
-    i = _find_assistant(
+    # 8. ADDRESS — last; exclude "email address" questions (consumed in step 5)
+    j, answer = _find_pair(
         r"\b(address|zip|postal|street|location|where.{0,10}you)\b",
         exclude_re=r"\bemail\b",
     )
-    if i >= 0:
-        j, answer = _claim_next_user(i)
-        if j >= 0:
-            consumed.add(j)
-            answer = re.sub(
-                r"^(?:yes|yeah|yep|yup|sure|okay|ok|alright|so)[.,!]?\s*",
-                "", answer, flags=re.IGNORECASE,
-            ).strip()
-            answer = re.sub(
-                r"^(?:it.?s|the address is|my address is|it is)\s+(?:at\s+)?",
-                "", answer, flags=re.IGNORECASE,
-            ).strip()
-            answer_n = _normalize_word_digits(answer)
-            zip_match = re.search(r"\b(\d{5})\b", answer_n)
-            if zip_match and len(answer_n.strip()) <= 12:
+    if j >= 0:
+        consumed.add(j)
+        answer = re.sub(
+            r"^(?:yes|yeah|yep|yup|sure|okay|ok|alright|so)[.,!]?\s*",
+            "", answer, flags=re.IGNORECASE,
+        ).strip()
+        answer = re.sub(
+            r"^(?:it.?s|the address is|my address is|it is)\s+(?:at\s+)?",
+            "", answer, flags=re.IGNORECASE,
+        ).strip()
+        answer_n = _normalize_word_digits(answer)
+        zip_match = re.search(r"\b(\d{5})\b", answer_n)
+        if zip_match and len(answer_n.strip()) <= 12:
+            out["zip"] = zip_match.group(1)
+        else:
+            out["service_address"] = answer_n.strip()
+            if not out["zip"] and zip_match:
                 out["zip"] = zip_match.group(1)
-            else:
-                out["service_address"] = answer_n.strip()
-                if not out["zip"] and zip_match:
-                    out["zip"] = zip_match.group(1)
 
     # Phone fallback: scan remaining unconsumed user turns for a digit string
     if not out["phone"]:

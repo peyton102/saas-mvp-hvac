@@ -76,6 +76,42 @@ check("urgency range", _normalize_urgency("8 to 10 on Tuesday", today), "Tuesday
 check("addr digits", _normalize_word_digits("six nine five nine Main Street three four seven three six"),
       "6959 Main Street 34736")
 
+# ── Transcript A: property_type opener before name question ────────────
+r = _parse_transcript(turns(
+    ("assistant", "Are you calling about a residential or commercial property today?"),
+    ("user", "Residential."),
+    ("assistant", "Can I get your full name?"),
+    ("user", "Peyton Madden."),
+))
+check("TxA property_type", r.get("property_type"), "residential")
+check("TxA name", r.get("name"), "Peyton Madden.")
+
+# ── Transcript B: email confirmation spelling + duplicate removal ───────
+r = _parse_transcript(turns(
+    ("assistant", "Can I get your email so the team can set up your account?"),
+    ("user", "Madden M A D D E N P zero seven zero six at gmail dot com"),
+))
+check("TxB email", r.get("email"), "madden.p0706@gmail.com")
+
+# ── Transcript C: tens+ones address normalization ──────────────────────
+r = _parse_transcript(turns(
+    ("assistant", "Can I get the full service address?"),
+    ("user", "Sixty nine fifty nine Perch Hammock Loop, Groveland, Florida, three four seven three six"),
+))
+check("TxC address", r.get("service_address"), "6959 Perch Hammock Loop, Groveland, Florida, 34736")
+check("TxC zip", r.get("zip"), "34736")
+
+# ── Tens normalization unit tests ──────────────────────────────────────
+check("tens sixty nine", _normalize_word_digits("sixty nine fifty nine Perch Hammock"),
+      "6959 Perch Hammock")
+check("tens mixed sixty 9", _normalize_word_digits("sixty 9 fifty 9 Main Street"),
+      "6959 Main Street")
+check("tens bare fifty", _normalize_word_digits("fifty Main Street"),
+      "50 Main Street")
+
+# ── .mom → .com fix ───────────────────────────────────────────────────
+check("email .mom fix", _normalize_email("peyton at gmail dot mom"), "peyton@gmail.com")
+
 if FAIL:
     print("\n--- FAILURES ---")
     for f in FAIL:
