@@ -112,6 +112,62 @@ check("tens bare fifty", _normalize_word_digits("fifty Main Street"),
 # ── .mom → .com fix ───────────────────────────────────────────────────
 check("email .mom fix", _normalize_email("peyton at gmail dot mom"), "peyton@gmail.com")
 
+# ── Readback confirmation tests ────────────────────────────────────────
+
+# Test 1 - Email self-correction mid-answer, confirmed on readback
+r = _parse_transcript(turns(
+    ("assistant", "Can I get your email address?"),
+    ("user", "peyton at gmail dot com... wait, peyton.madden at gmail dot com"),
+    ("assistant", "So that's p-e-y-t-o-n dot m-a-d-d-e-n at gmail dot com. Did I get that right?"),
+    ("user", "yes"),
+))
+check("READBACK1 email corrected", r.get("email"), "peyton.madden@gmail.com")
+check("READBACK1 confirmed no flag", r.get("needs_verification"), False)
+
+# Test 2 - Phone correction on readback: inline "no, last one's a three" + re-ask
+r = _parse_transcript(turns(
+    ("assistant", "What's your callback phone number?"),
+    ("user", "eight one four five six four two two one two"),
+    ("assistant", "Got it, that's 8-1-4-5-6-4-2-2-1-2. Correct?"),
+    ("user", "no, last one's a three"),
+    ("assistant", "No problem, can you say it again?"),
+    ("user", "eight one four five six four two two one three"),
+    ("assistant", "Got it, that's 8-1-4-5-6-4-2-2-1-3. Correct?"),
+    ("user", "yes"),
+))
+check("READBACK2 phone corrected", r.get("phone"), "8145642213")
+check("READBACK2 confirmed no flag", r.get("needs_verification"), False)
+
+# Test 3 - Address confirmed first try
+r = _parse_transcript(turns(
+    ("assistant", "Can I get the service address?"),
+    ("user", "six nine five nine main street groveland florida three four seven three six"),
+    ("assistant", "Just to confirm, the address is 6959 Main Street, Groveland, Florida, 34736. Is that right?"),
+    ("user", "yep"),
+))
+check("READBACK3 address captured", "6959" in (r.get("service_address") or ""), True)
+check("READBACK3 zip captured", r.get("zip"), "34736")
+check("READBACK3 confirmed no flag", r.get("needs_verification"), False)
+
+# Test 4 - Caller hangs up before confirming readback → needs_verification = True
+r = _parse_transcript(turns(
+    ("assistant", "Can I get your email address?"),
+    ("user", "peyton at gmail dot com"),
+    ("assistant", "So that's p-e-y-t-o-n at gmail dot com. Did I get that right?"),
+    # caller hangs up — no user turn follows
+))
+check("READBACK4 email saved", r.get("email"), "peyton@gmail.com")
+check("READBACK4 needs_verification set", r.get("needs_verification"), True)
+
+# Test 5 - No readback in transcript (old-style) → confirmed = False but no flag set
+r = _parse_transcript(turns(
+    ("assistant", "Can I get your full name?"),
+    ("user", "John Smith"),
+    ("assistant", "And what's the issue?"),
+    ("user", "My AC is not cooling"),
+))
+check("READBACK5 name no flag", r.get("needs_verification"), False)
+
 if FAIL:
     print("\n--- FAILURES ---")
     for f in FAIL:

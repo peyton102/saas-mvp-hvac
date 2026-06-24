@@ -16,6 +16,34 @@ from app.services.sms import vapi_lead_office_sms
 
 router = APIRouter(prefix="", tags=["vapi"])
 
+# ── Universal Vapi assistant system prompt template ───────────────────────────
+# Copy this block into every Vapi assistant's system prompt.
+# Do NOT reference any specific company name here.
+VAPI_SYSTEM_PROMPT_TEMPLATE = """
+[Universal Readback Behavior]
+
+After collecting each of the following fields, immediately read it back and confirm
+before moving to the next question:
+
+1. NAME — "Just to confirm, I have [name]. Is that correct?"
+2. PHONE — "Got it, that's [digit-by-digit, e.g. '8-1-4-5-6-4-2-2-1-2']. Correct?"
+3. EMAIL (new customers only) — "So that's [letter-by-letter, 'at' for @, 'dot' for periods]. Did I get that right?"
+4. SERVICE ADDRESS — "Just to confirm, the address is [full address]. Is that right?"
+
+Always read back, every time, no exceptions. Do not judge whether the value sounds
+correct. If the caller confirms, move on. If they correct, re-read the corrected
+version and confirm again.
+
+Skip readback for: issue description, service urgency/timing, customer type (new/existing),
+and property type (residential/commercial).
+
+If the caller says "no," "wait," "that's wrong," "actually," or similar mid-answer:
+- Say: "No problem, can you say it again?"
+- Capture only the corrected value
+- Read it back one more time to confirm
+- Repeat up to 3 times, then move on with the latest version
+""".strip()
+
 
 class VapiIntakePayload(BaseModel):
     call_id: Optional[str] = None
@@ -32,6 +60,7 @@ class VapiIntakePayload(BaseModel):
     email: Optional[str] = None
     phone_number_id: Optional[str] = None
     forwarded_from: Optional[str] = None
+    needs_verification: Optional[bool] = None
 
 
 def _message_type(body: Any) -> str:
@@ -619,6 +648,137 @@ def _normalize_urgency(text: str, _today: Optional[date] = None) -> str:
     return " ".join(parts)
 
 
+# ── Readback confirmation helpers ────────────────────────────────────────────
+
+_READBACK_ASST_RE = re.compile(
+    r"\b(just to confirm|got it[,.]?\s+that.s|so that.s|did i get that right"
+    r"|is that correct|is that right|correct\?|is that right\?)\b",
+    re.IGNORECASE,
+)
+
+_CONFIRM_USER_RE = re.compile(
+    r"^(yes|yeah|yep|yup|correct|that.?s right|right|uh.?huh|mm.?hmm|mhm"
+    r"|perfect|exactly|sounds good|affirmative|great|sure)\b",
+    re.IGNORECASE,
+)
+
+_REJECT_USER_RE = re.compile(
+    r"^(no\b|nope\b|wait\b|that.?s wrong|wrong\b|not quite|incorrect|actually\b|let me start over)",
+    re.IGNORECASE,
+)
+
+
+def _strip_mid_answer_correction(text: str) -> str:
+    """
+    If caller corrects themselves within a single turn, take only the last version.
+    'peyton at gmail dot com... wait, peyton.madden at gmail dot com'
+    → 'peyton.madden at gmail dot com'
+    """
+    parts = re.split(
+        r"\b(?:wait[,.]?|actually[,.]?|no wait[,.]?|let me start over[,.]?|i mean[,.]?)\s+",
+        text, flags=re.IGNORECASE,
+    )
+    if len(parts) > 1:
+        return parts[-1].strip()
+    return text
+
+
+def _trace_readback(
+    turns: list,
+    consumed: set,
+    initial_user_idx: int,
+    initial_answer: str,
+) -> tuple:
+    """
+    Walk forward from initial_user_idx through readback → correction → re-readback cycles.
+
+    Returns (final_answer, confirmed, readback_attempted, new_consumed).
+    - confirmed: True if caller said yes/correct/etc. after a readback
+    - readback_attempted: True if assistant attempted a readback but caller never confirmed
+      (caller hung up or abandoned the correction loop)
+    """
+    answer = initial_answer
+    current_idx = initial_user_idx
+    new_consumed: set = set()
+    confirmed = False
+    readback_attempted = False
+
+    for _ in range(3):
+        # Find next assistant turn after the current user turn
+        next_asst_idx = None
+        for k in range(current_idx + 1, len(turns)):
+            if turns[k][0] == "assistant":
+                next_asst_idx = k
+                break
+
+        if next_asst_idx is None:
+            break
+
+        if not _READBACK_ASST_RE.search(turns[next_asst_idx][1]):
+            break  # Next assistant turn is not a readback; stop
+
+        readback_attempted = True
+
+        # Find next user turn after the readback
+        next_user_idx = None
+        for k in range(next_asst_idx + 1, len(turns)):
+            if turns[k][0] == "user":
+                next_user_idx = k
+                break
+
+        if next_user_idx is None:
+            break  # Caller hung up before confirming
+
+        user_response = turns[next_user_idx][1].strip()
+
+        if _CONFIRM_USER_RE.search(user_response):
+            confirmed = True
+            new_consumed.add(next_user_idx)
+            break
+
+        if _REJECT_USER_RE.search(user_response):
+            new_consumed.add(next_user_idx)
+
+            # Look for the re-ask from the assistant
+            next_asst2_idx = None
+            for k in range(next_user_idx + 1, len(turns)):
+                if turns[k][0] == "assistant":
+                    next_asst2_idx = k
+                    break
+
+            search_start = next_asst2_idx + 1 if next_asst2_idx is not None else next_user_idx + 1
+
+            # Find the next user "value turn" (not a confirmation or rejection)
+            next_value_idx = None
+            for k in range(search_start, len(turns)):
+                if turns[k][0] == "user":
+                    t = turns[k][1].strip()
+                    if not _CONFIRM_USER_RE.search(t) and not _REJECT_USER_RE.search(t):
+                        next_value_idx = k
+                        break
+
+            if next_value_idx is not None:
+                answer = turns[next_value_idx][1]
+                new_consumed.add(next_value_idx)
+                current_idx = next_value_idx
+                continue
+
+            # No separate value turn; extract any inline correction from the rejection turn
+            inline = re.sub(
+                r"^(no|nope|wait|actually|that.?s wrong|wrong)[,.]?\s*",
+                "", user_response, flags=re.IGNORECASE,
+            ).strip()
+            if inline:
+                answer = inline
+            current_idx = next_user_idx
+            continue
+
+        # Unrecognized response; stop
+        break
+
+    return answer, confirmed, readback_attempted, new_consumed
+
+
 def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     """
     Walk artifact.messages in order. For each assistant turn, identify which
@@ -635,6 +795,7 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         "customer_type": "",
         "property_type": "",
         "email": "",
+        "needs_verification": False,
     }
 
     turns: list[tuple[str, str]] = []
@@ -678,7 +839,12 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     )
     if j >= 0:
         consumed.add(j)
-        name = re.sub(r"^(yes|yeah|yep|yup|sure|okay|ok|alright)[.,!]?\s*", "", answer, flags=re.IGNORECASE).strip()
+        raw = _strip_mid_answer_correction(answer)
+        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+        consumed.update(_nc)
+        if _rb and not _confirmed:
+            out["needs_verification"] = True
+        name = re.sub(r"^(yes|yeah|yep|yup|sure|okay|ok|alright)[.,!]?\s*", "", final_raw, flags=re.IGNORECASE).strip()
         name = re.sub(r"^(it.?s|my name is|i.?m|this is)\s+", "", name, flags=re.IGNORECASE).strip()
         name = re.sub(r"\s+\b(and|or|but)\b\s*$", "", name, flags=re.IGNORECASE).strip()
         _dw = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)"
@@ -690,7 +856,7 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
                 if ph:
                     out["phone"] = ph
             name = name[:phone_tail.start()].strip()
-        out["name"] = name or answer
+        out["name"] = name or final_raw
 
     # 2. PROPERTY TYPE — match before customer_type and issue so the opener is consumed first
     j, answer = _find_pair(r"\b(residential or commercial|commercial or residential|residential.*commercial)\b")
@@ -717,7 +883,12 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         j, answer = _find_pair(r"\b(phone.{0,10}number|callback|call.{0,8}back|number to call|best number)\b")
         if j >= 0:
             consumed.add(j)
-            answer_n = _normalize_word_digits(answer)
+            raw = _strip_mid_answer_correction(answer)
+            final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+            consumed.update(_nc)
+            if _rb and not _confirmed:
+                out["needs_verification"] = True
+            answer_n = _normalize_word_digits(final_raw)
             ph = _extract_phone_from_text(answer_n) or (
                 _normalize_phone(answer_n) if re.search(r"\d{7,}", answer_n) else ""
             )
@@ -728,7 +899,12 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     j, answer = _find_pair(r"\bemail\b")
     if j >= 0:
         consumed.add(j)
-        out["email"] = _normalize_email(answer)
+        raw = _strip_mid_answer_correction(answer)
+        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+        consumed.update(_nc)
+        if _rb and not _confirmed:
+            out["needs_verification"] = True
+        out["email"] = _normalize_email(final_raw)
 
     # 6. ISSUE — runs after property/customer so consumed turns are skipped automatically
     j, answer = _find_pair(
@@ -762,15 +938,20 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     )
     if j >= 0:
         consumed.add(j)
-        answer = re.sub(
+        raw = _strip_mid_answer_correction(answer)
+        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+        consumed.update(_nc)
+        if _rb and not _confirmed:
+            out["needs_verification"] = True
+        final_raw = re.sub(
             r"^(?:yes|yeah|yep|yup|sure|okay|ok|alright|so)[.,!]?\s*",
-            "", answer, flags=re.IGNORECASE,
+            "", final_raw, flags=re.IGNORECASE,
         ).strip()
-        answer = re.sub(
+        final_raw = re.sub(
             r"^(?:it.?s|the address is|my address is|it is)\s+(?:at\s+)?",
-            "", answer, flags=re.IGNORECASE,
+            "", final_raw, flags=re.IGNORECASE,
         ).strip()
-        answer_n = _normalize_word_digits(answer)
+        answer_n = _normalize_word_digits(final_raw)
         zip_match = re.search(r"\b(\d{5})\b", answer_n)
         if zip_match and len(answer_n.strip()) <= 12:
             out["zip"] = zip_match.group(1)
@@ -926,10 +1107,13 @@ def _extract_from_vapi_body(body: dict) -> dict:
         structured.get("email"),
     ) or None
 
+    needs_verification = bool(transcript.get("needs_verification"))
+
     print(
         f"[VAPI EXTRACT] final: name={name!r} phone={phone!r} issue={issue!r} "
         f"urgency={service_urgency!r} address={service_address!r} zip={zip_code!r} "
-        f"customer_type={customer_type!r} property_type={property_type!r} email={email!r}",
+        f"customer_type={customer_type!r} property_type={property_type!r} email={email!r} "
+        f"needs_verification={needs_verification}",
         flush=True,
     )
 
@@ -947,6 +1131,7 @@ def _extract_from_vapi_body(body: dict) -> dict:
         "property_type": property_type or None,
         "phone_number_id": phone_number_id,
         "forwarded_from": forwarded_from,
+        "needs_verification": needs_verification,
     }
 
 
@@ -1131,6 +1316,7 @@ async def vapi_intake(
     zip_code = (payload.zip or "").strip() or None
     customer_type = (payload.customer_type or "").strip() or None
     property_type = (payload.property_type or "").strip() or None
+    needs_verification = bool(payload.needs_verification)
 
     message = issue or "Inbound call via Vapi"
 
@@ -1159,6 +1345,7 @@ async def vapi_intake(
         customer_type=customer_type,
         property_type=property_type,
         needs_callback_for_scheduling=(service_urgency == "needs scheduling"),
+        needs_verification=needs_verification,
     )
     try:
         session.add(lead)
@@ -1180,8 +1367,9 @@ async def vapi_intake(
             "customer_type": customer_type,
             "property_type": property_type,
             "partial": is_partial,
+            "needs_verification": needs_verification,
         })
-        print(f"[VAPI] office SMS sent for tenant={tenant_id!r} partial={is_partial}", flush=True)
+        print(f"[VAPI] office SMS sent for tenant={tenant_id!r} partial={is_partial} needs_verification={needs_verification}", flush=True)
     except Exception as e:
         print(f"[VAPI] office SMS error: {e}", flush=True)
 

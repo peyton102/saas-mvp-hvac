@@ -531,6 +531,8 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
     else:
         location = "not provided"
 
+    needs_verification = bool(payload.get("needs_verification"))
+
     if is_partial:
         parts = []
         if phone:
@@ -565,6 +567,9 @@ def vapi_lead_office_sms(tenant_id: str, payload: dict) -> bool:
             f"When: {service_urgency or '—'}\n"
             f"Address: {location}"
         )
+
+    if needs_verification:
+        body = "⚠️ Lead unconfirmed — verify details with customer before calling back.\n" + body
 
     return send_sms(office_to, body)
 

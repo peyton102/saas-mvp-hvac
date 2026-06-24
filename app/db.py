@@ -42,6 +42,7 @@ def run_startup_migrations() -> None:
         ("sp_lead_customer_type",   "ALTER TABLE lead ADD COLUMN IF NOT EXISTS customer_type TEXT"),
         ("sp_lead_property_type",   "ALTER TABLE lead ADD COLUMN IF NOT EXISTS property_type TEXT"),
         ("sp_lead_needs_callback",  "ALTER TABLE lead ADD COLUMN IF NOT EXISTS needs_callback_for_scheduling BOOLEAN DEFAULT FALSE"),
+        ("sp_lead_needs_verification", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS needs_verification BOOLEAN DEFAULT FALSE"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

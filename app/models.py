@@ -33,6 +33,7 @@ class Lead(SQLModel, table=True):
     customer_type: Optional[str] = Field(default=None)   # "existing" | "new"
     property_type: Optional[str] = Field(default=None)   # "residential" | "commercial"
     needs_callback_for_scheduling: Optional[bool] = Field(default=False)
+    needs_verification: Optional[bool] = Field(default=False)
 
 
 class Booking(SQLModel, table=True):
