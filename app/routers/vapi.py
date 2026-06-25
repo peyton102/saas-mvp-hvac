@@ -959,19 +959,70 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             out["needs_verification"] = True
             print(f"[EMAIL] missing TLD after normalization: {normalized_email!r}", flush=True)
 
-    # 6. ISSUE — strict keywords only; exclude any closing/wrap-up assistant messages
+    # 6. ISSUE — explicit issue question from assistant (primary), HVAC keyword fallback (last resort)
+    _issue_exclude_re = r"anything else|else.*help|is there something else|all set|that.{0,10}everything|is that everything"
+    _issue_primary_re = (
+        r"(what.{0,20}going on|what.{0,20}happening"
+        r"|tell me about.*issue|tell me about what"
+        r"|can you describe"
+        r"|what.{0,5}(?:is|s) the issue"
+        r"|what brings you)"
+    )
+    _issue_source: str = ""
+    _issue_asst_q: str = ""
+
     if not out["issue"]:
-        j, answer = _find_pair(
-            r"(what.{0,20}going on|what.{0,20}happening"
-            r"|what.{0,20}(?:problem|issue)"
-            r"|what brings you|what bring you"
-            r"|how can i help you today|help you today"
-            r"|tell me more|describe the issue|what is happening)",
-            exclude_re=r"anything else|else.*help|is there something else|all set|that.{0,10}everything|is that everything",
+        # Primary: walk turns to find assistant explicitly asking about the issue
+        for i, (role, text) in enumerate(turns):
+            if role != "assistant":
+                continue
+            lower = text.lower()
+            if not re.search(_issue_primary_re, lower):
+                continue
+            if re.search(_issue_exclude_re, lower):
+                continue
+            for jj in range(i + 1, len(turns)):
+                if turns[jj][0] == "user":
+                    if jj not in consumed:
+                        m = re.search(_issue_primary_re, lower)
+                        _issue_asst_q = m.group(0) if m else text[:80]
+                        consumed.add(jj)
+                        out["issue"] = _compact_reason(turns[jj][1])
+                        _issue_source = "primary"
+                    break
+            if out["issue"]:
+                break
+
+    # 6b. ISSUE fallback — last resort: HVAC keyword in any unconsumed user turn
+    if not out["issue"]:
+        _hvac_re = re.compile(
+            r"blowing (?:warm|hot|cold)"
+            r"|not turning on|won.{0,2}t turn on"
+            r"|not cooling|not heating"
+            r"|making noise|grinding|buzzing|rattling"
+            r"|leaking|water"
+            r"|freezing up|frozen"
+            r"|AC (?:broken|stopped|down)"
+            r"|heat (?:broken|stopped)|no heat"
+            r"|smells?",
+            re.IGNORECASE,
         )
-        if j >= 0:
-            consumed.add(j)
-            out["issue"] = _compact_reason(answer)
+        for idx, (role, text) in enumerate(turns):
+            if role != "user":
+                continue
+            if idx in consumed:
+                continue
+            if re.search(_issue_exclude_re, text, re.IGNORECASE):
+                continue
+            if _hvac_re.search(text):
+                _issue_asst_q = "(none — user volunteered)"
+                consumed.add(idx)
+                out["issue"] = _compact_reason(text)
+                _issue_source = "fallback"
+                break
+
+    if out["issue"]:
+        print(f"[ISSUE] assistant_question={_issue_asst_q!r} user_response={out['issue']!r} source={_issue_source!r}", flush=True)
 
     # 7. SERVICE URGENCY
     j, answer = _find_pair(
