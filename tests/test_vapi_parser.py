@@ -168,6 +168,51 @@ r = _parse_transcript(turns(
 ))
 check("READBACK5 name no flag", r.get("needs_verification"), False)
 
+# ── Bug-regression tests ───────────────────────────────────────────────
+
+# BUG1-REG: leading filler before "yes" still counts as confirmed
+r = _parse_transcript(turns(
+    ("assistant", "Can I get your full name?"),
+    ("user", "John Smith"),
+    ("assistant", "Just to confirm, I have John Smith. Is that correct?"),
+    ("user", "Oh yes, that's right"),
+))
+check("BUG1-REG filler+yes confirmed", r.get("needs_verification"), False)
+check("BUG1-REG name correct", r.get("name"), "John Smith")
+
+# BUG1-REG: "That's correct" (not at anchor position by old RE) now matches
+r = _parse_transcript(turns(
+    ("assistant", "What's your callback phone number?"),
+    ("user", "eight one four five six four two two one two"),
+    ("assistant", "Got it, that's 8-1-4-5-6-4-2-2-1-2. Correct?"),
+    ("user", "That's correct"),
+))
+check("BUG1-REG thats-correct confirmed", r.get("needs_verification"), False)
+check("BUG1-REG phone correct", r.get("phone"), "8145642212")
+
+# BUG2-REG: closing "Is there anything else I can help you with?" must NOT capture issue
+r = _parse_transcript(turns(
+    ("assistant", "What's going on with your system today?"),
+    ("user", "My AC is not cooling"),
+    ("assistant", "Is there anything else I can help you with?"),
+    ("user", "No. That's it"),
+))
+check("BUG2-REG issue not overwritten", r.get("issue"), "My AC is not cooling")
+
+# BUG3-REG: email with no TLD for known provider gets .com appended
+from app.routers.vapi import _normalize_email
+check("BUG3-REG gmail no TLD", _normalize_email("madden at gmail"), "madden@gmail.com")
+check("BUG3-REG trailing period stripped", _normalize_email("peyton at gmail dot com."), "peyton@gmail.com")
+
+# BUG3-REG: unknown TLD-less email gets flagged in transcript parser
+r = _parse_transcript(turns(
+    ("assistant", "Can I get your email?"),
+    ("user", "john at customdomain"),
+    ("assistant", "So that's john at customdomain. Did I get that right?"),
+    ("user", "yes"),
+))
+check("BUG3-REG unknown no-TLD flagged", r.get("needs_verification"), True)
+
 if FAIL:
     print("\n--- FAILURES ---")
     for f in FAIL:

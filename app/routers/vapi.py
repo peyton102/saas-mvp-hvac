@@ -430,8 +430,26 @@ def _normalize_email(text: str) -> str:
         return s.strip().lower()
 
     result = f"{username}@{domain}"
+
+    # Strip trailing period that sometimes comes from sentence-ending punctuation
+    result = result.rstrip(".")
+
     # Fix common ASR "com" transcription errors
     result = re.sub(r"\.(mom|cum|con|calm)$", ".com", result, flags=re.IGNORECASE)
+
+    # Fix well-known providers missing their TLD (e.g. "@gmail" → "@gmail.com")
+    _PROVIDER_TLDS = {
+        "gmail": ".com", "yahoo": ".com", "hotmail": ".com",
+        "outlook": ".com", "icloud": ".com", "aol": ".com",
+        "protonmail": ".com", "live": ".com", "msn": ".com",
+    }
+    if "@" in result:
+        domain_part = result.split("@", 1)[1]
+        if "." not in domain_part:
+            tld = _PROVIDER_TLDS.get(domain_part.lower().strip("."))
+            if tld:
+                result = result + tld
+
     m = re.search(r"[\w.+-]+@[\w.-]+\.\w+", result)
     return m.group(0).lower() if m else result.lower()
 
@@ -657,8 +675,15 @@ _READBACK_ASST_RE = re.compile(
 )
 
 _CONFIRM_USER_RE = re.compile(
-    r"^(yes|yeah|yep|yup|correct|that.?s right|right|uh.?huh|mm.?hmm|mhm"
-    r"|perfect|exactly|sounds good|affirmative|great|sure)\b",
+    r"^(yes|yeah|yep|yup|yessir|correct|that.?s (right|correct)|right"
+    r"|uh.?huh|mm.?hmm|mhm|perfect|exactly|sounds (good|right)"
+    r"|affirmative|great|sure|spot on|that('s| is) it)\b",
+    re.IGNORECASE,
+)
+
+# Leading filler words callers add before a confirmation ("Oh yes", "Uh yeah")
+_CONFIRM_FILLER_RE = re.compile(
+    r"^(oh|uh|um|well|so|hmm|okay|ok|alright|right|and)[,.]?\s+",
     re.IGNORECASE,
 )
 
@@ -688,6 +713,7 @@ def _trace_readback(
     consumed: set,
     initial_user_idx: int,
     initial_answer: str,
+    field: str = "",
 ) -> tuple:
     """
     Walk forward from initial_user_idx through readback → correction → re-readback cycles.
@@ -727,16 +753,29 @@ def _trace_readback(
                 break
 
         if next_user_idx is None:
+            print(f"[READBACK] field={field!r} readback_detected=True user_confirmed=False confirmation_text=<hung up>", flush=True)
             break  # Caller hung up before confirming
 
         user_response = turns[next_user_idx][1].strip()
 
-        if _CONFIRM_USER_RE.search(user_response):
+        # Strip leading filler words ("Oh yes", "Uh yeah") before confirmation check
+        stripped_response = _CONFIRM_FILLER_RE.sub("", user_response).strip()
+
+        is_confirmed = bool(_CONFIRM_USER_RE.search(stripped_response))
+        is_rejected = bool(_REJECT_USER_RE.search(user_response))
+
+        print(
+            f"[READBACK] field={field!r} readback_detected=True "
+            f"user_confirmed={is_confirmed} confirmation_text={user_response!r}",
+            flush=True,
+        )
+
+        if is_confirmed:
             confirmed = True
             new_consumed.add(next_user_idx)
             break
 
-        if _REJECT_USER_RE.search(user_response):
+        if is_rejected:
             new_consumed.add(next_user_idx)
 
             # Look for the re-ask from the assistant
@@ -753,7 +792,8 @@ def _trace_readback(
             for k in range(search_start, len(turns)):
                 if turns[k][0] == "user":
                     t = turns[k][1].strip()
-                    if not _CONFIRM_USER_RE.search(t) and not _REJECT_USER_RE.search(t):
+                    t_stripped = _CONFIRM_FILLER_RE.sub("", t).strip()
+                    if not _CONFIRM_USER_RE.search(t_stripped) and not _REJECT_USER_RE.search(t):
                         next_value_idx = k
                         break
 
@@ -773,8 +813,16 @@ def _trace_readback(
             current_idx = next_user_idx
             continue
 
-        # Unrecognized response; stop
+        # Unrecognized response after a readback — treat as unconfirmed but don't loop
+        print(
+            f"[READBACK] field={field!r} readback_detected=True "
+            f"user_confirmed=False confirmation_text={user_response!r} (unrecognized)",
+            flush=True,
+        )
         break
+
+    if not readback_attempted:
+        print(f"[READBACK] field={field!r} readback_detected=False", flush=True)
 
     return answer, confirmed, readback_attempted, new_consumed
 
@@ -840,7 +888,7 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     if j >= 0:
         consumed.add(j)
         raw = _strip_mid_answer_correction(answer)
-        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw, field="name")
         consumed.update(_nc)
         if _rb and not _confirmed:
             out["needs_verification"] = True
@@ -884,7 +932,7 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         if j >= 0:
             consumed.add(j)
             raw = _strip_mid_answer_correction(answer)
-            final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+            final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw, field="phone")
             consumed.update(_nc)
             if _rb and not _confirmed:
                 out["needs_verification"] = True
@@ -900,22 +948,30 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     if j >= 0:
         consumed.add(j)
         raw = _strip_mid_answer_correction(answer)
-        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw, field="email")
         consumed.update(_nc)
         if _rb and not _confirmed:
             out["needs_verification"] = True
-        out["email"] = _normalize_email(final_raw)
+        normalized_email = _normalize_email(final_raw)
+        out["email"] = normalized_email
+        # If email has no valid TLD after normalization, flag for verification
+        if normalized_email and "@" in normalized_email and not re.search(r"@[\w.-]+\.\w{2,}$", normalized_email):
+            out["needs_verification"] = True
+            print(f"[EMAIL] missing TLD after normalization: {normalized_email!r}", flush=True)
 
-    # 6. ISSUE — runs after property/customer so consumed turns are skipped automatically
-    j, answer = _find_pair(
-        r"(what.{0,20}going on|what.{0,20}happening|how can i help|what.{0,15}problem"
-        r"|what.{0,15}issue|what brings|help you today|can i help|tell me more|describe"
-        r"|what can i do|help you with|calling about|how may i|assist you"
-        r"|blowing warm|not turning on|leaking)"
-    )
-    if j >= 0:
-        consumed.add(j)
-        out["issue"] = _compact_reason(answer)
+    # 6. ISSUE — strict keywords only; exclude any closing/wrap-up assistant messages
+    if not out["issue"]:
+        j, answer = _find_pair(
+            r"(what.{0,20}going on|what.{0,20}happening"
+            r"|what.{0,20}(?:problem|issue)"
+            r"|what brings you|what bring you"
+            r"|how can i help you today|help you today"
+            r"|tell me more|describe the issue|what is happening)",
+            exclude_re=r"anything else|else.*help|is there something else|all set|that.{0,10}everything|is that everything",
+        )
+        if j >= 0:
+            consumed.add(j)
+            out["issue"] = _compact_reason(answer)
 
     # 7. SERVICE URGENCY
     j, answer = _find_pair(
@@ -939,7 +995,7 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
     if j >= 0:
         consumed.add(j)
         raw = _strip_mid_answer_correction(answer)
-        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw)
+        final_raw, _confirmed, _rb, _nc = _trace_readback(turns, consumed, j, raw, field="address")
         consumed.update(_nc)
         if _rb and not _confirmed:
             out["needs_verification"] = True
