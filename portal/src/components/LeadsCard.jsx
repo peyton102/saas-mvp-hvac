@@ -338,8 +338,10 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ col: "created_at", dir: "desc" });
+  const [showAll, setShowAll] = useState(false);
   const [showAddForm, setShowAddForm]     = useState(false);
   const [convertingLead, setConvertingLead] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -415,16 +417,36 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     } catch (e) { console.error(e); }
   }
 
+  async function deleteLead(id) {
+    setDeletingId(id);
+    try {
+      await apiFetch(`/leads/${id}`, { method: "DELETE" });
+      setRows(prev => prev.filter(r => r.id !== id));
+    } catch (e) { console.error(e); } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const cutoff = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d;
+  }, []);
+
   const visible = useMemo(() => {
     const q = search.toLowerCase().trim();
-    let list = q ? rows.filter(r =>
+    let list = showAll ? [...rows] : rows.filter(r => {
+      const d = parseISO(r.created_at);
+      return d && d >= cutoff;
+    });
+    if (q) list = list.filter(r =>
       (r.name || "").toLowerCase().includes(q) ||
       (r.phone || "").toLowerCase().includes(q) ||
       (r.email || "").toLowerCase().includes(q) ||
       (r.message || "").toLowerCase().includes(q) ||
       (r.service_address || "").toLowerCase().includes(q) ||
       (r.notes || "").toLowerCase().includes(q)
-    ) : [...rows];
+    );
 
     list.sort((a, b) => {
       let av = a[sort.col] ?? "";
@@ -442,7 +464,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     });
 
     return list;
-  }, [rows, search, sort]);
+  }, [rows, search, sort, showAll, cutoff]);
 
   const cols = [
     { key: "created_at", label: "Time Received", w: "120px" },
@@ -455,6 +477,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     { key: "notes",      label: "Notes",          w: "160px" },
     { key: "status",     label: "Contacted",      w: "90px"  },
     { key: "job_won",    label: "Won",            w: "120px" },
+    { key: "_delete",    label: "",               w: "40px", noSort: true },
   ];
 
   const thStyle = (key) => ({
@@ -486,7 +509,16 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Leads</div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{visible.length} lead{visible.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+            {visible.length} lead{visible.length !== 1 ? "s" : ""}
+            {!showAll && rows.length > visible.length && (
+              <span style={{ marginLeft: 6 }}>
+                · <button onClick={() => setShowAll(true)} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontSize: 12, padding: 0 }}>
+                  +{rows.length - visible.length} older
+                </button>
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input
@@ -500,6 +532,16 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
               outline: "none", width: "min(240px, 100%)",
             }}
           />
+          <button
+            onClick={() => setShowAll(v => !v)}
+            style={{
+              padding: "9px 14px", borderRadius: 10, fontWeight: 700, fontSize: 13,
+              border: C.border, background: showAll ? "rgba(249,115,22,0.12)" : C.inputBg,
+              color: showAll ? C.accent : C.muted, cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            {showAll ? "Last 7 days" : "All time"}
+          </button>
           <button
             onClick={() => setShowAddForm(v => !v)}
             style={{
@@ -516,8 +558,8 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
         <AddLeadForm onSave={addLead} onCancel={() => setShowAddForm(false)} />
       )}
 
-      {/* Table — horizontal scroll on mobile */}
-      <div className="table-scroll-wrap" style={{ overflowX: "auto", borderRadius: 12, border: C.border }}>
+      {/* Table — max-height keeps the scrollbar in view without scrolling the whole page */}
+      <div className="table-scroll-wrap" style={{ overflowX: "auto", overflowY: "auto", maxHeight: "65vh", borderRadius: 12, border: C.border }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
           <thead>
             <tr style={{ background: "rgba(255,255,255,0.03)" }}>
@@ -525,20 +567,20 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                 <th
                   key={c.key}
                   style={{ ...thStyle(c.key), width: c.w, minWidth: c.w }}
-                  onClick={() => c.key !== "notes" && toggleSort(c.key)}
+                  onClick={() => !c.noSort && c.key !== "notes" && toggleSort(c.key)}
                 >
                   {c.label}{" "}
-                  {c.key !== "notes" && <SortIcon dir={sort.col === c.key ? sort.dir : null} />}
+                  {!c.noSort && c.key !== "notes" && <SortIcon dir={sort.col === c.key ? sort.dir : null} />}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={10} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
+              <tr><td colSpan={11} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
             )}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={10} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
+              <tr><td colSpan={11} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
             )}
             {!loading && visible.map((r, i) => {
               const contacted = (r.status || "").toLowerCase() === "contacted";
@@ -657,6 +699,24 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                   {/* Won toggle */}
                   <td style={{ padding: "10px 10px" }}>
                     <WonCell lead={r} onSave={saveWon} />
+                  </td>
+
+                  {/* Delete */}
+                  <td style={{ padding: "10px 6px", textAlign: "center" }}>
+                    <button
+                      onClick={() => deletingId !== r.id && deleteLead(r.id)}
+                      title="Delete lead"
+                      style={{
+                        background: "none", border: "none", cursor: deletingId === r.id ? "not-allowed" : "pointer",
+                        color: deletingId === r.id ? C.muted : "rgba(239,68,68,0.5)",
+                        fontSize: 14, lineHeight: 1, padding: "4px 6px", borderRadius: 6,
+                        transition: "color 0.15s",
+                      }}
+                      onMouseEnter={e => { if (deletingId !== r.id) e.currentTarget.style.color = "#ef4444"; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = deletingId === r.id ? C.muted : "rgba(239,68,68,0.5)"; }}
+                    >
+                      {deletingId === r.id ? "…" : "✕"}
+                    </button>
                   </td>
                 </tr>
               );
