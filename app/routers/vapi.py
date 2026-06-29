@@ -881,9 +881,18 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         return -1, ""
 
     # 1. NAME — require explicit ask for the caller's name; skip assistant self-intros
+    _NAME_STREET_WORDS = r"(?:loop|drive|road|avenue|street|circle|way|court|lane|boulevard|place|blvd|ave|dr|rd|ct|ln|st)\b"
+    _NAME_META_PHRASES = re.compile(
+        r"^(can you repeat|repeat that|residential|commercial|i.?m sorry|what was that"
+        r"|i didn.?t|could you|sorry|i need)",
+        re.IGNORECASE,
+    )
+
     j, answer = _find_pair(
         r"\byour\s+(?:full\s+)?name\b|\bfull\s+name\b|\bget\s+your\s+name\b"
         r"|\bname\s+please\b|\bwhat.{0,15}your\s+name\b"
+        r"|\bwho am i speaking\b|\bmay i ask who.{0,10}calling\b"
+        r"|\bwho is this\b|\bcan i get a name\b|\bwhat should i call you\b"
     )
     if j >= 0:
         consumed.add(j)
@@ -904,7 +913,13 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
                 if ph:
                     out["phone"] = ph
             name = name[:phone_tail.start()].strip()
-        out["name"] = name or final_raw
+        # Sanity filter: reject if it looks like an address or a meta-phrase
+        _name_is_address = bool(re.search(r"\d", name) and re.search(_NAME_STREET_WORDS, name, re.IGNORECASE))
+        _name_is_meta = bool(_NAME_META_PHRASES.search(name))
+        if _name_is_address or _name_is_meta:
+            print(f"[NAME] rejected garbage name={name!r} (address={_name_is_address} meta={_name_is_meta})", flush=True)
+            name = ""
+        out["name"] = name or final_raw if not (_name_is_address or _name_is_meta) else ""
 
     # 2. PROPERTY TYPE — match before customer_type and issue so the opener is consumed first
     j, answer = _find_pair(r"\b(residential or commercial|commercial or residential|residential.*commercial)\b")
@@ -1289,48 +1304,6 @@ def _dedupe_insert(session: Session, source: str, event_id: str) -> bool:
         return False
 
 
-def _process_tool_call_background(tenant_id: str, call_id: str, name: str, phone: str, issue: str, zip_code: str, service_urgency: str):
-    """DB + SMS work done after VAPI already got its response."""
-    try:
-        gen = get_session()
-        session = next(gen)
-        try:
-            if call_id and not _dedupe_insert(session, source=f"vapi_tool:{tenant_id}", event_id=call_id):
-                print(f"[VAPI TOOL-CALL] duplicate ignored call_id={call_id!r}", flush=True)
-                return
-
-            lead = LeadModel(
-                name=name,
-                phone=phone or "",
-                email=None,
-                message=issue or "Inbound call via Vapi",
-                tenant_id=tenant_id,
-                source="vapi",
-                service_urgency=service_urgency or None,
-                needs_callback_for_scheduling=(service_urgency == "needs scheduling"),
-            )
-            session.add(lead)
-            session.commit()
-            print(f"[VAPI TOOL-CALL] lead saved for tenant={tenant_id!r}", flush=True)
-        except Exception as e:
-            session.rollback()
-            print(f"[VAPI TOOL-CALL] lead insert error: {e}", flush=True)
-        finally:
-            session.close()
-    except Exception as e:
-        print(f"[VAPI TOOL-CALL] background session error: {e}", flush=True)
-
-    try:
-        vapi_lead_office_sms(tenant_id, {
-            "name": name,
-            "phone": phone,
-            "issue": issue,
-            "zip": zip_code,
-            "service_urgency": service_urgency,
-        })
-    except Exception as e:
-        print(f"[VAPI TOOL-CALL] office SMS error: {e}", flush=True)
-
 
 async def _handle_tool_call(body: dict, background_tasks: BackgroundTasks):
     """
@@ -1441,7 +1414,7 @@ async def vapi_intake(
     )
 
     lead = LeadModel(
-        name=name or phone or "Unknown caller",
+        name=name or "Unknown caller",
         phone=phone,
         email=email,
         message=message,

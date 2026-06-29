@@ -420,7 +420,9 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     let list = q ? rows.filter(r =>
       (r.name || "").toLowerCase().includes(q) ||
       (r.phone || "").toLowerCase().includes(q) ||
+      (r.email || "").toLowerCase().includes(q) ||
       (r.message || "").toLowerCase().includes(q) ||
+      (r.service_address || "").toLowerCase().includes(q) ||
       (r.notes || "").toLowerCase().includes(q)
     ) : [...rows];
 
@@ -444,8 +446,9 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
 
   const cols = [
     { key: "created_at", label: "Time Received", w: "120px" },
-    { key: "name",       label: "Name",          w: "110px" },
+    { key: "name",       label: "Name",          w: "130px" },
     { key: "phone",      label: "Phone",          w: "120px" },
+    { key: "email",      label: "Email",          w: "160px" },
     { key: "message",         label: "Issue",          w: "180px" },
     { key: "service_address", label: "Address",        w: "150px" },
     { key: "service_urgency", label: "Preferred Day",  w: "110px" },
@@ -532,10 +535,10 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
+              <tr><td colSpan={10} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
             )}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
+              <tr><td colSpan={10} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
             )}
             {!loading && visible.map((r, i) => {
               const contacted = (r.status || "").toLowerCase() === "contacted";
@@ -557,8 +560,29 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                   </td>
 
                   {/* Name */}
-                  <td style={{ padding: "10px 10px", fontWeight: 600, whiteSpace: "nowrap" }}>
-                    {r.name || "—"}
+                  <td style={{ padding: "10px 10px", fontWeight: 600 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                      <span style={{ whiteSpace: "nowrap" }}>{r.name || "—"}</span>
+                      {r.needs_verification && (
+                        <span title="Unconfirmed — caller hung up before confirming" style={{ fontSize: 12, color: "#fbbf24" }}>⚠</span>
+                      )}
+                      {r.customer_type && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
+                          background: r.customer_type === "new" ? "rgba(96,165,250,0.15)" : "rgba(167,139,250,0.15)",
+                          color: r.customer_type === "new" ? "#60a5fa" : "#a78bfa",
+                          whiteSpace: "nowrap",
+                        }}>{r.customer_type}</span>
+                      )}
+                      {r.property_type && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
+                          background: r.property_type === "residential" ? "rgba(52,211,153,0.15)" : "rgba(251,191,36,0.15)",
+                          color: r.property_type === "residential" ? "#34d399" : "#fbbf24",
+                          whiteSpace: "nowrap",
+                        }}>{r.property_type}</span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Phone */}
@@ -566,6 +590,16 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
                     <a href={`tel:${r.phone}`} style={{ color: C.accent, textDecoration: "none", fontWeight: 600 }}>
                       {r.phone || "—"}
                     </a>
+                  </td>
+
+                  {/* Email */}
+                  <td style={{ padding: "10px 10px", fontSize: 12 }}>
+                    <div style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.email || ""}>
+                      {r.email
+                        ? <a href={`mailto:${r.email}`} style={{ color: C.muted, textDecoration: "none" }}>{r.email}</a>
+                        : <span style={{ color: C.muted }}>—</span>
+                      }
+                    </div>
                   </td>
 
                   {/* Issue */}
