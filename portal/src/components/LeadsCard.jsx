@@ -342,6 +342,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const [showAddForm, setShowAddForm]     = useState(false);
   const [convertingLead, setConvertingLead] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [qualityFilter, setQualityFilter] = useState("good");
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -433,12 +434,24 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     return d;
   }, []);
 
+  // Good-lead stats for the current date range (unaffected by quality filter)
+  const stats = useMemo(() => {
+    const dateFiltered = showAll ? rows : rows.filter(r => {
+      const d = parseISO(r.created_at);
+      return d && d >= cutoff;
+    });
+    const good = dateFiltered.filter(r => r.is_good_lead).length;
+    return { total: dateFiltered.length, good, spam: dateFiltered.length - good };
+  }, [rows, showAll, cutoff]);
+
   const visible = useMemo(() => {
     const q = search.toLowerCase().trim();
     let list = showAll ? [...rows] : rows.filter(r => {
       const d = parseISO(r.created_at);
       return d && d >= cutoff;
     });
+    if (qualityFilter === "good") list = list.filter(r => r.is_good_lead);
+    else if (qualityFilter === "spam") list = list.filter(r => !r.is_good_lead);
     if (q) list = list.filter(r =>
       (r.name || "").toLowerCase().includes(q) ||
       (r.phone || "").toLowerCase().includes(q) ||
@@ -464,7 +477,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     });
 
     return list;
-  }, [rows, search, sort, showAll, cutoff]);
+  }, [rows, search, sort, showAll, cutoff, qualityFilter]);
 
   const cols = [
     { key: "created_at", label: "Time Received", w: "120px" },
@@ -510,17 +523,33 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Leads</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-            {visible.length} lead{visible.length !== 1 ? "s" : ""}
-            {!showAll && rows.length > visible.length && (
+            <span style={{ color: C.text, fontWeight: 600 }}>{stats.good}</span> good leads
+            {stats.spam > 0 && (
+              <span style={{ marginLeft: 6 }}>({stats.spam} spam filtered)</span>
+            )}
+            {!showAll && rows.length > stats.total && (
               <span style={{ marginLeft: 6 }}>
                 · <button onClick={() => setShowAll(true)} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontSize: 12, padding: 0 }}>
-                  +{rows.length - visible.length} older
+                  show older
                 </button>
               </span>
             )}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            value={qualityFilter}
+            onChange={e => setQualityFilter(e.target.value)}
+            style={{
+              padding: "9px 12px", borderRadius: 10, fontSize: 13,
+              background: C.inputBg, border: C.border, color: C.text,
+              outline: "none", cursor: "pointer",
+            }}
+          >
+            <option value="good">Good leads only</option>
+            <option value="all">All</option>
+            <option value="spam">Spam &amp; incomplete</option>
+          </select>
           <input
             type="text"
             placeholder="Search name, phone, issue, notes…"
@@ -584,17 +613,21 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
             )}
             {!loading && visible.map((r, i) => {
               const contacted = (r.status || "").toLowerCase() === "contacted";
+              const isSpam = !r.is_good_lead;
+              const rowBase = isSpam
+                ? (i % 2 === 0 ? "rgba(239,68,68,0.03)" : "rgba(239,68,68,0.055)")
+                : (i % 2 === 0 ? "transparent" : C.rowEven);
               return (
                 <tr
                   key={r.id}
                   style={{
-                    background: i % 2 === 0 ? "transparent" : C.rowEven,
+                    background: rowBase,
                     borderBottom: "1px solid rgba(255,255,255,0.04)",
-                    opacity: contacted ? 0.65 : 1,
+                    opacity: contacted ? 0.65 : (isSpam ? 0.5 : 1),
                     transition: "background 0.1s",
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = C.rowHover}
-                  onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "transparent" : C.rowEven}
+                  onMouseLeave={e => e.currentTarget.style.background = rowBase}
                 >
                   {/* Time */}
                   <td style={{ padding: "10px 10px", color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>

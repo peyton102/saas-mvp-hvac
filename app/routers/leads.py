@@ -1,4 +1,5 @@
 # app/routers/leads.py
+import re
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
@@ -16,6 +17,36 @@ from ..deps import get_tenant_id  # tenant resolver
 from app.services.sms import lead_auto_reply_sms, lead_office_notify_sms  # already imported
 
 router = APIRouter(prefix="", tags=["leads"])
+
+# ---------- Good-lead classification ----------
+_LEAD_NAME_STREET = r"(?:loop|drive|road|avenue|street|circle|way|court|lane|boulevard|place|blvd|ave|dr|rd|ct|ln|st)\b"
+_LEAD_NAME_META = re.compile(
+    r"^(can you repeat|repeat that|residential|commercial|i.?m sorry|what was that"
+    r"|i didn.?t|could you|sorry|i need)",
+    re.IGNORECASE,
+)
+
+def _is_good_lead(lead) -> bool:
+    """Return True if the lead has all four required quality fields."""
+    name = (lead.name or "").strip()
+    phone = (lead.phone or "").strip()
+    message = (lead.message or "").strip()
+    address = (getattr(lead, "service_address", None) or "").strip()
+
+    if not name or name.lower() == "unknown caller":
+        return False
+    if re.search(r"\d", name) and re.search(_LEAD_NAME_STREET, name, re.IGNORECASE):
+        return False
+    if _LEAD_NAME_META.search(name):
+        return False
+    if not phone:
+        return False
+    if not message or message == "Inbound call via Vapi":
+        return False
+    if not address:
+        return False
+    return True
+
 def to_utc_z(dt):
     if not dt:
         return None
@@ -266,6 +297,7 @@ def debug_leads(
                 "message": r.message or "",
                 "status": (getattr(r, "status", None) or "new"),
                 "tenant_id": r.tenant_id,
+                "is_good_lead": _is_good_lead(r),
             }
             for r in rows
         ]
@@ -436,6 +468,7 @@ def list_leads(
             "job_won": bool(getattr(r, "job_won", False)),
             "job_value": getattr(r, "job_value", None),
             "tenant_id": r.tenant_id,
+            "is_good_lead": _is_good_lead(r),
         }
         for r in rows
     ]

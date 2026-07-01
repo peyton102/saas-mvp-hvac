@@ -36,6 +36,7 @@ function PortalApp({ me }) {
   const [tab, setTab] = useState("home");
   const [apiHealth, setApiHealth] = useState("checking…");
   const [settingsComplete, setSettingsComplete] = useState(false);
+  const [leadsStats, setLeadsStats] = useState(null);
 
   const needsSetup = me?.needs_setup;
   const TENANT_SLUG =
@@ -62,6 +63,31 @@ function PortalApp({ me }) {
     ping();
   }, []);
 
+
+  // ====== Good-lead stats for home summary ======
+  useEffect(() => {
+    if (!has("leads")) return;
+    async function loadLeadsStats() {
+      try {
+        const h = { ...NGROK_HEADER, "Content-Type": "application/json" };
+        const apiKey = localStorage.getItem("API_KEY");
+        if (apiKey) h["X-API-Key"] = apiKey;
+        const tk = getToken();
+        if (tk) h["Authorization"] = `Bearer ${tk}`;
+        const res = await fetch(`${BASE}/leads?limit=500`, { headers: h });
+        if (!res.ok) return;
+        const data = await res.json();
+        const now = new Date();
+        const monthLeads = (data.items || []).filter(r => {
+          const d = new Date(r.created_at);
+          return !isNaN(d) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        });
+        const good = monthLeads.filter(r => r.is_good_lead).length;
+        setLeadsStats({ total: monthLeads.length, good, spam: monthLeads.length - good });
+      } catch {}
+    }
+    loadLeadsStats();
+  }, [features]); // re-run if features change (login/logout)
 
 const headers = useMemo(() => {
   const h = {
@@ -245,6 +271,28 @@ const headers = useMemo(() => {
 
         {tab === "home" && (
           <div style={{ display: "grid", gap: 12 }}>
+            {has("leads") && leadsStats && (
+              <div style={{
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 16,
+                padding: "14px 20px",
+                background: "rgba(0,0,0,0.12)",
+                display: "flex",
+                alignItems: "baseline",
+                gap: 16,
+                flexWrap: "wrap",
+              }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 32, fontWeight: 900, color: "#f97316", lineHeight: 1 }}>{leadsStats.good}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb" }}>good leads this month</span>
+                </div>
+                {leadsStats.spam > 0 && (
+                  <span style={{ fontSize: 12, color: "rgba(229,231,235,0.40)" }}>
+                    {leadsStats.spam} spam filtered
+                  </span>
+                )}
+              </div>
+            )}
             <div
               style={{
                 border: "1px solid rgba(255,255,255,0.10)",
