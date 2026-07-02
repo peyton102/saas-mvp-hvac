@@ -1065,6 +1065,38 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         consumed.update(_nc)
         if _rb and not _confirmed:
             out["needs_verification"] = True
+
+        # Override with the AI's readback-assembled address when available.
+        # The readback always contains the complete address ("the address is
+        # [street, city, state, ZIP]. Is that right?"), making it more reliable
+        # than partial or multi-turn user utterances captured in final_raw.
+        for k in range(j + 1, len(turns)):
+            if turns[k][0] != "assistant":
+                continue
+            if not _READBACK_ASST_RE.search(turns[k][1]):
+                continue
+            rb_m = re.search(
+                r"\bthe address is\s+(.+?)\s*\.?\s*(?:is that|is this)\s+(?:right|correct)\b",
+                turns[k][1], re.IGNORECASE,
+            )
+            if not rb_m:
+                continue  # readback for a different field; keep scanning
+            rb_address = rb_m.group(1).strip()
+            if rb_address:
+                final_raw = rb_address
+                # Check for user confirmation after this readback (covers
+                # multi-step address collection where _trace_readback stopped early)
+                for kk in range(k + 1, len(turns)):
+                    if turns[kk][0] == "user":
+                        kk_stripped = _CONFIRM_FILLER_RE.sub("", turns[kk][1].strip()).strip()
+                        if _CONFIRM_USER_RE.search(kk_stripped):
+                            consumed.add(kk)
+                            out["needs_verification"] = False
+                        elif not _confirmed:
+                            out["needs_verification"] = True
+                        break
+            break
+
         final_raw = re.sub(
             r"^(?:yes|yeah|yep|yup|sure|okay|ok|alright|so)[.,!]?\s*",
             "", final_raw, flags=re.IGNORECASE,

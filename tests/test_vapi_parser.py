@@ -213,6 +213,45 @@ r = _parse_transcript(turns(
 ))
 check("BUG3-REG unknown no-TLD flagged", r.get("needs_verification"), True)
 
+# ── Address readback assembly tests ────────────────────────────────────
+
+# BUG-ADDR1: single continuous utterance with 5-digit ZIP — readback is source of truth
+r = _parse_transcript(turns(
+    ("assistant", "What is your service address?"),
+    ("user", "1234 John Doe Blvd Clermont Florida 34711"),
+    ("assistant", "Just to confirm, the address is 1234 John Doe Blvd, Clermont, Florida, 34711. Is that right?"),
+    ("user", "yes"),
+))
+check("BUG-ADDR1 full address", r.get("service_address"), "1234 John Doe Blvd, Clermont, Florida, 34711")
+check("BUG-ADDR1 zip", r.get("zip"), "34711")
+check("BUG-ADDR1 no flag", r.get("needs_verification"), False)
+
+# BUG-ADDR2: ZIP asked FIRST (root cause of the reported bug) — parser grabbed only ZIP
+# Without fix: service_address == "34711". With fix: service_address == full address.
+r = _parse_transcript(turns(
+    ("assistant", "What's your ZIP code for service?"),
+    ("user", "34711"),
+    ("assistant", "And your full street address?"),
+    ("user", "1234 John Doe Blvd Clermont Florida"),
+    ("assistant", "Just to confirm, the address is 1234 John Doe Blvd, Clermont, Florida, 34711. Is that right?"),
+    ("user", "yes"),
+))
+check("BUG-ADDR2 zip-first full address", r.get("service_address"), "1234 John Doe Blvd, Clermont, Florida, 34711")
+check("BUG-ADDR2 zip", r.get("zip"), "34711")
+check("BUG-ADDR2 no flag", r.get("needs_verification"), False)
+
+# BUG-ADDR3: partial address given first, ZIP asked as follow-up
+r = _parse_transcript(turns(
+    ("assistant", "What is your service address?"),
+    ("user", "1234 John Doe Blvd Clermont Florida"),
+    ("assistant", "And your ZIP code?"),
+    ("user", "34711"),
+    ("assistant", "Just to confirm, the address is 1234 John Doe Blvd, Clermont, Florida, 34711. Is that right?"),
+    ("user", "yes"),
+))
+check("BUG-ADDR3 partial+zip assembled", r.get("service_address"), "1234 John Doe Blvd, Clermont, Florida, 34711")
+check("BUG-ADDR3 zip", r.get("zip"), "34711")
+
 if FAIL:
     print("\n--- FAILURES ---")
     for f in FAIL:
