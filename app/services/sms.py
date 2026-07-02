@@ -313,8 +313,21 @@ def booking_reminder_sms(tenant_id: str, payload: dict, kind: str) -> bool:
     kind: '24h', '2h', or 'review'
     Uses TenantSettings for business_name + review_link.
     """
+    print(
+        f"[REMINDER SMS] invoked kind={kind!r} tenant={tenant_id!r} phone={payload.get('phone')!r}",
+        flush=True,
+    )
+    try:
+        return _booking_reminder_sms_inner(tenant_id, payload, kind)
+    except Exception as exc:
+        print(f"[REMINDER SMS ERROR] kind={kind!r} tenant={tenant_id!r} err={exc!r}", flush=True)
+        return False
+
+
+def _booking_reminder_sms_inner(tenant_id: str, payload: dict, kind: str) -> bool:
     phone = payload.get("phone")
     if not phone:
+        print(f"[REMINDER SMS] SKIPPED — no phone in payload tenant={tenant_id!r}", flush=True)
         return False
 
     brand = get_brand_for_tenant(tenant_id)

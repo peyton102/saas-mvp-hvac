@@ -445,11 +445,22 @@ def complete_booking(
             starts_at = starts_at.replace(tzinfo=timezone.utc)
         starts_iso = starts_at.astimezone(tenant_tz).isoformat() if starts_at else ""
 
+        print(
+            f"[REVIEW SMS] scheduling background task "
+            f"booking_id={booking_id} phone={booking.phone!r} tenant={tenant_id!r}",
+            flush=True,
+        )
         background_tasks.add_task(
             booking_reminder_sms,
             tenant_id,
             {"name": booking.name or "there", "phone": booking.phone, "service": "appointment", "starts_at_iso": starts_iso},
             "review",
+        )
+    else:
+        print(
+            f"[REVIEW SMS] SKIPPED — booking.phone is empty "
+            f"booking_id={booking_id} tenant={tenant_id!r}",
+            flush=True,
         )
 
     return {"ok": True, "booking_id": booking_id, "tenant_id": tenant_id}
