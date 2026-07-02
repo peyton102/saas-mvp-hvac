@@ -25,7 +25,7 @@ VAPI_SYSTEM_PROMPT_TEMPLATE = """
 After collecting each of the following fields, immediately read it back and confirm
 before moving to the next question:
 
-1. NAME — "Just to confirm, I have [name]. Is that correct?"
+1. NAME — "Just to confirm, I have [name]. Is that correct? If it's an uncommon or unusual name, ask the caller to spell it letter by letter, then read the spelled-out version back before confirming."
 2. PHONE — "Got it, that's [digit-by-digit, e.g. '8-1-4-5-6-4-2-2-1-2']. Correct?"
 3. EMAIL (new customers only) — "So that's [letter-by-letter, 'at' for @, 'dot' for periods]. Did I get that right?"
 4. SERVICE ADDRESS — "Just to confirm, the address is [full address]. Is that right?"
@@ -921,6 +921,30 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
             name = ""
         out["name"] = name or final_raw if not (_name_is_address or _name_is_meta) else ""
 
+        # Override with the AI's confirmed readback name (handles STT errors on first pass).
+        # When the caller spells the name out, the AI reconstructs it correctly in its
+        # readback — more reliable than what STT heard from the raw utterance.
+        rb_name_final = ""
+        for k in range(j + 1, len(turns)):
+            if turns[k][0] != "assistant":
+                continue
+            rb_nm = re.search(
+                r"\bjust to confirm[,.]?\s+i have\s+([A-Za-z][A-Za-z\s\-\'\.]{0,40}?)\s*[.,]?\s*(?:is that|is this)\s+(?:right|correct)\b",
+                turns[k][1], re.IGNORECASE,
+            )
+            if rb_nm:
+                rb_cand = rb_nm.group(1).strip()
+                # Only adopt this readback name if the caller confirmed it
+                for kk in range(k + 1, len(turns)):
+                    if turns[kk][0] == "user":
+                        kk_stripped = _CONFIRM_FILLER_RE.sub("", turns[kk][1].strip()).strip()
+                        if _CONFIRM_USER_RE.search(kk_stripped):
+                            rb_name_final = rb_cand
+                        break
+        if rb_name_final and rb_name_final.lower() != (out["name"] or "").lower():
+            print(f"[NAME] readback overrides first-pass: {rb_name_final!r} (was: {out['name']!r})", flush=True)
+            out["name"] = rb_name_final
+
     # 2. PROPERTY TYPE — match before customer_type and issue so the opener is consumed first
     j, answer = _find_pair(r"\b(residential or commercial|commercial or residential|residential.*commercial)\b")
     if j >= 0:
@@ -967,10 +991,47 @@ def _parse_transcript(messages: list, customer_number: str = "") -> dict:
         consumed.update(_nc)
         if _rb and not _confirmed:
             out["needs_verification"] = True
+
+        # Override with the AI's readback-assembled email when available.
+        # The readback ("So that's [email]. Did I get that right?") contains the
+        # fully composed address and is the ground truth — it avoids the class of
+        # bug where the keyword scanner matches the readback question and captures
+        # the caller's "yes" response as the email value.
+        for k in range(j + 1, len(turns)):
+            if turns[k][0] != "assistant":
+                continue
+            if not _READBACK_ASST_RE.search(turns[k][1]):
+                continue
+            rb_em = re.search(
+                r"\bso that.{0,5}s\s+(.+?)\s*\.?\s*(?:did i get that right|is that correct|is that right|correct\?)\b",
+                turns[k][1], re.IGNORECASE,
+            )
+            if rb_em:
+                rb_email_raw = rb_em.group(1).strip()
+                rb_email = _normalize_email(rb_email_raw)
+                if rb_email and re.search(r"@[\w.-]+\.\w{2,}", rb_email):
+                    final_raw = rb_email_raw
+                    # Re-evaluate confirmation against this specific readback turn
+                    for kk in range(k + 1, len(turns)):
+                        if turns[kk][0] == "user":
+                            kk_stripped = _CONFIRM_FILLER_RE.sub("", turns[kk][1].strip()).strip()
+                            if _CONFIRM_USER_RE.search(kk_stripped):
+                                consumed.add(kk)
+                                out["needs_verification"] = False
+                            elif not _confirmed:
+                                out["needs_verification"] = True
+                            break
+            break  # only inspect the first readback turn after the email answer
+
         normalized_email = _normalize_email(final_raw)
+        # Validate: if the captured value isn't a recognisable email (e.g. "yes",
+        # "correct", other confirmation words), reject it rather than save garbage.
+        if normalized_email and not re.search(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$", normalized_email):
+            print(f"[EMAIL] rejected invalid value: {normalized_email!r}", flush=True)
+            normalized_email = ""
+            out["needs_verification"] = True
         out["email"] = normalized_email
-        # If email has no valid TLD after normalization, flag for verification
-        if normalized_email and "@" in normalized_email and not re.search(r"@[\w.-]+\.\w{2,}$", normalized_email):
+        if normalized_email and not re.search(r"@[\w.-]+\.\w{2,}$", normalized_email):
             out["needs_verification"] = True
             print(f"[EMAIL] missing TLD after normalization: {normalized_email!r}", flush=True)
 

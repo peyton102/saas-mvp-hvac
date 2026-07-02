@@ -342,7 +342,7 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders, readOnly 
   const [showAddForm, setShowAddForm]     = useState(false);
   const [convertingLead, setConvertingLead] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const [qualityFilter, setQualityFilter] = useState("good");
+  const [qualityFilter, setQualityFilter] = useState("all");
 
   const headers = useMemo(() => ({
     ...(commonHeaders || {}),
@@ -525,9 +525,12 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders, readOnly 
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Leads</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-            <span style={{ color: C.text, fontWeight: 600 }}>{stats.good}</span> good leads
-            {stats.spam > 0 && (
-              <span style={{ marginLeft: 6 }}>({stats.spam} spam filtered)</span>
+            <span style={{ color: C.text, fontWeight: 600 }}>{stats.total}</span> leads
+            {stats.good < stats.total && qualityFilter !== "good" && (
+              <span style={{ marginLeft: 6 }}>({stats.good} good · {stats.spam} flagged)</span>
+            )}
+            {qualityFilter === "good" && stats.spam > 0 && (
+              <span style={{ marginLeft: 6 }}>({stats.spam} flagged not shown)</span>
             )}
             {!showAll && rows.length > stats.total && (
               <span style={{ marginLeft: 6 }}>
@@ -548,9 +551,9 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders, readOnly 
               outline: "none", cursor: "pointer",
             }}
           >
+            <option value="all">All leads</option>
             <option value="good">Good leads only</option>
-            <option value="all">All</option>
-            <option value="spam">Spam &amp; incomplete</option>
+            <option value="spam">Flagged only</option>
           </select>
           <input
             type="text"
