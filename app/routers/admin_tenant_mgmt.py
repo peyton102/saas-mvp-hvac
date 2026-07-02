@@ -187,6 +187,52 @@ def export_tenant_data(
     )
 
 
+@router.get("/tenants/{slug}/leads")
+def list_tenant_leads(
+    slug: str,
+    limit: int = 500,
+    session: Session = Depends(get_session),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Return full lead objects for a tenant. Admin-only."""
+    _require_admin(current_user, session)
+
+    tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    leads = session.exec(
+        select(Lead).where(Lead.tenant_id == slug).order_by(Lead.created_at.desc()).limit(limit)
+    ).all()
+
+    from app.routers.leads import _is_good_lead
+
+    items = []
+    for r in leads:
+        items.append({
+            "id": r.id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "name": r.name or "",
+            "phone": r.phone or "",
+            "email": r.email or "",
+            "message": r.message or "",
+            "status": r.status or "",
+            "source": r.source or "",
+            "service_address": getattr(r, "service_address", None) or "",
+            "service_urgency": getattr(r, "service_urgency", None) or "",
+            "zip": getattr(r, "zip", None) or "",
+            "notes": getattr(r, "notes", None) or "",
+            "job_won": getattr(r, "job_won", None) or False,
+            "job_value": getattr(r, "job_value", None),
+            "needs_verification": getattr(r, "needs_verification", None) or False,
+            "customer_type": getattr(r, "customer_type", None) or "",
+            "property_type": getattr(r, "property_type", None) or "",
+            "is_good_lead": _is_good_lead(r),
+        })
+
+    return {"items": items, "total": len(items)}
+
+
 @router.delete("/tenants/{slug}")
 def delete_tenant(
     slug: str,

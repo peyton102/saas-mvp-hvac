@@ -331,7 +331,7 @@ function AddLeadForm({ onSave, onCancel }) {
   );
 }
 
-export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
+export default function LeadsCard({ tenantKey, apiBase, commonHeaders, readOnly = false, overrideLeadsUrl = null }) {
   const BASE = (typeof apiBase === "string" && apiBase.trim()) ? apiBase : BASE_FALLBACK;
 
   const [rows, setRows] = useState([]);
@@ -363,14 +363,14 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
   const loadLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch("/leads?limit=200");
+      const data = await apiFetch(overrideLeadsUrl || "/leads?limit=200");
       setRows(data.items || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [headers, BASE]);
+  }, [headers, BASE, overrideLeadsUrl]);
 
   useEffect(() => { loadLeads(); }, [tenantKey, BASE, loadLeads]);
 
@@ -488,9 +488,11 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
     { key: "service_address", label: "Address",        w: "150px" },
     { key: "service_urgency", label: "Preferred Day",  w: "110px" },
     { key: "notes",      label: "Notes",          w: "160px" },
-    { key: "status",     label: "Contacted",      w: "90px"  },
-    { key: "job_won",    label: "Won",            w: "120px" },
-    { key: "_delete",    label: "",               w: "40px", noSort: true },
+    ...(!readOnly ? [
+      { key: "status",   label: "Contacted",      w: "90px"  },
+      { key: "job_won",  label: "Won",            w: "120px" },
+      { key: "_delete",  label: "",               w: "40px", noSort: true },
+    ] : []),
   ];
 
   const thStyle = (key) => ({
@@ -571,19 +573,21 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           >
             {showAll ? "Last 7 days" : "All time"}
           </button>
-          <button
-            onClick={() => setShowAddForm(v => !v)}
-            style={{
-              padding: "9px 16px", borderRadius: 10, fontWeight: 800, fontSize: 13,
-              border: "none", background: C.accent, color: "#111", cursor: "pointer", whiteSpace: "nowrap",
-            }}
-          >
-            + Add Lead
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => setShowAddForm(v => !v)}
+              style={{
+                padding: "9px 16px", borderRadius: 10, fontWeight: 800, fontSize: 13,
+                border: "none", background: C.accent, color: "#111", cursor: "pointer", whiteSpace: "nowrap",
+              }}
+            >
+              + Add Lead
+            </button>
+          )}
         </div>
       </div>
 
-      {showAddForm && (
+      {!readOnly && showAddForm && (
         <AddLeadForm onSave={addLead} onCancel={() => setShowAddForm(false)} />
       )}
 
@@ -606,10 +610,10 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={11} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
+              <tr><td colSpan={cols.length} style={{ padding: 24, textAlign: "center", color: C.muted }}>Loading…</td></tr>
             )}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={11} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
+              <tr><td colSpan={cols.length} style={{ padding: 24, textAlign: "center", color: C.muted }}>No leads found.</td></tr>
             )}
             {!loading && visible.map((r, i) => {
               const contacted = (r.status || "").toLowerCase() === "contacted";
@@ -698,59 +702,68 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders }) {
 
                   {/* Notes */}
                   <td style={{ padding: "6px 10px" }}>
-                    <NotesCell lead={r} onSave={saveNotes} />
+                    {readOnly
+                      ? <div style={{ fontSize: 12, color: r.notes ? C.text : C.muted, padding: "4px 6px" }}>{r.notes || "—"}</div>
+                      : <NotesCell lead={r} onSave={saveNotes} />
+                    }
                   </td>
 
                   {/* Contacted + Book */}
-                  <td style={{ padding: "10px 10px", textAlign: "center" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "center" }}>
-                      <button
-                        onClick={() => toggleContacted(r.id, r.status)}
-                        style={{
-                          padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                          cursor: "pointer", border: "none", whiteSpace: "nowrap",
-                          background: contacted ? C.greenBg : "rgba(249,115,22,0.12)",
-                          color: contacted ? C.green : C.accent,
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        {contacted ? "✓ Done" : "Mark Done"}
-                      </button>
-                      <button
-                        onClick={() => setConvertingLead(r)}
-                        style={{
-                          padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                          cursor: "pointer", border: "none", whiteSpace: "nowrap",
-                          background: "rgba(96,165,250,0.12)", color: "#60a5fa",
-                        }}
-                      >
-                        Book
-                      </button>
-                    </div>
-                  </td>
+                  {!readOnly && (
+                    <td style={{ padding: "10px 10px", textAlign: "center" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "center" }}>
+                        <button
+                          onClick={() => toggleContacted(r.id, r.status)}
+                          style={{
+                            padding: "5px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                            cursor: "pointer", border: "none", whiteSpace: "nowrap",
+                            background: contacted ? C.greenBg : "rgba(249,115,22,0.12)",
+                            color: contacted ? C.green : C.accent,
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {contacted ? "✓ Done" : "Mark Done"}
+                        </button>
+                        <button
+                          onClick={() => setConvertingLead(r)}
+                          style={{
+                            padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                            cursor: "pointer", border: "none", whiteSpace: "nowrap",
+                            background: "rgba(96,165,250,0.12)", color: "#60a5fa",
+                          }}
+                        >
+                          Book
+                        </button>
+                      </div>
+                    </td>
+                  )}
 
                   {/* Won toggle */}
-                  <td style={{ padding: "10px 10px" }}>
-                    <WonCell lead={r} onSave={saveWon} />
-                  </td>
+                  {!readOnly && (
+                    <td style={{ padding: "10px 10px" }}>
+                      <WonCell lead={r} onSave={saveWon} />
+                    </td>
+                  )}
 
                   {/* Delete */}
-                  <td style={{ padding: "10px 6px", textAlign: "center" }}>
-                    <button
-                      onClick={() => deletingId !== r.id && deleteLead(r.id)}
-                      title="Delete lead"
-                      style={{
-                        background: "none", border: "none", cursor: deletingId === r.id ? "not-allowed" : "pointer",
-                        color: deletingId === r.id ? C.muted : "rgba(239,68,68,0.5)",
-                        fontSize: 14, lineHeight: 1, padding: "4px 6px", borderRadius: 6,
-                        transition: "color 0.15s",
-                      }}
-                      onMouseEnter={e => { if (deletingId !== r.id) e.currentTarget.style.color = "#ef4444"; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = deletingId === r.id ? C.muted : "rgba(239,68,68,0.5)"; }}
-                    >
-                      {deletingId === r.id ? "…" : "✕"}
-                    </button>
-                  </td>
+                  {!readOnly && (
+                    <td style={{ padding: "10px 6px", textAlign: "center" }}>
+                      <button
+                        onClick={() => deletingId !== r.id && deleteLead(r.id)}
+                        title="Delete lead"
+                        style={{
+                          background: "none", border: "none", cursor: deletingId === r.id ? "not-allowed" : "pointer",
+                          color: deletingId === r.id ? C.muted : "rgba(239,68,68,0.5)",
+                          fontSize: 14, lineHeight: 1, padding: "4px 6px", borderRadius: 6,
+                          transition: "color 0.15s",
+                        }}
+                        onMouseEnter={e => { if (deletingId !== r.id) e.currentTarget.style.color = "#ef4444"; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = deletingId === r.id ? C.muted : "rgba(239,68,68,0.5)"; }}
+                      >
+                        {deletingId === r.id ? "…" : "✕"}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}

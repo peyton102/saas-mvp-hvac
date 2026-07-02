@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import LeadsCard from "./LeadsCard";
 
 // ---- status config ----
 const STATUS = {
@@ -255,7 +256,7 @@ function RemoveTenantModal({ tenant, apiBase, commonHeaders, onClose, onDeleted 
 }
 
 // ---- Tenant Value / Usage section ----
-function TenantUsageSection({ apiBase, commonHeaders }) {
+function TenantUsageSection({ apiBase, commonHeaders, onDrillDown }) {
   const [rows, setRows]     = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr]       = useState("");
@@ -386,7 +387,10 @@ function TenantUsageSection({ apiBase, commonHeaders }) {
               {sorted.map((r) => (
                 <tr
                   key={r.slug}
-                  style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                  onClick={() => onDrillDown && onDrillDown({ slug: r.slug, business_name: r.business_name })}
+                  style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", cursor: onDrillDown ? "pointer" : "default" }}
+                  onMouseEnter={e => { if (onDrillDown) e.currentTarget.style.background = "rgba(249,115,22,0.05)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = ""; }}
                 >
                   <td style={{ padding: "10px 10px 10px 0", verticalAlign: "middle" }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e7eb" }}>
@@ -463,6 +467,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   const [vapiInputs, setVapiInputs]   = useState({}); // slug → current input value
   const [savingVapi, setSavingVapi]   = useState({}); // slug → true while saving
   const [vapiErr, setVapiErr]         = useState({}); // slug → error string
+  const [drillTenant, setDrillTenant] = useState(null); // tenant object when drill-down is active
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
@@ -602,6 +607,55 @@ export default function AdminTab({ apiBase, commonHeaders }) {
     return acc;
   }, {});
 
+  if (drillTenant) {
+    const displayName = drillTenant.business_name || drillTenant.name || drillTenant.slug;
+    return (
+      <div style={{ display: "grid", gap: 20 }}>
+        {/* Admin read-only banner */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          padding: "12px 18px",
+          borderRadius: 12,
+          border: "1px solid rgba(249,115,22,0.3)",
+          background: "rgba(249,115,22,0.06)",
+        }}>
+          <button
+            onClick={() => setDrillTenant(null)}
+            style={btnGhost}
+          >
+            ← Back
+          </button>
+          <div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#e5e7eb" }}>
+              Viewing as: {displayName}
+            </span>
+            <span style={{
+              marginLeft: 10,
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#f97316",
+              background: "rgba(249,115,22,0.12)",
+              padding: "2px 8px",
+              borderRadius: 5,
+              border: "1px solid rgba(249,115,22,0.3)",
+            }}>
+              Admin (read-only)
+            </span>
+          </div>
+        </div>
+        <LeadsCard
+          tenantKey={drillTenant.slug}
+          apiBase={apiBase}
+          commonHeaders={commonHeaders}
+          readOnly={true}
+          overrideLeadsUrl={`/admin/mgmt/tenants/${drillTenant.slug}/leads`}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "grid", gap: 32 }}>
 
@@ -620,7 +674,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       )}
 
       {/* Value / Usage Overview */}
-      <TenantUsageSection apiBase={apiBase} commonHeaders={commonHeaders} />
+      <TenantUsageSection apiBase={apiBase} commonHeaders={commonHeaders} onDrillDown={setDrillTenant} />
 
       {/* Divider */}
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} />
@@ -933,6 +987,9 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                     <span style={{ fontSize: 11, color: "rgba(229,231,235,0.4)", whiteSpace: "nowrap" }}>
                       Joined {fmtDate(t.created_at)}
                     </span>
+                    <button onClick={() => setDrillTenant(t)} style={btnGhost}>
+                      View Leads
+                    </button>
                     <button onClick={() => setRemovingTenant(t)} style={btnRed}>
                       Remove
                     </button>
