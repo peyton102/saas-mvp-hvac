@@ -575,6 +575,7 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   const [savingVapi, setSavingVapi]   = useState({}); // slug → true while saving
   const [vapiErr, setVapiErr]         = useState({}); // slug → error string
   const [drillTenant, setDrillTenant] = useState(null); // tenant object when drill-down is active
+  const [markingReady, setMarkingReady] = useState({}); // slug → true while in-flight
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
@@ -705,6 +706,25 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       setVapiErr((prev) => ({ ...prev, [tenantSlug]: String(e.message || e) }));
     } finally {
       setSavingVapi((prev) => ({ ...prev, [tenantSlug]: false }));
+    }
+  }
+
+  async function markReady(tenantSlug) {
+    setMarkingReady((prev) => ({ ...prev, [tenantSlug]: true }));
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenantSlug}/mark-ready`, {
+        method: "POST",
+        headers: commonHeaders,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setTenants((prev) =>
+        prev.map((t) => t.slug === tenantSlug ? { ...t, assistant_status: "ready" } : t)
+      );
+    } catch (e) {
+      alert(`Mark ready failed: ${e.message}`);
+    } finally {
+      setMarkingReady((prev) => ({ ...prev, [tenantSlug]: false }));
     }
   }
 
@@ -1139,6 +1159,58 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                       );
                     })}
                   </div>
+
+                  {/* Onboarding status + Mark Ready */}
+                  {(() => {
+                    const status = t.assistant_status || "active";
+                    const STATUS_STYLE = {
+                      pending: { color: "#fbbf24", bg: "rgba(251,191,36,0.12)", border: "rgba(251,191,36,0.3)", label: "Pending setup" },
+                      ready:   { color: "#60a5fa", bg: "rgba(96,165,250,0.12)", border: "rgba(96,165,250,0.3)", label: "Ready — awaiting wizard" },
+                      active:  { color: "#34d399", bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.3)", label: "Active" },
+                    };
+                    const s = STATUS_STYLE[status] || STATUS_STYLE.active;
+                    const isMarking = markingReady[t.slug];
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", whiteSpace: "nowrap", minWidth: 56 }}>
+                          Status:
+                        </span>
+                        <span style={{
+                          fontSize: 11, fontWeight: 700,
+                          padding: "3px 9px", borderRadius: 5,
+                          color: s.color, background: s.bg,
+                          border: `1px solid ${s.border}`,
+                        }}>
+                          {s.label}
+                        </span>
+                        {t.carrier && (
+                          <span style={{ fontSize: 11, color: "rgba(229,231,235,0.4)" }}>
+                            Carrier: {t.carrier}
+                            {t.carrier_setup_complete && " ✓"}
+                          </span>
+                        )}
+                        {status === "pending" && !t.is_admin && (
+                          <button
+                            disabled={isMarking}
+                            onClick={() => markReady(t.slug)}
+                            style={{
+                              padding: "5px 12px",
+                              fontSize: 11, fontWeight: 700,
+                              borderRadius: 7,
+                              border: "1px solid rgba(110,231,183,0.4)",
+                              background: "rgba(110,231,183,0.10)",
+                              color: "#6ee7b7",
+                              cursor: isMarking ? "not-allowed" : "pointer",
+                              opacity: isMarking ? 0.5 : 1,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {isMarking ? "Sending…" : "Mark Assistant Ready"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Vapi phone number assignment */}
                   {(() => {

@@ -136,6 +136,10 @@ class MeResponse(BaseModel):
     is_locked: bool = False
     trial_active: bool = True  # always true — no trial system, kept for old frontend compat
 
+    assistant_status: str = "active"  # pending | ready | active
+    carrier: Optional[str] = None
+    carrier_setup_complete: bool = False
+
 class SignupRequest(BaseModel):
     invite_code: str
     business_name: str
@@ -250,6 +254,7 @@ def signup(payload: SignupRequest, background_tasks: BackgroundTasks, session: S
             booking_link=booking_link_default,
             review_google_url=(payload.review_link or "").strip(),
             is_active=True,
+            assistant_status="pending",
         )
         session.add(tenant)
         session.flush()  # assign tenant.id
@@ -371,6 +376,7 @@ def register(request: Request, payload: RegisterRequest, background_tasks: Backg
             phone=(payload.phone or "").strip(),
             booking_link=booking_link_default,
             is_active=True,
+            assistant_status="pending",
         )
         session.add(tenant)
         session.flush()
@@ -598,6 +604,11 @@ def me(
 
     is_locked = not bool(tenant.is_active)
 
+    # onboarding fields (added via startup migration — use getattr for safety)
+    assistant_status = getattr(tenant, "assistant_status", None) or "active"
+    carrier = getattr(tenant, "carrier", None) or None
+    carrier_setup_complete = bool(getattr(tenant, "carrier_setup_complete", False))
+
     return MeResponse(
         email=email,
         tenant_slug=tenant_slug,
@@ -611,6 +622,9 @@ def me(
         office_email_to=tenant.office_email_to,
         paid_status=paid_status,
         is_locked=is_locked,
+        assistant_status=assistant_status,
+        carrier=carrier,
+        carrier_setup_complete=carrier_setup_complete,
     )
 
 

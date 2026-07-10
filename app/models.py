@@ -104,6 +104,11 @@ class Tenant(SQLModel, table=True):
     # platform admin flag
     is_admin: bool = Field(default=False)
 
+    # Onboarding flow: pending → ready → active
+    assistant_status: Optional[str] = Field(default="active", max_length=20)
+    carrier: Optional[str] = Field(default=None, max_length=100)
+    carrier_setup_complete: Optional[bool] = Field(default=False)
+
     # --- QBO fields ---
     qbo_realm_id: Optional[str] = None
     qbo_access_token: Optional[str] = None

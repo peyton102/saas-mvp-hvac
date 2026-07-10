@@ -43,6 +43,10 @@ def run_startup_migrations() -> None:
         ("sp_lead_property_type",   "ALTER TABLE lead ADD COLUMN IF NOT EXISTS property_type TEXT"),
         ("sp_lead_needs_callback",  "ALTER TABLE lead ADD COLUMN IF NOT EXISTS needs_callback_for_scheduling BOOLEAN DEFAULT FALSE"),
         ("sp_lead_needs_verification", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS needs_verification BOOLEAN DEFAULT FALSE"),
+        # Onboarding flow
+        ("sp_tenant_assistant_status",        "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS assistant_status TEXT DEFAULT 'active'"),
+        ("sp_tenant_carrier",                 "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS carrier TEXT"),
+        ("sp_tenant_carrier_setup_complete",  "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS carrier_setup_complete BOOLEAN DEFAULT FALSE"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

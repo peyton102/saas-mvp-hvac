@@ -13,6 +13,7 @@ import BookingAvailabilityCard from "./components/BookingAvailabilityCard.jsx";
 import MissedCallsCard from "./components/MissedCallsCard.jsx";
 import AdminTab from "./components/AdminTab.jsx";
 import ValueCard from "./components/ValueCard.jsx";
+import WelcomeCard from "./components/WelcomeCard.jsx";
 
 // ====== CONFIG ======
 const API_BASE =
@@ -39,6 +40,8 @@ function PortalApp({ me }) {
   const [leadsStats, setLeadsStats] = useState(null);
 
   const needsSetup = me?.needs_setup;
+  const assistantStatus = me?.assistant_status || "active";
+  const [helpOpen, setHelpOpen] = useState(false);
   const TENANT_SLUG =
   localStorage.getItem("TENANT_SLUG") ||
   "default";
@@ -269,7 +272,11 @@ const headers = useMemo(() => {
           />
         )}
 
-        {tab === "home" && (
+        {tab === "home" && assistantStatus === "pending" && (
+          <WelcomeCard />
+        )}
+
+        {tab === "home" && assistantStatus !== "pending" && (
           <div style={{ display: "grid", gap: 12 }}>
             {has("leads") && leadsStats && (
               <div style={{
@@ -390,6 +397,91 @@ const headers = useMemo(() => {
         )}
       </div>
     </div>
+
+    {/* Need help? — persistent floating button */}
+    <button
+      onClick={() => setHelpOpen(true)}
+      style={{
+        position: "fixed",
+        bottom: 24,
+        right: 24,
+        zIndex: 900,
+        padding: "12px 18px",
+        borderRadius: 50,
+        border: "1px solid rgba(249,115,22,0.4)",
+        background: "rgba(15,23,42,0.92)",
+        color: "#f97316",
+        fontWeight: 800,
+        fontSize: 14,
+        cursor: "pointer",
+        backdropFilter: "blur(12px)",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+      }}
+    >
+      Need help?
+    </button>
+
+    {/* Help panel */}
+    {helpOpen && (
+      <div
+        onClick={(e) => { if (e.target === e.currentTarget) setHelpOpen(false); }}
+        style={{
+          position: "fixed", inset: 0, zIndex: 950,
+          background: "rgba(0,0,0,0.55)",
+          display: "flex", justifyContent: "flex-end",
+        }}
+      >
+        <div style={{
+          width: "100%", maxWidth: 420,
+          height: "100%",
+          background: "#0b1220",
+          borderLeft: "1px solid rgba(255,255,255,0.10)",
+          padding: 28,
+          overflowY: "auto",
+          display: "grid",
+          gap: 20,
+          alignContent: "start",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#e5e7eb" }}>Help & Walkthrough</div>
+            <button onClick={() => setHelpOpen(false)} style={{
+              background: "none", border: "none", color: "rgba(229,231,235,0.5)",
+              fontSize: 22, cursor: "pointer", lineHeight: 1,
+            }}>×</button>
+          </div>
+
+          {[
+            { title: "Getting started", desc: "Overview of your Torevez dashboard" },
+            { title: "How call forwarding works", desc: "What happens when a customer calls your number" },
+            { title: "Reading your leads", desc: "How to follow up on captured leads" },
+            { title: "Booking setup", desc: "Configure your availability and booking link" },
+          ].map(({ title, desc }) => (
+            <div key={title} style={{
+              padding: "14px 16px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.03)",
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#e5e7eb", marginBottom: 4 }}>{title}</div>
+              <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", marginBottom: 10 }}>{desc}</div>
+              {/* Placeholder video embed */}
+              <div style={{
+                width: "100%", paddingBottom: "56.25%", position: "relative",
+                background: "rgba(0,0,0,0.3)", borderRadius: 8,
+              }}>
+                <div style={{
+                  position: "absolute", inset: 0, display: "flex",
+                  alignItems: "center", justifyContent: "center",
+                  color: "rgba(229,231,235,0.2)", fontSize: 13,
+                }}>
+                  Video coming soon
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
   </div>
 );
 

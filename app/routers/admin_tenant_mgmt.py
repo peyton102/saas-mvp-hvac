@@ -11,10 +11,13 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from sqlalchemy import delete, text
 
+from fastapi import BackgroundTasks
+
 from app.db import get_session
 from app.models import Tenant, Lead, Booking, Review, ReminderSent, TenantSettings, ApiKey
 from app.models_finance import FinanceRevenue, FinanceCost
 from app.routers.auth import get_current_user
+from app.services.sms import tenant_ready_sms, new_signup_alert_sms
 
 router = APIRouter(prefix="/admin/mgmt", tags=["admin-mgmt"])
 
@@ -52,7 +55,7 @@ def list_tenants(
         session.exec(text("ROLLBACK TO SAVEPOINT sp_mgmt_features"))
 
     rows = session.exec(
-        text("SELECT id, slug, name, business_name, email, is_active, is_admin, created_at, features, twilio_number FROM tenant ORDER BY created_at DESC")
+        text("SELECT id, slug, name, business_name, email, phone, is_active, is_admin, created_at, features, twilio_number, assistant_status, carrier, carrier_setup_complete FROM tenant ORDER BY created_at DESC")
     ).all()
 
     result = []
@@ -65,11 +68,15 @@ def list_tenants(
             "name": r.name or "",
             "business_name": r.business_name or "",
             "email": r.email or "",
+            "phone": r.phone or "",
             "is_active": r.is_active,
             "is_admin": r.is_admin,
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "features": features_list,
             "vapi_phone_number_id": (r.twilio_number if hasattr(r, "twilio_number") else None) or "",
+            "assistant_status": (r.assistant_status if hasattr(r, "assistant_status") else None) or "active",
+            "carrier": (r.carrier if hasattr(r, "carrier") else None) or "",
+            "carrier_setup_complete": bool(r.carrier_setup_complete if hasattr(r, "carrier_setup_complete") else False),
         })
     return result
 
@@ -134,6 +141,37 @@ def assign_vapi_number(
     session.commit()
 
     return {"ok": True, "slug": slug, "vapi_phone_number_id": new_value}
+
+
+@router.post("/tenants/{slug}/mark-ready")
+def mark_assistant_ready(
+    slug: str,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Set assistant_status = 'ready' and SMS the customer."""
+    _require_admin(current_user, session)
+
+    tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    if getattr(tenant, "assistant_status", None) == "active":
+        raise HTTPException(status_code=400, detail="Tenant is already active")
+
+    session.exec(
+        text("UPDATE tenant SET assistant_status = 'ready' WHERE slug = :slug").bindparams(slug=slug)
+    )
+    session.commit()
+
+    phone = (tenant.phone or "").strip()
+    if phone:
+        background_tasks.add_task(tenant_ready_sms, phone)
+    else:
+        print(f"[MARK READY] No phone for tenant {slug!r}; skipping customer SMS", flush=True)
+
+    return {"ok": True, "slug": slug, "assistant_status": "ready", "sms_sent": bool(phone)}
 
 
 @router.get("/tenants/{slug}/export")

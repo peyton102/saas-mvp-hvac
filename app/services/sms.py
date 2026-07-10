@@ -618,6 +618,22 @@ def booking_office_notify_sms(tenant_id: str, payload: dict) -> bool:
 
 # ---------- Signup alert SMS ----------
 
+def tenant_ready_sms(phone: str) -> bool:
+    """
+    Notify the tenant (customer) that their Torevez assistant is ready.
+    Sent when admin clicks 'Mark Assistant Ready'.
+    """
+    if not phone:
+        print("[TENANT READY SMS] No phone on tenant record; skipping.", flush=True)
+        return False
+    body = (
+        "Your Torevez assistant is ready. "
+        "Log in to finish setup — takes 2 minutes."
+    )
+    print(f"[TENANT READY SMS] to={phone!r}", flush=True)
+    return send_sms(phone, body)
+
+
 def new_signup_alert_sms(data: dict) -> bool:
     """
     Alert admin (ALERT_SMS_TO) immediately when a new tenant signs up.
