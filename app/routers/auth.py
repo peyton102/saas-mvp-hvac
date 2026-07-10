@@ -22,6 +22,7 @@ from app.models import Tenant, ApiKey, PasswordResetToken
 from app.db import get_session
 from app import config
 from app.services.email import send_password_reset_email, send_welcome_email
+from app.services.sms import new_signup_alert_sms
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -187,7 +188,7 @@ def get_current_user(
 # ----------------- Signup -----------------
 
 @router.post("/signup", response_model=SignupResponse)
-def signup(payload: SignupRequest, session: Session = Depends(get_session)):
+def signup(payload: SignupRequest, background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
     ensure_invite_table(session)
 
     code = (payload.invite_code or "").strip()
@@ -295,8 +296,22 @@ def signup(payload: SignupRequest, session: Session = Depends(get_session)):
         tenant_id=slug,
         user_email=email_lower,
         ok=True,
-        payload={"tenant_slug": slug},
+        payload={
+            "tenant_slug": slug,
+            "business_name": payload.business_name.strip(),
+            "phone": (payload.phone or "").strip(),
+        },
     )
+
+    # Alert admin immediately via SMS
+    _signup_data = {
+        "business_name": payload.business_name.strip(),
+        "contact_name": email_lower,
+        "phone": (payload.phone or "").strip(),
+        "email": email_lower,
+        "timestamp": datetime.now(timezone.utc).strftime("%m/%d %H:%M UTC"),
+    }
+    background_tasks.add_task(new_signup_alert_sms, _signup_data)
 
     token_data = {"sub": email_lower, "tenant": slug}
     access_token = create_access_token(token_data)
@@ -403,8 +418,22 @@ def register(request: Request, payload: RegisterRequest, background_tasks: Backg
         tenant_id=slug,
         user_email=email_lower,
         ok=True,
-        payload={"tenant_slug": slug},
+        payload={
+            "tenant_slug": slug,
+            "business_name": payload.business_name.strip(),
+            "phone": (payload.phone or "").strip(),
+        },
     )
+
+    # Alert admin immediately via SMS
+    _signup_data = {
+        "business_name": payload.business_name.strip(),
+        "contact_name": email_lower,
+        "phone": (payload.phone or "").strip(),
+        "email": email_lower,
+        "timestamp": datetime.now(timezone.utc).strftime("%m/%d %H:%M UTC"),
+    }
+    background_tasks.add_task(new_signup_alert_sms, _signup_data)
 
     token_data = {"sub": email_lower, "tenant": slug}
     access_token = create_access_token(token_data)

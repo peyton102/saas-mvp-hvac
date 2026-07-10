@@ -233,6 +233,47 @@ def list_tenant_leads(
     return {"items": items, "total": len(items)}
 
 
+@router.get("/signups")
+def list_signups(
+    limit: int = 50,
+    session: Session = Depends(get_session),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Return recent signup events for the admin dashboard notification feed."""
+    _require_admin(current_user, session)
+
+    rows = session.exec(text("""
+        SELECT
+            ae.created_at,
+            ae.user_email,
+            ae.tenant_id AS slug,
+            t.business_name,
+            t.phone,
+            ae.action
+        FROM audit_event ae
+        LEFT JOIN tenant t ON t.slug = ae.tenant_id
+        WHERE ae.category = 'auth'
+          AND ae.action IN ('signup_success', 'register_success')
+        ORDER BY ae.created_at DESC
+        LIMIT :limit
+    """).bindparams(limit=limit)).all()
+
+    result = []
+    for r in rows:
+        created_at = r.created_at
+        if created_at and hasattr(created_at, "isoformat"):
+            created_at = created_at.isoformat()
+        result.append({
+            "created_at": created_at,
+            "email": r.user_email or "",
+            "slug": r.slug or "",
+            "business_name": r.business_name or "",
+            "phone": r.phone or "",
+            "via": "invite" if r.action == "signup_success" else "self-serve",
+        })
+    return result
+
+
 @router.delete("/tenants/{slug}")
 def delete_tenant(
     slug: str,

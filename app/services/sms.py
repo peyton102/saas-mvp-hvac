@@ -616,6 +616,36 @@ def booking_office_notify_sms(tenant_id: str, payload: dict) -> bool:
     return send_sms(office_to, msg)
 
 
+# ---------- Signup alert SMS ----------
+
+def new_signup_alert_sms(data: dict) -> bool:
+    """
+    Alert admin (ALERT_SMS_TO) immediately when a new tenant signs up.
+    data keys: business_name, contact_name, phone, email, timestamp
+    """
+    dest = os.getenv("ALERT_SMS_TO", "").strip()
+    if not dest:
+        print("[SIGNUP ALERT SMS] ALERT_SMS_TO not set; skipping.", flush=True)
+        return False
+
+    business_name = (data.get("business_name") or "Unknown").strip()
+    contact_name  = (data.get("contact_name") or data.get("email") or "—").strip()
+    phone         = (data.get("phone") or "").strip() or "not provided"
+    email         = (data.get("email") or "").strip() or "not provided"
+    ts            = data.get("timestamp") or datetime.now(timezone.utc).strftime("%m/%d %H:%M UTC")
+
+    body = (
+        f"New Torevez signup!\n"
+        f"Business: {business_name}\n"
+        f"Contact: {contact_name}\n"
+        f"Phone: {phone}\n"
+        f"Email: {email}\n"
+        f"Time: {ts}"
+    )
+    print(f"[SIGNUP ALERT SMS] dest={dest!r} business={business_name!r}", flush=True)
+    return send_sms(dest, body)
+
+
 # ---------- System alert SMS (add-only block) ----------
 
 # Alert destination for server errors — set ALERT_SMS_TO in your environment.

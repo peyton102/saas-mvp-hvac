@@ -434,6 +434,113 @@ function TenantUsageSection({ apiBase, commonHeaders, onDrillDown }) {
   );
 }
 
+// ---- Signup Notifications Section ----
+function SignupsSection({ apiBase, commonHeaders }) {
+  const [signups, setSignups] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/signups?limit=20`, { headers: commonHeaders });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${res.status}`);
+      }
+      setSignups(await res.json());
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  function fmtTime(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+    } catch { return iso; }
+  }
+
+  return (
+    <div style={{
+      padding: "16px 20px",
+      borderRadius: 14,
+      border: "1px solid rgba(52,211,153,0.25)",
+      background: "rgba(52,211,153,0.04)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: "#34d399" }}>New Signups</div>
+          <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", marginTop: 2 }}>
+            Most recent 20 — you also get an SMS for each
+          </div>
+        </div>
+        <button onClick={load} disabled={loading} style={btnGhost}>
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      {err && <div style={{ fontSize: 13, color: "#fca5a5", marginBottom: 8 }}>{err}</div>}
+
+      {!loading && signups.length === 0 && !err && (
+        <div style={{ fontSize: 13, color: "rgba(229,231,235,0.35)", padding: "8px 0" }}>
+          No signups yet.
+        </div>
+      )}
+
+      {signups.length > 0 && (
+        <div style={{ display: "grid", gap: 8 }}>
+          {signups.map((s, i) => (
+            <div key={i} style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(0,0,0,0.15)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              flexWrap: "wrap",
+            }}>
+              <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#e5e7eb", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {s.business_name || s.slug || "—"}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(229,231,235,0.45)", marginTop: 2 }}>
+                  {s.email}
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "rgba(229,231,235,0.45)", whiteSpace: "nowrap" }}>
+                {s.phone || "no phone"}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700,
+                  padding: "2px 7px", borderRadius: 4,
+                  background: s.via === "invite" ? "rgba(167,139,250,0.12)" : "rgba(52,211,153,0.12)",
+                  color: s.via === "invite" ? "#a78bfa" : "#34d399",
+                  border: `1px solid ${s.via === "invite" ? "rgba(167,139,250,0.25)" : "rgba(52,211,153,0.25)"}`,
+                }}>
+                  {s.via}
+                </span>
+                <span style={{ fontSize: 11, color: "rgba(229,231,235,0.35)" }}>
+                  {fmtTime(s.created_at)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminTab({ apiBase, commonHeaders }) {
   const ALL_FEATURES = [
     { slug: "vapi",      label: "Calls / VAPI" },
@@ -672,6 +779,9 @@ export default function AdminTab({ apiBase, commonHeaders }) {
           }}
         />
       )}
+
+      {/* New Signup Notifications */}
+      <SignupsSection apiBase={apiBase} commonHeaders={commonHeaders} />
 
       {/* Value / Usage Overview */}
       <TenantUsageSection apiBase={apiBase} commonHeaders={commonHeaders} onDrillDown={setDrillTenant} />
