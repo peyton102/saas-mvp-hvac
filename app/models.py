@@ -108,6 +108,8 @@ class Tenant(SQLModel, table=True):
     assistant_status: Optional[str] = Field(default="active", max_length=20)
     carrier: Optional[str] = Field(default=None, max_length=100)
     carrier_setup_complete: Optional[bool] = Field(default=False)
+    # Dialable Torevez number for this tenant — digits only, no + or dashes
+    torevez_dialable_number: Optional[str] = Field(default=None, max_length=20)
 
     # --- QBO fields ---
     qbo_realm_id: Optional[str] = None

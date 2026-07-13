@@ -139,6 +139,7 @@ class MeResponse(BaseModel):
     assistant_status: str = "active"  # pending | ready | active
     carrier: Optional[str] = None
     carrier_setup_complete: bool = False
+    torevez_dialable_number: Optional[str] = None  # digits only — used to build call-forward code
 
 class SignupRequest(BaseModel):
     invite_code: str
@@ -608,6 +609,7 @@ def me(
     assistant_status = getattr(tenant, "assistant_status", None) or "active"
     carrier = getattr(tenant, "carrier", None) or None
     carrier_setup_complete = bool(getattr(tenant, "carrier_setup_complete", False))
+    torevez_dialable_number = (getattr(tenant, "torevez_dialable_number", None) or "").strip() or None
 
     return MeResponse(
         email=email,
@@ -625,6 +627,7 @@ def me(
         assistant_status=assistant_status,
         carrier=carrier,
         carrier_setup_complete=carrier_setup_complete,
+        torevez_dialable_number=torevez_dialable_number,
     )
 
 

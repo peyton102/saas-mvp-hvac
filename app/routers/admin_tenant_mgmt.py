@@ -32,6 +32,10 @@ class AssignVapiNumberRequest(BaseModel):
     vapi_phone_number_id: str  # Vapi phoneNumberId, e.g. "phn_xxxx" — empty string to clear
 
 
+class SetTorevezNumberRequest(BaseModel):
+    torevez_dialable_number: str  # digits only — e.g. "18145551234" or "8145551234"
+
+
 def _require_admin(current_user: Dict[str, Any], session: Session) -> None:
     slug = current_user.get("tenant_slug") or current_user.get("tenant")
     tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
@@ -55,7 +59,7 @@ def list_tenants(
         session.exec(text("ROLLBACK TO SAVEPOINT sp_mgmt_features"))
 
     rows = session.exec(
-        text("SELECT id, slug, name, business_name, email, phone, is_active, is_admin, created_at, features, twilio_number, assistant_status, carrier, carrier_setup_complete FROM tenant ORDER BY created_at DESC")
+        text("SELECT id, slug, name, business_name, email, phone, is_active, is_admin, created_at, features, twilio_number, assistant_status, carrier, carrier_setup_complete, torevez_dialable_number FROM tenant ORDER BY created_at DESC")
     ).all()
 
     result = []
@@ -77,6 +81,7 @@ def list_tenants(
             "assistant_status": (r.assistant_status if hasattr(r, "assistant_status") else None) or "active",
             "carrier": (r.carrier if hasattr(r, "carrier") else None) or "",
             "carrier_setup_complete": bool(r.carrier_setup_complete if hasattr(r, "carrier_setup_complete") else False),
+            "torevez_dialable_number": (r.torevez_dialable_number if hasattr(r, "torevez_dialable_number") else None) or "",
         })
     return result
 
@@ -172,6 +177,31 @@ def mark_assistant_ready(
         print(f"[MARK READY] No phone for tenant {slug!r}; skipping customer SMS", flush=True)
 
     return {"ok": True, "slug": slug, "assistant_status": "ready", "sms_sent": bool(phone)}
+
+
+@router.patch("/tenants/{slug}/torevez-number")
+def set_torevez_number(
+    slug: str,
+    payload: SetTorevezNumberRequest,
+    session: Session = Depends(get_session),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Set the dialable Torevez number for a tenant. Digits only — stripped before save."""
+    _require_admin(current_user, session)
+
+    tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    # Strip everything except digits
+    digits_only = "".join(ch for ch in payload.torevez_dialable_number if ch.isdigit())
+
+    session.exec(
+        text("UPDATE tenant SET torevez_dialable_number = :num WHERE slug = :slug")
+        .bindparams(num=digits_only or None, slug=slug)
+    )
+    session.commit()
+    return {"ok": True, "slug": slug, "torevez_dialable_number": digits_only}
 
 
 @router.get("/tenants/{slug}/export")

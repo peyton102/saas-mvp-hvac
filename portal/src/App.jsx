@@ -14,6 +14,7 @@ import MissedCallsCard from "./components/MissedCallsCard.jsx";
 import AdminTab from "./components/AdminTab.jsx";
 import ValueCard from "./components/ValueCard.jsx";
 import WelcomeCard from "./components/WelcomeCard.jsx";
+import CarrierWizard from "./components/CarrierWizard.jsx";
 
 // ====== CONFIG ======
 const API_BASE =
@@ -276,7 +277,16 @@ const headers = useMemo(() => {
           <WelcomeCard />
         )}
 
-        {tab === "home" && assistantStatus !== "pending" && (
+        {tab === "home" && assistantStatus === "ready" && (
+          <CarrierWizard
+            me={me}
+            apiBase={BASE}
+            commonHeaders={headers}
+            onComplete={() => window.location.reload()}
+          />
+        )}
+
+        {tab === "home" && assistantStatus === "active" && (
           <div style={{ display: "grid", gap: 12 }}>
             {has("leads") && leadsStats && (
               <div style={{

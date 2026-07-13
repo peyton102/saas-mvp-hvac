@@ -47,6 +47,7 @@ def run_startup_migrations() -> None:
         ("sp_tenant_assistant_status",        "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS assistant_status TEXT DEFAULT 'active'"),
         ("sp_tenant_carrier",                 "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS carrier TEXT"),
         ("sp_tenant_carrier_setup_complete",  "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS carrier_setup_complete BOOLEAN DEFAULT FALSE"),
+        ("sp_tenant_torevez_dialable_number", "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS torevez_dialable_number TEXT"),
     ]
     with Session(engine) as session:
         for sp, ddl in migrations:

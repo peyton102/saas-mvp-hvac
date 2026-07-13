@@ -576,6 +576,8 @@ export default function AdminTab({ apiBase, commonHeaders }) {
   const [vapiErr, setVapiErr]         = useState({}); // slug → error string
   const [drillTenant, setDrillTenant] = useState(null); // tenant object when drill-down is active
   const [markingReady, setMarkingReady] = useState({}); // slug → true while in-flight
+  const [torevezInputs, setTorevezInputs] = useState({}); // slug → current input value
+  const [savingTorevez, setSavingTorevez] = useState({}); // slug → true while saving
 
   const loadInvites = useCallback(async () => {
     setLoading(true);
@@ -605,10 +607,15 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       }
       const data = await res.json();
       setTenants(data);
-      // seed vapi inputs with current values so fields show what's assigned
+      // seed vapi + torevez inputs with current values
       const inputs = {};
-      data.forEach((t) => { inputs[t.slug] = t.vapi_phone_number_id || ""; });
+      const torevezIn = {};
+      data.forEach((t) => {
+        inputs[t.slug] = t.vapi_phone_number_id || "";
+        torevezIn[t.slug] = t.torevez_dialable_number || "";
+      });
       setVapiInputs(inputs);
+      setTorevezInputs(torevezIn);
     } catch (e) {
       setTenantsErr(String(e.message || e));
     } finally {
@@ -725,6 +732,28 @@ export default function AdminTab({ apiBase, commonHeaders }) {
       alert(`Mark ready failed: ${e.message}`);
     } finally {
       setMarkingReady((prev) => ({ ...prev, [tenantSlug]: false }));
+    }
+  }
+
+  async function saveTorevezNumber(tenantSlug, value) {
+    setSavingTorevez((prev) => ({ ...prev, [tenantSlug]: true }));
+    try {
+      const res = await fetch(`${apiBase}/admin/mgmt/tenants/${tenantSlug}/torevez-number`, {
+        method: "PATCH",
+        headers: commonHeaders,
+        body: JSON.stringify({ torevez_dialable_number: value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      const saved = data.torevez_dialable_number || "";
+      setTenants((prev) =>
+        prev.map((t) => t.slug === tenantSlug ? { ...t, torevez_dialable_number: saved } : t)
+      );
+      setTorevezInputs((prev) => ({ ...prev, [tenantSlug]: saved }));
+    } catch (e) {
+      alert(`Failed to save number: ${e.message}`);
+    } finally {
+      setSavingTorevez((prev) => ({ ...prev, [tenantSlug]: false }));
     }
   }
 
@@ -1288,6 +1317,64 @@ export default function AdminTab({ apiBase, commonHeaders }) {
                       </div>
                     );
                   })()}
+                  {/* Torevez dialable number */}
+                  {(() => {
+                    const currentInput = torevezInputs[t.slug] ?? (t.torevez_dialable_number || "");
+                    const saved = t.torevez_dialable_number || "";
+                    const isDirty = currentInput !== saved;
+                    const isSaving = savingTorevez[t.slug];
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, color: "rgba(229,231,235,0.35)", whiteSpace: "nowrap", minWidth: 56 }}>
+                          Torevez #:
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 200px" }}>
+                          <input
+                            type="text"
+                            placeholder="digits only — e.g. 8145551234"
+                            value={currentInput}
+                            onChange={(e) =>
+                              setTorevezInputs((prev) => ({ ...prev, [t.slug]: e.target.value }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && isDirty && !isSaving) {
+                                saveTorevezNumber(t.slug, currentInput);
+                              }
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: "5px 10px",
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              borderRadius: 7,
+                              border: saved
+                                ? "1px solid rgba(249,115,22,0.4)"
+                                : "1px solid rgba(255,255,255,0.10)",
+                              background: "rgba(255,255,255,0.04)",
+                              color: saved ? "#f97316" : "#e5e7eb",
+                              outline: "none",
+                            }}
+                          />
+                          {isDirty && (
+                            <button
+                              disabled={isSaving}
+                              onClick={() => saveTorevezNumber(t.slug, currentInput)}
+                              style={{
+                                ...btnGhost,
+                                padding: "5px 12px",
+                                fontSize: 11,
+                                opacity: isSaving ? 0.5 : 1,
+                                cursor: isSaving ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              {isSaving ? "Saving…" : "Save"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                 </div>
               );
             })}
