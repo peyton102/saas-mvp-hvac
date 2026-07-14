@@ -16,30 +16,24 @@ const CARRIERS = [
 ];
 
 // CRITICAL FORMAT: digits only, NO plus, NO dashes
+// Only show codes that have been personally verified.
 function buildActivationCode(carrierId, dialableNumber) {
   const num = (dialableNumber || "").replace(/\D/g, "");
   if (!num) return null;
   switch (carrierId) {
-    case "verizon":
-    case "spectrum": return `*71${num}`;
-    case "att":
-    case "cricket":  return `*92${num}#`;
-    case "tmobile":
-    case "metro":    return `**61*${num}#`;
-    default:         return null; // boost, other → no code
+    case "att":     return `*61*${num}#`;          // verified
+    case "tmobile": return `*004*${num}*11#`;       // verified
+    case "metro":   return `**61*${num}#`;          // verified
+    default:        return null;                    // unverified → Get Help
   }
 }
 
 function deactivationCode(carrierId) {
   switch (carrierId) {
-    case "verizon":
-    case "spectrum":
-    case "boost":    return "*73";
     case "att":
-    case "cricket":
     case "tmobile":
-    case "metro":    return "##61#";
-    default:         return null;
+    case "metro":   return "##61#";
+    default:        return null;
   }
 }
 
@@ -47,11 +41,12 @@ function carrierTroubleshootHint(carrierId) {
   if (carrierId === "metro") {
     return "Open the MyMetro app → Account → Add-ons → enable Call Forwarding. Restart your phone, then dial the code again.";
   }
-  // All other supported carriers: generic
   return "Call your carrier and ask them to enable conditional call forwarding on your line, then dial the code again.";
 }
 
-const needsGetHelp = (carrierId) => carrierId === "boost" || carrierId === "other";
+// Unverified carriers → skip code, go straight to Get Help
+const VERIFIED_CARRIERS = ["att", "tmobile", "metro"];
+const needsGetHelp = (carrierId) => !VERIFIED_CARRIERS.includes(carrierId);
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
@@ -189,9 +184,7 @@ function StepCode({ carrierId, dialableNumber, onNext, onBack }) {
             {carrierId === "boost" ? "Boost Mobile" : "Other carrier"}
           </div>
           <div style={{ fontSize: 14, color: "rgba(229,231,235,0.7)", lineHeight: 1.7, marginBottom: 20 }}>
-            {carrierId === "boost"
-              ? "Boost Mobile doesn't support conditional call forwarding codes. We'll set this up manually for you."
-              : "We need to confirm the right code for your carrier before setting this up."}
+            Setting this up takes 30 seconds — tap below and I'll send you the exact code for your carrier and make sure it works.
           </div>
           <button onClick={onNext} style={btnOrange}>
             Get help from Torevez
