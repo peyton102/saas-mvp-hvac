@@ -29,7 +29,7 @@ export default function WelcomeCard() {
           background: "#0b1220",
         }}>
           <iframe
-            src="https://www.loom.com/embed/placeholder"
+            src="https://www.youtube.com/embed/yGFZ767y0m0"
             title="Torevez walkthrough"
             frameBorder="0"
             allowFullScreen
@@ -63,7 +63,7 @@ export default function WelcomeCard() {
         }} />
         <div style={{ fontSize: 15, color: "#e5e7eb", lineHeight: 1.6 }}>
           Your AI assistant is being set up. Nothing needed from you yet.
-          I'll text you the moment it's ready — under 24 hours.
+          I'll text you the moment it's ready.
         </div>
       </div>
 
