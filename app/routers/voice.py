@@ -300,13 +300,20 @@ async def twilio_voice(
     if forwarded_from_raw:
         vapi_url += "?" + urllib.parse.urlencode({"forwarded_from": forwarded_from_raw})
 
-    # Forwarding path: owner already missed this call on their real number — go straight to Vapi.
-    # Direct-dial path: try ringing the owner's cell first (20s), then fall back to Vapi on no-answer.
-    if not forwarded_from_raw:
-        tenant_row = session.exec(
-            select(Tenant).where(Tenant.slug == tenant_id)
-        ).first()
-        owner_phone = ((tenant_row.phone or "").strip() if tenant_row else "")
+    # Real carrier-forward: ForwardedFrom == the owner's own registered number (customer called
+    # the owner's real cell, carrier forwarded to Twilio). Owner already missed it — go to Vapi.
+    # Everything else (direct dial, Google Voice / VoIP artifacts that set ForwardedFrom to an
+    # unrelated infrastructure number): ring the owner's cell first, then fall back to Vapi.
+    tenant_row = session.exec(
+        select(Tenant).where(Tenant.slug == tenant_id)
+    ).first()
+    owner_phone = ((tenant_row.phone or "").strip() if tenant_row else "")
+    is_real_carrier_forward = bool(
+        forwarded_from_raw
+        and owner_phone
+        and normalize_us_phone(forwarded_from_raw) == normalize_us_phone(owner_phone)
+    )
+    if not is_real_carrier_forward:
         if owner_phone:
             proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "https").split(",")[0].strip()
             host = (request.headers.get("host") or request.url.netloc).split(",")[0].strip()
