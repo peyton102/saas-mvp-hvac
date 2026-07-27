@@ -149,22 +149,6 @@ def create_event(
     return ev
 
 
-def get_service():
-    """
-    Return an authorized Google Calendar API service using the saved OAuth token file.
-    Legacy single-user mode. Use get_service_for_tenant() for per-tenant calendar sync.
-    """
-    token_dir = getattr(config, "GOOGLE_TOKEN_DIR", "data/google_tokens")
-    token_path = Path(token_dir) / "default.json"
-    if not token_path.exists():
-        raise RuntimeError(f"Google token not found at {token_path}. Re-auth at /oauth/google/start")
-    scopes = str(getattr(config, "GOOGLE_SCOPES", "")).split()
-    if not scopes:
-        scopes = ["https://www.googleapis.com/auth/calendar"]
-    creds = Credentials.from_authorized_user_file(str(token_path), scopes=scopes)
-    return build("calendar", "v3", credentials=creds, cache_discovery=False)
-
-
 def get_service_for_tenant(tenant, session):
     """
     Return an authorized Google Calendar API service for the given Tenant row.

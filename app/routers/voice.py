@@ -1,7 +1,7 @@
 # app/routers/voice.py
 import os
 import urllib.parse
-from app.call_cache import store as cache_store
+from app.call_cache import store as cache_store, lookup as cache_lookup
 from fastapi import APIRouter, Request, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response, PlainTextResponse
 from sqlmodel import Session, select
@@ -246,39 +246,6 @@ def _blocked_number(phone: str) -> bool:
     bl = (getattr(config, "SMS_BLOCKLIST", "") or "").split(",")
     return phone in [x.strip() for x in bl if x.strip()]
 
-def _handle_voice_side_effects(from_number: str, caller_name: str, body: str, tenant_id: str, business_name: str = ""):
-    try:
-        minutes = getattr(config, "ANTI_SPAM_MINUTES", 120)
-        ok = False
-        if from_number and not _blocked_number(from_number):
-            if storage.sent_recently(from_number, minutes=minutes):
-                print(f"[THROTTLE] Skipping SMS to {from_number} ({minutes}m)")
-            else:
-                try:
-                    ok = send_sms(from_number, body)
-                except Exception as e:
-                    print(f"[VOICE] SMS send error: {e}")
-        try:
-            storage.save_lead(
-                {"name": caller_name or "", "phone": from_number, "email": "", "message": "Inbound call", "tenant_id": tenant_id},
-                sms_body=body,
-                sms_sent=ok,
-                source="voice",
-            )
-        except Exception:
-            pass
-        # Office alert for forwarded missed call
-        try:
-            office_to = _office_destination_for_tenant(tenant_id)
-            if office_to:
-                label = business_name or tenant_id
-                alert = f"Missed call from {from_number}" + (f" ({caller_name})" if caller_name else "") + f" — {label}"
-                send_sms(office_to, alert)
-        except Exception as e:
-            print(f"[VOICE] office alert error: {e}")
-    except Exception as e:
-        print(f"[VOICE ERROR] {e}")
-
 # ------------------------- routes -------------------------
 
 @router.post("/twilio/voice")
@@ -327,20 +294,44 @@ async def twilio_voice(
     print(f"[VOICE] tenant={tenant_id} call_sid={call_sid or 'n/a'} first={first_time} "
           f"from={from_num} forwarded_from={forwarded_from_raw!r} after_hours={after_hours}")
 
-    # Always hand the call off to Vapi first.
-    # Post-call summary handling happens in /vapi/intake, which is where
-    # leads and office SMS should be created for this flow.
     cache_store(call_sid, forwarded_from_raw)
+
     vapi_url = "https://api.vapi.ai/twilio/inbound_call"
     if forwarded_from_raw:
         vapi_url += "?" + urllib.parse.urlencode({"forwarded_from": forwarded_from_raw})
+
+    # Forwarding path: owner already missed this call on their real number — go straight to Vapi.
+    # Direct-dial path: try ringing the owner's cell first (20s), then fall back to Vapi on no-answer.
+    if not forwarded_from_raw:
+        tenant_row = session.exec(
+            select(Tenant).where(Tenant.slug == tenant_id)
+        ).first()
+        owner_phone = ((tenant_row.phone or "").strip() if tenant_row else "")
+        if owner_phone:
+            proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "https").split(",")[0].strip()
+            host = (request.headers.get("host") or request.url.netloc).split(",")[0].strip()
+            action_url = (
+                f"{proto}://{host}/twilio/voice/no-answer"
+                f"?tenant={urllib.parse.quote(tenant_id)}"
+            )
+            twiml = (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                "<Response>"
+                f'<Dial timeout="20" action="{action_url}" method="POST">'
+                f"<Number>{owner_phone}</Number>"
+                "</Dial>"
+                "</Response>"
+            )
+            print(f"[VOICE] direct-dial: ringing owner first for tenant={tenant_id!r}", flush=True)
+            return PlainTextResponse(twiml, media_type="application/xml")
+
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
         f'<Redirect method="POST">{vapi_url}</Redirect>'
         "</Response>"
     )
-    print(f"[VOICE] redirecting to VAPI inbound_call URL, forwarded_from={forwarded_from_raw!r}", flush=True)
+    print(f"[VOICE] → Vapi (forwarding={bool(forwarded_from_raw)!r})", flush=True)
     return PlainTextResponse(twiml, media_type="application/xml")
 
 @router.post("/twilio/voice/recorded", response_class=PlainTextResponse)
@@ -363,63 +354,51 @@ async def twilio_voice_recorded(
     vr.say("Thanks. Goodbye.", voice="alice")
     return PlainTextResponse(str(vr), media_type="application/xml")
 
-    from_num = normalize_us_phone((form.get("From") or "").strip()) or ""
-    recording_url = (form.get("RecordingUrl") or "").strip()
-    caller = (form.get("CallerName") or "").strip()
 
-    if from_num:
-        try:
-            last = session.exec(
-                select(LeadModel)
-                .where(LeadModel.phone == from_num, LeadModel.tenant_id == tenant_id)
-                .order_by(LeadModel.created_at.desc())
-            ).first()
-            if last:
-                last.message = (last.message or "") + (f"\nVoicemail: {recording_url}" if recording_url else "")
-                last.source = "missed_call"
-                session.add(last); session.commit()
-            else:
-                session.add(LeadModel(
-                    name=(caller or "").strip(),
-                    phone=from_num,
-                    email=None,
-                    message=f"Voicemail: {recording_url}" if recording_url else "Voicemail",
-                    tenant_id=tenant_id,
-                    source="missed_call",
-                ))
-                session.commit()
-        except Exception as e:
-            session.rollback()
-            print(f"[VOICE] voicemail attach error: {e}")
-
-    b = get_brand_for_tenant(tenant_id)
-    business_name = b.get("business_name") or tenant_id
-    print(f"[RECORDED] brand lookup — tenant_id={tenant_id!r} business_name={business_name!r}", flush=True)
-    body = "Hi! We missed your call and want to make sure you get taken care of. We'll be in touch shortly."
+@router.post("/twilio/voice/no-answer")
+async def twilio_voice_no_answer(
+    request: Request,
+    session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id_public),
+):
+    """
+    Twilio <Dial> action callback fired when the owner's phone didn't answer.
+    DialCallStatus values: completed (answered), no-answer, busy, failed, canceled.
+    On no-answer/busy/failed/canceled: redirect to Vapi AI.
+    On completed: owner picked up; return empty response (call is already live).
+    """
+    if not await _verify_twilio_signature(request):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Twilio signature")
     try:
-        if from_num and not _blocked_number(from_num) and _after_hours():
-            if not storage.sent_recently(from_num, minutes=getattr(config, "ANTI_SPAM_MINUTES", 120)):
-                send_sms(from_num, body)
-    except Exception as e:
-        print(f"[VOICE] voicemail SMS error: {e}")
+        form = await request.form()
+    except Exception:
+        form = {}
 
-    # Alert the office that a voicemail was left
-    try:
-        office_to = _office_destination_for_tenant(tenant_id)
-        if office_to:
-            voicemail_alert = (
-                f"Voicemail from {from_num}" +
-                (f" ({caller})" if caller else "") +
-                f" — {business_name}" +
-                (f"\n{recording_url}" if recording_url else "")
-            )
-            send_sms(office_to, voicemail_alert)
-    except Exception as e:
-        print(f"[VOICE] voicemail office alert error: {e}")
+    dial_status = (form.get("DialCallStatus") or "").strip().lower()
+    call_sid = (form.get("CallSid") or "").strip()
+    print(f"[NO-ANSWER] tenant={tenant_id!r} dial_status={dial_status!r} call_sid={call_sid}", flush=True)
 
-    vr = VoiceResponse()
-    vr.say("Thanks. We just texted you our booking link. Goodbye.", voice="alice")
-    return PlainTextResponse(str(vr), media_type="application/xml")
+    if dial_status in ("no-answer", "busy", "failed", "canceled"):
+        forwarded_from = cache_lookup(call_sid) or ""
+        vapi_url = "https://api.vapi.ai/twilio/inbound_call"
+        if forwarded_from:
+            vapi_url += "?" + urllib.parse.urlencode({"forwarded_from": forwarded_from})
+        twiml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            "<Response>"
+            f'<Redirect method="POST">{vapi_url}</Redirect>'
+            "</Response>"
+        )
+        print(f"[NO-ANSWER] owner didn't answer ({dial_status!r}) → Vapi", flush=True)
+        return PlainTextResponse(twiml, media_type="application/xml")
+
+    # Owner answered (dial_status == "completed") — call is already connected
+    print(f"[NO-ANSWER] owner answered (status={dial_status!r})", flush=True)
+    return PlainTextResponse(
+        '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        media_type="application/xml",
+    )
+
 
 @router.post("/twilio/voice/missed")
 async def twilio_voice_missed(
@@ -458,63 +437,6 @@ async def twilio_voice_missed(
     print(f"[MISSED] tenant={tenant_id} status={call_status} from={from_num} sid={call_sid}")
 
     print(f"[MISSED] skipping Twilio missed-call save/SMS for tenant={tenant_id!r}", flush=True)
-    return PlainTextResponse("", status_code=204)
-
-    if _vapi_enabled():
-        print(f"[MISSED] Vapi-enabled flow - skipping Twilio missed-call save/SMS for tenant={tenant_id!r}", flush=True)
-        return PlainTextResponse("", status_code=204)
-
-    # Only act on actual missed/unanswered calls
-    if call_status not in ("no-answer", "busy", "failed"):
-        return PlainTextResponse("", status_code=204)
-
-    if not from_num:
-        return PlainTextResponse("", status_code=204)
-
-    # Dedupe by CallSid so retries don't double-send
-    if call_sid and not _dedupe_insert(session, source=f"missed_call:{tenant_id}", event_id=call_sid):
-        print(f"[MISSED] duplicate CallSid={call_sid}, skipping")
-        return PlainTextResponse("", status_code=204)
-
-    # 1. Save lead with source="missed_call"
-    try:
-        session.add(LeadModel(
-            name=(caller or "").strip(),
-            phone=from_num,
-            email=None,
-            message="Missed call",
-            tenant_id=tenant_id,
-            source="missed_call",
-        ))
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        print(f"[MISSED] DB lead insert error: {e}")
-
-    b = get_brand_for_tenant(tenant_id)
-    business_name = b.get("business_name") or tenant_id
-
-    # 2. SMS to caller
-    def _send_missed_call_effects():
-        try:
-            if not _blocked_number(from_num):
-                caller_msg = "Hi! We missed your call and want to make sure you get taken care of. We'll be in touch shortly."
-                send_sms(from_num, caller_msg)
-        except Exception as e:
-            print(f"[MISSED] caller SMS error: {e}")
-
-        # 3. Alert the office
-        try:
-            from app.services.sms import _office_destination_for_tenant, send_sms as _send
-            office_to = _office_destination_for_tenant(tenant_id)
-            if office_to:
-                alert_body = f"Missed call from {from_num}" + (f" ({caller})" if caller else "") + f" — {business_name}"
-                _send(office_to, alert_body)
-        except Exception as e:
-            print(f"[MISSED] office alert error: {e}")
-
-    background_tasks.add_task(_send_missed_call_effects)
-
     return PlainTextResponse("", status_code=204)
 
 
