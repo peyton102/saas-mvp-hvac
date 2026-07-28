@@ -372,6 +372,32 @@ def _booking_reminder_sms_inner(tenant_id: str, payload: dict, kind: str) -> boo
     return send_sms(phone, body)
 
 
+def owner_alert_sms(tenant_id: str, payload: dict) -> bool:
+    """
+    SMS to the OWNER when a lead is still 'new' 15 minutes after creation.
+    Goes to office_sms_to (per-tenant) or OFFICE_SMS_TO env.
+
+    payload fields: name, phone, message (customer's issue)
+    """
+    office_to = _office_destination_for_tenant(tenant_id)
+    if not office_to:
+        print(f"[owner_alert_sms] No office SMS destination for tenant={tenant_id!r}; skipping.")
+        return False
+
+    name = (payload.get("name") or "").strip()
+    phone = (payload.get("phone") or "").strip()
+    issue = (payload.get("message") or "").strip()
+    issue_preview = (issue[:80] + "…") if len(issue) > 80 else issue or "not specified"
+
+    body = (
+        f"\u23f0 Unactioned lead: {name} | {phone}\n"
+        f"Issue: {issue_preview}\n"
+        f"Came in 15 min ago \u2014 call them before they find someone else."
+    )
+
+    return send_sms(office_to, body)
+
+
 def lead_nudge_sms(tenant_id: str, payload: dict) -> bool:
     """
     Follow-up nudge sent to the customer when a lead hasn't been contacted

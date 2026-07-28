@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlmodel import Session
 
-from app.services.sms import lead_nudge_sms
+from app.services.sms import lead_nudge_sms, owner_alert_sms
 
 
 def _ensure_nudge_column(session: Session) -> None:
@@ -90,4 +90,81 @@ def send_lead_nudges_all(hours_old: float, session: Session, max_hours_old: floa
         "leads_checked": len(rows),
         "nudges_sent": sent,
         "nudges_failed": failed,
+    }
+
+
+def _ensure_owner_alert_column(session: Session) -> None:
+    """Add owner_alert_sent_at to lead table if it doesn't exist yet."""
+    try:
+        session.exec(text("SAVEPOINT sp_owner_alert_col"))
+        session.exec(text("ALTER TABLE lead ADD COLUMN owner_alert_sent_at TIMESTAMP WITH TIME ZONE"))
+        session.exec(text("RELEASE SAVEPOINT sp_owner_alert_col"))
+    except Exception:
+        session.exec(text("ROLLBACK TO SAVEPOINT sp_owner_alert_col"))
+
+
+def send_owner_alerts_all(minutes_old: float, session: Session, max_minutes_old: float = 120.0) -> dict:
+    """
+    Send one SMS to the business owner for each lead that:
+      - status = 'new'  (nobody has actioned it)
+      - created between minutes_old and max_minutes_old minutes ago
+      - owner_alert_sent_at IS NULL  (never alerted before)
+      - has a phone number
+      - needs_verification is not true  (skip garbled/unconfirmed leads)
+
+    Each lead is stamped immediately after send so it is never alerted twice.
+    """
+    _ensure_owner_alert_column(session)
+
+    now = datetime.now(timezone.utc)
+    cutoff_max = now - timedelta(minutes=minutes_old)
+    cutoff_min = now - timedelta(minutes=max_minutes_old)
+
+    rows = session.exec(text("""
+        SELECT id, tenant_id, name, phone, message
+        FROM lead
+        WHERE status = 'new'
+          AND owner_alert_sent_at IS NULL
+          AND (needs_verification IS NULL OR needs_verification = false)
+          AND created_at <= :cutoff_max
+          AND created_at >= :cutoff_min
+          AND phone IS NOT NULL
+          AND phone != ''
+        ORDER BY created_at ASC
+    """).bindparams(cutoff_max=cutoff_max, cutoff_min=cutoff_min)).all()
+
+    sent = 0
+    failed = 0
+    skipped = 0
+
+    for row in rows:
+        lead_id   = row[0]
+        tenant_id = row[1]
+        name      = row[2] or ""
+        phone     = row[3] or ""
+        message   = row[4] or ""
+
+        ok = owner_alert_sms(tenant_id, {"name": name, "phone": phone, "message": message})
+
+        # Stamp immediately — mid-run kill must never cause a double-send.
+        now_iso = datetime.now(timezone.utc).isoformat()
+        session.exec(text("""
+            UPDATE lead SET owner_alert_sent_at = :ts WHERE id = :id
+        """).bindparams(ts=now_iso, id=lead_id))
+        session.commit()
+
+        if ok:
+            sent += 1
+            print(f"[OWNER ALERT] sent tenant={tenant_id} lead_id={lead_id} name={name!r} phone={phone}")
+        else:
+            skipped += 1
+            print(f"[OWNER ALERT] no destination tenant={tenant_id} lead_id={lead_id}")
+
+    return {
+        "ok": True,
+        "minutes_old": minutes_old,
+        "max_minutes_old": max_minutes_old,
+        "leads_checked": len(rows),
+        "alerts_sent": sent,
+        "alerts_skipped": skipped,
     }

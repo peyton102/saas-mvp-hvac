@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Tenant
 from app.routers.reminders import send_reminders_all
-from app.services.lead_nudges import send_lead_nudges_all
+from app.services.lead_nudges import send_lead_nudges_all, send_owner_alerts_all
 from app.services.email import send_monthly_summary_email
 from app import config
 
@@ -40,6 +40,22 @@ def cron_lead_nudges_run(
     """
     _require_admin_key(x_admin_key)
     return send_lead_nudges_all(hours_old=hours_old, max_hours_old=max_hours_old, session=session)
+
+
+@router.post("/owner-alerts/run")
+def cron_owner_alerts_run(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    minutes_old: float = Query(15.0, ge=5.0, le=60.0, description="Alert owner for leads stale this many minutes"),
+    max_minutes_old: float = Query(120.0, ge=15.0, le=480.0, description="Skip leads older than this many minutes"),
+    session: Session = Depends(get_session),
+):
+    """
+    Send one SMS to the business owner for each lead that is still 'new'
+    after minutes_old minutes. Runs on a 15-minute Render cron schedule.
+    Each lead is only ever alerted once (owner_alert_sent_at stamp).
+    """
+    _require_admin_key(x_admin_key)
+    return send_owner_alerts_all(minutes_old=minutes_old, max_minutes_old=max_minutes_old, session=session)
 
 
 @router.post("/reminders/run")
