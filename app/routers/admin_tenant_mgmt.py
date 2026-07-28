@@ -18,6 +18,7 @@ from app.models import Tenant, Lead, Booking, Review, ReminderSent, TenantSettin
 from app.models_finance import FinanceRevenue, FinanceCost
 from app.routers.auth import get_current_user
 from app.services.sms import tenant_ready_sms, new_signup_alert_sms
+from app.utils.phone import normalize_us_phone
 
 router = APIRouter(prefix="/admin/mgmt", tags=["admin-mgmt"])
 
@@ -34,6 +35,10 @@ class AssignVapiNumberRequest(BaseModel):
 
 class SetTorevezNumberRequest(BaseModel):
     torevez_dialable_number: str  # digits only — e.g. "18145551234" or "8145551234"
+
+
+class SetTwilioDIDRequest(BaseModel):
+    twilio_did: str  # E.164 Twilio phone number, e.g. "+14155551234" — empty string to clear
 
 
 def _require_admin(current_user: Dict[str, Any], session: Session) -> None:
@@ -146,6 +151,53 @@ def assign_vapi_number(
     session.commit()
 
     return {"ok": True, "slug": slug, "vapi_phone_number_id": new_value}
+
+
+@router.patch("/tenants/{slug}/twilio-did")
+def assign_twilio_did(
+    slug: str,
+    payload: SetTwilioDIDRequest,
+    session: Session = Depends(get_session),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Set (or clear) the Twilio DID for a tenant in TenantSettings.
+    This is the E.164 number Twilio puts in the 'To' field on inbound calls,
+    used by voice.py to resolve tenant_id from the dialed number."""
+    _require_admin(current_user, session)
+
+    tenant = session.exec(select(Tenant).where(Tenant.slug == slug)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    raw = payload.twilio_did.strip()
+    normalized = normalize_us_phone(raw) if raw else ""
+    new_value = normalized or raw or None
+
+    # Prevent two tenants sharing the same DID
+    if new_value:
+        conflict = session.exec(
+            select(TenantSettings).where(
+                TenantSettings.twilio_number == new_value,
+                TenantSettings.tenant_id != slug,
+            )
+        ).first()
+        if conflict:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Twilio DID already assigned to tenant '{conflict.tenant_id}'",
+            )
+
+    row = session.exec(
+        select(TenantSettings).where(TenantSettings.tenant_id == slug)
+    ).first()
+    if row:
+        row.twilio_number = new_value
+        session.add(row)
+    else:
+        session.add(TenantSettings(tenant_id=slug, twilio_number=new_value))
+    session.commit()
+
+    return {"ok": True, "slug": slug, "twilio_did": new_value}
 
 
 @router.post("/tenants/{slug}/mark-ready")
