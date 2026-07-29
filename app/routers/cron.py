@@ -25,6 +25,39 @@ def _require_admin_key(x_admin_key: str | None) -> None:
 def debug_admin_key():
     v = (getattr(config, "ADMIN_KEY", "") or "").strip()
     return {"has_admin_key": bool(v), "len": len(v)}
+
+
+@router.get("/debug/leads-raw")
+def debug_leads_raw(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    tenant_id: str = Query(..., description="Tenant slug to inspect"),
+    limit: int = Query(20, ge=1, le=100),
+    session: Session = Depends(get_session),
+):
+    """
+    Raw SQL query on the lead table — bypasses SQLModel/ORM so we see
+    exactly what PostgreSQL is storing (not Python-coerced values).
+    """
+    _require_admin_key(x_admin_key)
+    rows = session.exec(text("""
+        SELECT id, tenant_id, source, needs_verification, created_at, name, phone
+        FROM lead
+        WHERE tenant_id = :tid
+        ORDER BY created_at DESC
+        LIMIT :lim
+    """).bindparams(tid=tenant_id, lim=limit)).all()
+    return [
+        {
+            "id": r[0],
+            "tenant_id": r[1],
+            "source": r[2],
+            "needs_verification": r[3],   # raw DB value — True/False/None
+            "created_at": str(r[4]),
+            "name": r[5],
+            "phone": r[6],
+        }
+        for r in rows
+    ]
 @router.post("/lead-nudges/run")
 def cron_lead_nudges_run(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
