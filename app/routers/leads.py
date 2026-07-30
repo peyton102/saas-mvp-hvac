@@ -181,6 +181,7 @@ async def create_lead(
             message=(payload.message or "").strip() or None,
             tenant_id=tenant_id,
             status="new",
+            needs_verification=False,
             **({"source": "web_form"} if hasattr(LeadModel, "source") else {}),
         )
     )
@@ -461,7 +462,7 @@ def list_leads(
             "service_address": getattr(r, "service_address", None) or "",
             "customer_type": getattr(r, "customer_type", None) or "",
             "property_type": getattr(r, "property_type", None) or "",
-            "needs_verification": bool(getattr(r, "needs_verification", False)),
+            "needs_verification": bool(getattr(r, "needs_verification", False)) and getattr(r, "source", None) == "vapi",
             "needs_callback_for_scheduling": bool(getattr(r, "needs_callback_for_scheduling", False)),
             "source": getattr(r, "source", None) or "",
             "notes": getattr(r, "notes", None) or "",

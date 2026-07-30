@@ -648,13 +648,13 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders, readOnly 
                       {r.needs_verification && (
                         <span title="Unconfirmed — caller hung up before confirming" style={{ fontSize: 12, color: "#fbbf24" }}>⚠</span>
                       )}
-                      {r.source && r.source !== "web_form" && (
+                      {r.source && (
                         <span title={`Source: ${r.source}`} style={{
                           fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3,
                           background: r.source === "vapi" ? "rgba(139,92,246,0.15)" : r.source === "missed_call" ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.08)",
                           color: r.source === "vapi" ? "#a78bfa" : r.source === "missed_call" ? "#f87171" : C.muted,
                           whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.03em",
-                        }}>{r.source === "missed_call" ? "missed" : r.source}</span>
+                        }}>{r.source === "missed_call" ? "missed" : r.source === "web_form" ? "form" : r.source}</span>
                       )}
                       {r.customer_type && (
                         <span style={{

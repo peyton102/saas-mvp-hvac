@@ -43,6 +43,7 @@ def run_startup_migrations() -> None:
         ("sp_lead_property_type",   "ALTER TABLE lead ADD COLUMN IF NOT EXISTS property_type TEXT"),
         ("sp_lead_needs_callback",  "ALTER TABLE lead ADD COLUMN IF NOT EXISTS needs_callback_for_scheduling BOOLEAN DEFAULT FALSE"),
         ("sp_lead_needs_verification", "ALTER TABLE lead ADD COLUMN IF NOT EXISTS needs_verification BOOLEAN DEFAULT FALSE"),
+        ("sp_clear_nonvapi_nv", "UPDATE lead SET needs_verification = false WHERE (source IS NULL OR source != 'vapi') AND needs_verification = true"),
         # Onboarding flow
         ("sp_tenant_assistant_status",        "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS assistant_status TEXT DEFAULT 'active'"),
         ("sp_tenant_carrier",                 "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS carrier TEXT"),
