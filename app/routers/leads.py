@@ -182,7 +182,7 @@ async def create_lead(
             tenant_id=tenant_id,
             status="new",
             needs_verification=False,
-            **({"source": "web_form"} if hasattr(LeadModel, "source") else {}),
+            **({"source": "manual" if payload.manual_entry else "web_form"} if hasattr(LeadModel, "source") else {}),
         )
     )
     session.commit()

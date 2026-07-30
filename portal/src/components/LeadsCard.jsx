@@ -645,17 +645,19 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders, readOnly 
                   <td style={{ padding: "10px 10px", fontWeight: 600 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
                       <span style={{ whiteSpace: "nowrap" }}>{r.name || "—"}</span>
-                      {r.needs_verification && (
-                        <span title="Unconfirmed — caller hung up before confirming" style={{ fontSize: 12, color: "#fbbf24" }}>⚠</span>
-                      )}
-                      {r.source && (
-                        <span title={`Source: ${r.source}`} style={{
-                          fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3,
-                          background: r.source === "vapi" ? "rgba(139,92,246,0.15)" : r.source === "missed_call" ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.08)",
-                          color: r.source === "vapi" ? "#a78bfa" : r.source === "missed_call" ? "#f87171" : C.muted,
-                          whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.03em",
-                        }}>{r.source === "missed_call" ? "missed" : r.source === "web_form" ? "form" : r.source}</span>
-                      )}
+                      {(() => {
+                        const src = r.source || "";
+                        const label = src === "web_form" ? "Online Form" : src === "vapi" ? "Vapi" : src === "missed_call" ? "Missed Call" : src === "manual" ? "Manual" : "Unknown";
+                        const bg = src === "vapi" ? "rgba(139,92,246,0.15)" : src === "missed_call" ? "rgba(239,68,68,0.15)" : src === "manual" ? "rgba(59,130,246,0.15)" : src === "web_form" ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.08)";
+                        const color = src === "vapi" ? "#a78bfa" : src === "missed_call" ? "#f87171" : src === "manual" ? "#60a5fa" : src === "web_form" ? "#34d399" : C.muted;
+                        return (
+                          <span title={`Source: ${label}`} style={{
+                            fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3,
+                            background: bg, color,
+                            whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.03em",
+                          }}>{label}</span>
+                        );
+                      })()}
                       {r.customer_type && (
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
