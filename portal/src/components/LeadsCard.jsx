@@ -631,6 +631,13 @@ export default function LeadsCard({ tenantKey, apiBase, commonHeaders, readOnly 
                           }}>{label}</span>
                         );
                       })()}
+                      {r.needs_verification && (
+                        <span title="AI wasn't confident it captured all details — call back to confirm" style={{
+                          fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3,
+                          background: "rgba(251,191,36,0.15)", color: "#fbbf24",
+                          whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.03em",
+                        }}>Confirm info</span>
+                      )}
                       {r.customer_type && (
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
