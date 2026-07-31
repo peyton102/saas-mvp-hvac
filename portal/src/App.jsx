@@ -86,8 +86,7 @@ function PortalApp({ me }) {
           const d = new Date(r.created_at);
           return !isNaN(d) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
         });
-        const good = monthLeads.filter(r => r.is_good_lead).length;
-        setLeadsStats({ total: monthLeads.length, good, spam: monthLeads.length - good });
+        setLeadsStats({ total: monthLeads.length });
       } catch {}
     }
     loadLeadsStats();
@@ -300,14 +299,9 @@ const headers = useMemo(() => {
                 flexWrap: "wrap",
               }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontSize: 32, fontWeight: 900, color: "#f97316", lineHeight: 1 }}>{leadsStats.good}</span>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb" }}>good leads this month</span>
+                  <span style={{ fontSize: 32, fontWeight: 900, color: "#f97316", lineHeight: 1 }}>{leadsStats.total}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb" }}>leads this month</span>
                 </div>
-                {leadsStats.spam > 0 && (
-                  <span style={{ fontSize: 12, color: "rgba(229,231,235,0.40)" }}>
-                    {leadsStats.spam} spam filtered
-                  </span>
-                )}
               </div>
             )}
             <div
